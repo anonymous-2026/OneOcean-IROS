@@ -1,4 +1,4 @@
-# A Large-Scale Oceanographic Dataset and Prediction Framework for Ocean Currents and Pollution Dispersion
+
 ## Overview
 MOPD-OCPNet consists of a large Marine Oceanic Pollution and Dynamics Dataset (MOPD) that integrates topography, currents, and pollution, and a machine learning model (OCPNet) for accurate prediction.
 
