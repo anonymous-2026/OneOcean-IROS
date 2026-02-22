@@ -10,6 +10,9 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Notebooks (project policy: no .ipynb in repo)
+*.ipynb
+
 # Data artifacts
 *.csv
 *.nc
@@ -19,6 +22,9 @@ __pycache__/
 *.parquet
 *.zarr/
 *.zip
+
+# Local runs / artifacts (do not commit)
+runs/
 
 ref/
 **/ref/
