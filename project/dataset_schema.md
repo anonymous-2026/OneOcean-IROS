@@ -35,6 +35,10 @@ The S1 simulation code resolves datasets as:
 
 If `ONEOCEAN_VARIANTS_ROOT` is not set, it defaults to the workspace layout above.
 
+Note:
+- Some workspaces keep generated datasets outside the repo (e.g., `../OceanEnv/...`). Others generate them inside the repo.
+- The default resolver prefers an in-repo `OceanEnv/.../variants` folder if it exists; otherwise it falls back to the workspace-sibling layout.
+
 ### Quick inspection tool (no xarray)
 
 To inspect a combined file (dims/vars/tide presence) without xarray:

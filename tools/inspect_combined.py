@@ -23,7 +23,12 @@ TIDE_VARS = ("utide", "vtide", "utotal", "vtotal")
 
 def _default_variants_root() -> Path:
     repo_root = Path(__file__).resolve().parents[1]
-    return repo_root.parent / "OceanEnv" / "Data_pipeline" / "Data" / "Combined" / "variants"
+    in_repo = repo_root / "OceanEnv" / "Data_pipeline" / "Data" / "Combined" / "variants"
+    workspace_sibling = repo_root.parent / "OceanEnv" / "Data_pipeline" / "Data" / "Combined" / "variants"
+
+    if in_repo.exists():
+        return in_repo
+    return workspace_sibling
 
 
 def _resolve_path(args: argparse.Namespace) -> Path:
