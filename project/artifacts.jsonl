@@ -1,0 +1,7 @@
+{"time_utc": "2026-02-22 17:31:32 UTC", "kind": "runs_dir", "path": "runs", "produced_by": "experiment-runpack", "source": "", "notes": ""}
+{"time_utc": "2026-02-22 17:31:32 UTC", "kind": "runs_index", "path": "runs/index.jsonl", "produced_by": "experiment-runpack", "source": "", "notes": ""}
+{"time_utc": "2026-02-22 17:31:32 UTC", "kind": "experiment_matrix", "path": "project/experiment_matrix.md", "produced_by": "experiment-runpack", "source": "", "notes": ""}
+{"time_utc": "2026-02-22 17:40:03 UTC", "kind": "run_dir", "path": "runs/s1_matrix_v3", "produced_by": "oneocean_sim.experiments.run_s1_matrix", "source": "", "notes": "S1 controller+tide ablation matrix"}
+{"time_utc": "2026-02-22 17:40:03 UTC", "kind": "run_manifest", "path": "runs/s1_matrix_v3/matrix_manifest.json", "produced_by": "oneocean_sim.experiments.run_s1_matrix", "source": "", "notes": "S1 controller+tide ablation matrix"}
+{"time_utc": "2026-02-22 17:40:03 UTC", "kind": "report_dir", "path": "runs/s1_reports/s1_matrix_v3", "produced_by": "oneocean_sim.experiments.export_s1_report", "source": "runs/s1_matrix_v3", "notes": "S1 paper/web handoff artifacts"}
+{"time_utc": "2026-02-22 17:40:03 UTC", "kind": "report_manifest", "path": "runs/s1_reports/s1_matrix_v3/results_manifest.json", "produced_by": "oneocean_sim.experiments.export_s1_report", "source": "runs/s1_matrix_v3/matrix_manifest.json", "notes": "S1 paper/web handoff artifacts"}

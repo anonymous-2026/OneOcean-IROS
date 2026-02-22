@@ -2,8 +2,11 @@ copernicusmarine
 xarray
 netCDF4
 h5netcdf
+h5py
 rasterio
 numpy
 scipy
 pandas
 dask
+mujoco
+matplotlib
