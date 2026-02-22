@@ -21,43 +21,56 @@ python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --o
 
 See `DATA_PIPELINE_LOG.md` for the full rationale, assumptions (tides), and reproducibility notes.
 
-## S1 Navigation Task (MuJoCo primary track)
+## S1 3D Tasks (MuJoCo primary track; quality-gate compliant)
 
-Run the first runnable simulation task (goal navigation with dataset-driven currents):
+Run a 3D underwater scene + task with dataset-driven currents:
 
 ```bash
-python -m oneocean_sim.cli.run_navigation_task \
-  --task navigation \
+cd oneocean(iros-2026-code)
+MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
+  -m oneocean_sim.cli.run_3d_task \
+  --task nav_obstacles_3d \
+  --controller compensated \
   --variant scene \
-  --episodes 3 \
+  --episodes 2 \
   --seed 42
 ```
 
-Key outputs are written under `runs/oneocean_nav_<timestamp>/`:
-- `metrics.csv` (per-episode metrics)
-- `metrics.json` (summary + metadata)
-- `trajectory_overview.png` (trajectory with current field)
-- `trajectories/episode_*.csv` (per-step trajectory traces)
+Multi-agent task (2 vehicles):
 
-Detailed CLI arguments and metrics schema: `oneocean_sim/README.md`.
-
-Run a compact S1 experiment matrix:
 ```bash
-python -m oneocean_sim.experiments.run_s1_matrix \
-  --output-root runs/s1_matrix_v3 \
-  --variants tiny,scene \
-  --tasks navigation,station_keeping \
-  --controller-modes compensated,naive \
-  --tide-modes on,off \
+cd oneocean(iros-2026-code)
+MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
+  -m oneocean_sim.cli.run_3d_task \
+  --task plume_source_localization_3d \
+  --controller compensated \
+  --variant scene \
+  --episodes 2 \
+  --seed 9
+```
+
+Key outputs are written under `runs/oneocean_<task>_3d_<timestamp>/` (or `--output-dir`):
+- `metrics.csv`, `metrics.json`
+- `run_config.json`
+- `trajectories/episode_*_agent*.csv`
+- `media/episode_000_start.png`, `media/episode_000_end.png`, `media/episode_000.mp4`
+- `media_manifest.json`
+
+Run the compact S1 3D quality-gate suite (tasks × controller):
+
+```bash
+cd oneocean(iros-2026-code)
+MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
+  -m oneocean_sim.experiments.run_s1_3d_quality_gate \
+  --output-root runs/s1_3d_quality_v1 \
+  --variant scene \
   --episodes 2
 ```
 
-Export paper/web-ready S1 report artifacts:
-```bash
-python -m oneocean_sim.experiments.export_s1_report \
-  --matrix-root runs/s1_matrix_v3 \
-  --output-dir runs/s1_reports/s1_matrix_v3
-```
+Detailed CLI arguments: `oneocean_sim/README.md`.
+
+Legacy note:
+- The older S1 2D point-mass runner + matrix/robustness scripts remain for debugging, but do not satisfy the 3D quality gate.
 
 ## S3 Navigation Task (SAPIEN backup track)
 

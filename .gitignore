@@ -1,18 +1,38 @@
+# IDE / OS
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
-# Local data outputs (not committed)
+# Notebooks (project policy: no .ipynb in repo)
+*.ipynb
+
+# Data artifacts
+*.csv
 *.nc
 *.tif
 *.tiff
+*.ref
+*.parquet
 *.zarr/
 *.zip
-*.parquet
-*.csv
 
+# Local runs / artifacts (do not commit)
+runs/
+
+# Local outputs (do not commit)
+OCPNet/output/
+
+ref/
+**/ref/
+
+# OneOcean pipeline local outputs (not committed)
 OceanEnv/Data_pipeline/Data/
 OceanEnv/Data_pipeline/output/
 OceanEnv/Data_pipeline/**/variants/
