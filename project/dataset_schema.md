@@ -133,6 +133,14 @@ NetCDF writing uses compression and chunking (see `OceanEnv/Data_pipeline/Combin
 
 This snapshot is for debugging and sanity checks; regenerate locally as needed.
 
+## 7) Recommended usage (“latest artifacts” policy)
+
+- **Simulation / task construction (S1 MuJoCo primary)**: start with `scene` variant.
+  - Rationale: high spatial resolution with a manageable geographic scope and daily time grid.
+  - If you want to exclude tides explicitly, either disable tides in the consumer or use the canonical combined file (no tides by default).
+- **Fast debugging / CI-like smoke tests**: use `tiny` variant.
+- **Downloadable/public packaging experiments**: use `public` variant (coarse grid, monthly time; tides disabled by default).
+
 ### Canonical combined
 - dims: `time=30`, `depth=26`, `latitude=240`, `longitude=240`
 - vars: `so thetao uo vo zos elevation land_mask`
