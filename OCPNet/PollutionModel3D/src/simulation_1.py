@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from model import PollutionModel3D
+from .model import PollutionModel3D
 
 
 def create_velocity_field(grid_shape):

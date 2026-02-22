@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Union, Callable
-from grid3d import Grid3D
-from pollution_field import PollutionField
+from ..grid3d import Grid3D
+from ..pollution_field import PollutionField
 
 class SourceSinkModule:
     """
@@ -213,7 +213,7 @@ class SourceSinkModule:
             Source term field
         """
         # Get grid coordinates
-        x, y, z = self.grid.get_grid_coordinates()
+        x, y, z = self.grid.get_coordinate_arrays()
         
         # Get line points
         points = source['points']

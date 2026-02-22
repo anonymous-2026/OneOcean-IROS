@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Dict, List, Optional, Tuple
-from grid3d import Grid3D
+from .grid3d import Grid3D
 
 class PollutionField:
     """

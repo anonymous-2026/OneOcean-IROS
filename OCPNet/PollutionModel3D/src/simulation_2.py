@@ -3,8 +3,8 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
-from data_select import query_data_by_geo_range
-from model import PollutionModel3D
+from .data_select import query_data_by_geo_range
+from .model import PollutionModel3D
 
 def aggregate_data_by_grid(data, grid_size=0.1):
     """

@@ -4,9 +4,4 @@ OCPNet (Ocean Current Prediction Network)
 """
 
 __version__ = "1.3.0"
-
-from .LSTM import *
-from .wuranwukuosanmodel import *
-
-__all__ = ['LSTM', 'wuranwukuosanmodel']
-
+__all__ = ["__version__"]

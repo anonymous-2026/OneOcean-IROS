@@ -2,17 +2,17 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional, Union
 from pathlib import Path
 from datetime import datetime
-from grid3d import Grid3D
-from pollution_field import PollutionField
-from modules.advection_module import AdvectionModule
-from modules.diffusion_module import DiffusionModule
-from modules.decay_module import DecayModule
-from modules.coupling_reaction_module import CouplingReactionModule
-from modules.bio_uptake_module import BioUptakeModule
-from modules.precipitation_module import PrecipitationModule
-from modules.source_sink_module import SourceSinkModule
-from modules.boundary_conditions_module import BoundaryConditionsModule
-from modules.output_module import OutputModule
+from .grid3d import Grid3D
+from .pollution_field import PollutionField
+from .modules.advection_module import AdvectionModule
+from .modules.diffusion_module import DiffusionModule
+from .modules.decay_module import DecayModule
+from .modules.coupling_reaction_module import CouplingReactionModule
+from .modules.bio_uptake_module import BioUptakeModule
+from .modules.precipitation_module import PrecipitationModule
+from .modules.source_sink_module import SourceSinkModule
+from .modules.boundary_conditions_module import BoundaryConditionsModule
+from .modules.output_module import OutputModule
 
 class PollutionModel3D:
     """
@@ -68,6 +68,8 @@ class PollutionModel3D:
         self.velocity_field = None
         self.environmental_fields = {}
         self.pollutant_fields = {}
+        self.diffusion_coefficients = {}
+        self.initial_masses = {}
         
         # Initialize time
         self.current_time = 0.0
@@ -98,6 +100,7 @@ class PollutionModel3D:
         
         # Add to pollutant fields dictionary
         self.pollutant_fields[name] = field
+        self.initial_masses[name] = field.calculate_total_mass(name)
         
         # Add to decay module if decay rate is provided
         if decay_rate is not None:
@@ -111,8 +114,6 @@ class PollutionModel3D:
             
         # Store diffusion coefficient if provided
         if diffusion_coefficient is not None:
-            if not hasattr(self, 'diffusion_coefficients'):
-                self.diffusion_coefficients = {}
             self.diffusion_coefficients[name] = diffusion_coefficient
         
     def set_environmental_field(self,
@@ -323,8 +324,10 @@ class PollutionModel3D:
         """
         # Get current concentrations
         concentrations = {name: field.get_concentration(name) for name, field in self.pollutant_fields.items()}
-        
+
         # Get velocity field
+        if self.velocity_field is None:
+            raise ValueError("Velocity field is not set. Call set_velocity_field() before running.")
         u, v, w = self.velocity_field
         
         # Compute advection terms
@@ -509,9 +512,13 @@ class PollutionModel3D:
         # Print total mass balance
         print("\nTotal mass balance:")
         for pollutant in self.pollutant_fields:
-            initial_mass = self.pollutant_fields[pollutant].initial_mass
-            final_mass = np.sum(self.pollutant_fields[pollutant].get_concentration(pollutant) * self.grid.volume)
-            print(f"{pollutant}: Initial={initial_mass:.3e} mg, Final={final_mass:.3e} mg, Change={(final_mass-initial_mass)/initial_mass*100:.1f}%")
+            initial_mass = self.initial_masses.get(pollutant, np.nan)
+            final_mass = np.sum(self.pollutant_fields[pollutant].get_concentration(pollutant) * self.grid.volumes)
+            if np.isfinite(initial_mass) and initial_mass != 0:
+                change_pct = (final_mass - initial_mass) / initial_mass * 100
+            else:
+                change_pct = np.nan
+            print(f"{pollutant}: Initial={initial_mass:.3e} mg, Final={final_mass:.3e} mg, Change={change_pct:.1f}%")
         
         # Save final output
         print("\nSaving final output...")

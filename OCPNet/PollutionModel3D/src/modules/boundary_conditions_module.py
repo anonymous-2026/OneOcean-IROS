@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Union, Callable
-from grid3d import Grid3D
-from pollution_field import PollutionField
+from ..grid3d import Grid3D
+from ..pollution_field import PollutionField
 
 class BoundaryConditionsModule:
     """

@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Optional, Union
 from pathlib import Path
 from datetime import datetime
-from grid3d import Grid3D
-from pollution_field import PollutionField
+from ..grid3d import Grid3D
+from ..pollution_field import PollutionField
 
 class OutputModule:
     """

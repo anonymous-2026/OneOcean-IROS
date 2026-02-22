@@ -7,6 +7,8 @@ setup(
     install_requires=[
         "numpy",
         "matplotlib",
+        "netCDF4",
+        "xarray",
     ],
     python_requires=">=3.8",
-) 
+)

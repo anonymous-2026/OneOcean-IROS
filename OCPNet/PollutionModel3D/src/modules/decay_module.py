@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict, Optional, Tuple
-from grid3d import Grid3D
-from pollution_field import PollutionField
+from ..grid3d import Grid3D
+from ..pollution_field import PollutionField
 
 class DecayModule:
     """
