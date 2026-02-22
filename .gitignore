@@ -1,11 +1,32 @@
+# IDE / OS
 .idea/
-__pycache__/
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data artifacts
 *.csv
 *.nc
 *.tif
+*.tiff
 *.ref
+*.parquet
+*.zarr/
+*.zip
+
 ref/
 **/ref/
-*.parquet
+
+# OneOcean pipeline local outputs (not committed)
+OceanEnv/Data_pipeline/Data/
+OceanEnv/Data_pipeline/output/
+OceanEnv/Data_pipeline/**/variants/
+
+# Credentials (never commit)
+.copernicusmarine/

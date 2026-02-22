@@ -1,3 +1,29 @@
+# shuaijun-iros-26-code
+
+This repository hosts multiple codebases used in our IROS 2026 work.
+
+## OneOcean environment data pipeline (recommended)
+
+This pipeline generates `combined_environment.nc` (and multi-size variants) for simulation, experiments, and (eventually) public releases.
+
+Prerequisites:
+- Set CMEMS credentials in your environment:
+  - `export COPERNICUSMARINE_USERNAME=...`
+  - `export COPERNICUSMARINE_PASSWORD=...`
+
+Canonical combined dataset:
+```bash
+python OceanEnv/Data_pipeline/run_pipeline.py --overwrite
+```
+
+Multi-size datasets (tiny / scene / public):
+```bash
+python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
+```
+
+See `DATA_PIPELINE_LOG.md` for the rationale, assumptions (tides), and reproducibility notes.
+
+---
 
 ## Overview
 MOPD-OCPNet consists of a large Marine Oceanic Pollution and Dynamics Dataset (MOPD) that integrates topography, currents, and pollution, and a machine learning model (OCPNet) for accurate prediction.
@@ -157,4 +183,3 @@ Fill missing values (`NaN`) using linear and nearest-neighbor interpolation, the
 ### Support
 E.U. Copernicus Marine Service Information (2024). Global Ocean Physics Analysis and Forecast (GOPAF). doi:https://doi.org/10.48670/moi-00016. 
 GEBCO Compilation Group (2024). GEBCO 2024 Grid. doi:10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f.
-
