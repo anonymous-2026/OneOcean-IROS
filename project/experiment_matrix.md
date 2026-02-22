@@ -19,6 +19,8 @@ This matrix is owned by Agent A-S1 and is executable without waiting for other l
 | S1-E3 | C1,C2,C3 | Compact matrix v1 | `tiny,scene` | both tasks | auto | success_rate by case | 1 per case | done | `s1_matrix_v1` |
 | S1-E4 | C1,C2,C3 | Compact matrix v2 (step budget tuned) | `tiny,scene` | both tasks | auto | success_rate by case | 2 per case | done | `s1_matrix_v2` |
 | S1-E5 | C1,C2,C3 | Controller+tide ablation matrix | `tiny,scene` | both tasks | compensated vs naive | success/final_distance/energy/sim_speed | 2 per case | in-progress | `s1_matrix_v3` |
+| S1-E6 | C1,C2,C3 | Robustness suite (time/speed/goal stress) | `scene` | both tasks | compensated vs naive | aggregated success/final_distance/energy under stress factors | 4 per stress case | in-progress | `s1_robustness_v1` |
+| S1-M1 | C2 (qualitative) | Media package from S1 runs | `scene` (from matrix cases) | navigation + station_keeping | compensated/naive | screenshots + GIF + MP4 + media manifest | n/a | in-progress | `s1_media/s1_matrix_v3` |
 
 ## Execution commands
 
@@ -50,9 +52,36 @@ python -m oneocean_sim.experiments.export_s1_report \
   --output-dir runs/s1_reports/s1_matrix_v3
 ```
 
+Robustness suite:
+
+```bash
+python -m oneocean_sim.experiments.run_s1_robustness_suite \
+  --output-root runs/s1_robustness_v1 \
+  --variant scene \
+  --tasks navigation,station_keeping \
+  --controller-modes compensated,naive \
+  --tide-modes on,off \
+  --time-indices 0,-1 \
+  --depth-indices 0 \
+  --episodes 4
+```
+
+Media package:
+
+```bash
+python -m oneocean_sim.experiments.render_s1_media \
+  --matrix-root runs/s1_matrix_v3 \
+  --output-dir runs/s1_media/s1_matrix_v3 \
+  --case-limit 8 \
+  --max-frames 90 \
+  --fps 10
+```
+
 ## Reporting notes
 
 - `run_s1_matrix.py` default `max_steps=600` is intentional. `400` caused near-miss navigation runs (not controller failure).
 - S1-E5 is the first matrix that directly supports reviewer-facing comparison:
   - current-compensated controller vs naive controller,
   - tides on vs tides off.
+- S1-E6 extends to robustness dimensions (time index, speed cap, and navigation distance stress) using official generated data only.
+- S1-M1 is the required qualitative package for paper/website/demo handoff (`media_manifest.json` + screenshots/GIF/MP4).
