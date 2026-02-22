@@ -26,6 +26,9 @@ __pycache__/
 # Local runs / artifacts (do not commit)
 runs/
 
+# Local outputs (do not commit)
+OCPNet/output/
+
 ref/
 **/ref/
 

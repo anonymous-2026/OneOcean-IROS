@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 
 
-REQUIRED_VARS = ("uo", "vo", "time", "depth", "latitude", "longitude")
+REQUIRED_VARS = ("uo", "vo", "time", "depth", "latitude", "longitude", "elevation")
 
 
 @dataclass(frozen=True)
@@ -58,12 +58,14 @@ class CombinedDataset:
         self.longitude = self.file["longitude"]
         self.uo = self.file["uo"]
         self.vo = self.file["vo"]
+        self.elevation = self.file["elevation"] if "elevation" in self.file else None
         self.utide = self.file["utide"] if "utide" in self.file else None
         self.vtide = self.file["vtide"] if "vtide" in self.file else None
         self.land_mask = self.file["land_mask"] if "land_mask" in self.file else None
 
         self.latitude_values = np.asarray(self.latitude[:], dtype=np.float64)
         self.longitude_values = np.asarray(self.longitude[:], dtype=np.float64)
+        self._elevation_grid: Optional[np.ndarray] = None
 
     @property
     def sizes(self) -> dict[str, int]:
@@ -77,6 +79,13 @@ class CombinedDataset:
     def close(self) -> None:
         if self.file:
             self.file.close()
+
+    def elevation_grid(self) -> np.ndarray:
+        if self.elevation is None:
+            raise ValueError("Dataset missing required variable: elevation")
+        if self._elevation_grid is None:
+            self._elevation_grid = np.asarray(self.elevation[:, :], dtype=np.float32)
+        return self._elevation_grid
 
     def nearest_latlon_indices(self, latitude: float, longitude: float) -> tuple[int, int]:
         lat_idx = int(np.argmin(np.abs(self.latitude_values - latitude)))
