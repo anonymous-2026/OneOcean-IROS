@@ -35,6 +35,16 @@ The S1 simulation code resolves datasets as:
 
 If `ONEOCEAN_VARIANTS_ROOT` is not set, it defaults to the workspace layout above.
 
+### Quick inspection tool (no xarray)
+
+To inspect a combined file (dims/vars/tide presence) without xarray:
+```bash
+python -m pip install -r requirements.txt
+
+python tools/inspect_combined.py --variant scene
+python tools/inspect_combined.py --path /abs/path/to/combined_environment.nc
+```
+
 ---
 
 ## 2) Coordinates and dimensions
