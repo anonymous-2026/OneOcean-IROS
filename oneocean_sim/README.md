@@ -55,6 +55,31 @@ python -m oneocean_sim.experiments.export_s1_report \
   --output-dir runs/s1_reports/s1_matrix_v3
 ```
 
+Run robustness suite on official generated dataset:
+
+```bash
+python -m oneocean_sim.experiments.run_s1_robustness_suite \
+  --output-root runs/s1_robustness_v1 \
+  --variant scene \
+  --tasks navigation,station_keeping \
+  --controller-modes compensated,naive \
+  --tide-modes on,off \
+  --time-indices 0,-1 \
+  --depth-indices 0 \
+  --episodes 4
+```
+
+Render S1 media package (screenshots + GIF + MP4 + `media_manifest.json`):
+
+```bash
+python -m oneocean_sim.experiments.render_s1_media \
+  --matrix-root runs/s1_matrix_v3 \
+  --output-dir runs/s1_media/s1_matrix_v3 \
+  --case-limit 8 \
+  --max-frames 90 \
+  --fps 10
+```
+
 ## Outputs
 
 - `metrics.csv`: per-episode metrics
@@ -68,6 +93,15 @@ python -m oneocean_sim.experiments.export_s1_report \
   - `fig_success_rate_ablation.png/.pdf`
   - `fig_final_distance_ablation.png/.pdf`
   - `results_manifest.json`
+- robustness outputs (from `run_s1_robustness_suite.py`):
+  - `robustness_summary.md`
+  - `robustness_manifest.json`
+- media outputs (from `render_s1_media.py`):
+  - `cases/*/scene_overview.png`
+  - `cases/*/rollout.gif`
+  - `cases/*/rollout.mp4`
+  - `hero/rollout.gif`, `hero/rollout.mp4`
+  - `media_manifest.json`
 
 ## Metrics schema (per episode)
 

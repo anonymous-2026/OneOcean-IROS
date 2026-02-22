@@ -10,3 +10,4 @@ pandas
 dask
 mujoco
 matplotlib
+imageio
