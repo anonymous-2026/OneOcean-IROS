@@ -58,16 +58,23 @@ The merged output standardizes variable dimension order:
 
 ### Required (consumers may assume these exist)
 
-Ocean state (3D; float32):
+Coordinates (1D):
+- `time`, `depth`, `latitude`, `longitude`
+
+Core currents (3D; float32):
 - `uo`: eastward velocity
 - `vo`: northward velocity
-- `so`: salinity
-- `thetao`: potential temperature
-- `zos`: sea surface height
 
 Terrain (2D):
 - `elevation` (float32): bathymetry/topography on the merged grid
 - `land_mask` (uint8): mask of terrain pixels that were invalid (`NaN`) before filling
+
+### Present-by-default today (but do not hard-require unless you need them)
+
+Ocean state (3D; float32):
+- `so`: salinity
+- `thetao`: potential temperature
+- `zos`: sea surface height
 
 ### Optional (consumers must check existence)
 
@@ -131,4 +138,3 @@ This snapshot is for debugging and sanity checks; regenerate locally as needed.
 - dims: `time=48`, `depth=26`, `latitude=41`, `longitude=41`
 - vars: `so thetao uo vo zos elevation land_mask` (tides excluded by default)
 - file size: ~22 MiB
-
