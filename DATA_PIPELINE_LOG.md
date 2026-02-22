@@ -165,12 +165,13 @@ This file is the single source of truth for **what changed**, **why**, and **how
 ### Cleanup / archive
 - Obsolete artifacts (bad bbox water files, invalid combined outputs, one-off intermediate downloads, `.DS_Store`, caches) were deleted after validation.
 - Per-variant intermediate subset files are not required; we keep only `water/combined_gopaf_data.nc` for each variant.
+- Old `combined_environment.nc.bak.*` backups under each variant were deleted to avoid wasting disk space and confusing “latest” selection.
 
 ### Disk usage snapshot (as of 2026-02-22)
-- Canonical combined: `OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc` ≈ 332MB
-- `tiny` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/tiny` ≈ 15MB (combined file ≈ 1.7MB)
-- `scene` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/scene` ≈ 1.2GB (combined file ≈ 569MB)
-- `public` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/public` ≈ 227MB (combined file ≈ 23MB)
+- Canonical combined file: `OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc` ≈ 331 MiB
+- `tiny` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/tiny` ≈ 2 MiB (combined file ≈ 1.7 MiB)
+- `scene` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/scene` ≈ 572 MiB (combined file ≈ 569 MiB)
+- `public` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/public` ≈ 183 MiB (combined file ≈ 22 MiB)
 
 ### Environment snapshot (as of 2026-02-22)
 - python: 3.13.11
