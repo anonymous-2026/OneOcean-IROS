@@ -203,11 +203,19 @@ One-command run + export + bundle:
 PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
   -m oneocean_sim_habitat.cli.run_and_package \
   --preset compact \
-  --no-video \
+  --build-media-package \
   --publish-e2 \
   --e2-target-dir /data/private/user2/workspace/ocean/demo/assets/data \
   --episodes 1 \
   --max-steps 60
+```
+
+Build media package from an existing S2 run:
+
+```bash
+PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
+  -m oneocean_sim_habitat.cli.build_media_package \
+  --run-dir runs/oneocean_habitat_s2_smoke
 ```
 
 Batch robustness regression (multi-case S2 run matrix):
@@ -221,6 +229,7 @@ PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
   --max-steps 20 \
   --no-video \
   --bundle-no-video \
+  --build-best-media-package \
   --publish-best-e2 \
   --e2-target-dir /data/private/user2/workspace/ocean/demo/assets/data
 ```
