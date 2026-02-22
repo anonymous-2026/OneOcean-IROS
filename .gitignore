@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data outputs (not committed)
+*.nc
+*.tif
+*.tiff
+*.zarr/
+*.zip
+*.parquet
+*.csv
+
+OceanEnv/Data_pipeline/Data/
+OceanEnv/Data_pipeline/output/
+OceanEnv/Data_pipeline/**/variants/
+
+# Credentials (never commit)
+.copernicusmarine/

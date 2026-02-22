@@ -1,0 +1,9 @@
+copernicusmarine
+xarray
+netCDF4
+h5netcdf
+rasterio
+numpy
+scipy
+pandas
+dask
