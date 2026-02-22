@@ -1,0 +1,8 @@
+newmtl marker_yellow
+Ka 0.30 0.28 0.05
+Kd 0.92 0.86 0.20
+Ks 0.08 0.08 0.08
+Ns 14.0
+d 1.0
+illum 2
+

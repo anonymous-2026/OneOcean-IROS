@@ -1,9 +1,10 @@
-# OneOcean S2 Habitat Track
+# OneOcean S2 Habitat Track (Habitat-Sim)
 
 This package implements Agent H's differentiated S2 track:
-- Habitat-Lab navigation prototype,
-- coarse drift injection,
-- screenshot/video export for website/demo material.
+- **3D underwater ocean-proxy scenes** (bathymetry mesh + obstacles) grounded in our dataset variants,
+- current-driven drift hooks (dataset cache or synthetic fallback),
+- ≥2 qualitative tasks including **multi-agent** plume containment,
+- screenshot/video/gif export + `media_manifest.json` with exact commands.
 
 ## Environment
 
@@ -13,7 +14,53 @@ Use the locked Habitat environment:
 /home/shuaijun/miniconda3/envs/habitat/bin/python -c "import habitat, habitat_sim; print('ok')"
 ```
 
-## Quick run
+## Underwater tasks (recommended, quality-gate compliant)
+
+1) Prepare a drift cache (runs in the base conda Python because Habitat env does not ship `h5py`):
+
+```bash
+cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
+PYTHONPATH=. /home/shuaijun/miniconda3/bin/python -m oneocean_sim_habitat.cli.prepare_drift_cache \
+  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc \
+  --output-path runs/s2_drift_cache_tiny_t0_d0_bathy.npz \
+  --time-index 0 --depth-index 0
+```
+
+2) Build an underwater stage mesh from bathymetry (also needs `h5py`):
+
+```bash
+cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
+PYTHONPATH=. /home/shuaijun/miniconda3/bin/python -m oneocean_sim_habitat.cli.build_underwater_stage \
+  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc \
+  --output-dir runs/underwater_stage_tiny_v1 \
+  --horizontal-scale 0.01 \
+  --vertical-scale 0.01 \
+  --floor-offset-m 6 \
+  --obstacle-count 12 \
+  --seed 0
+```
+
+3) Run the underwater tasks (Habitat-Sim renderer):
+
+```bash
+cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
+PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python -m oneocean_sim_habitat.cli.run_underwater_tasks \
+  --stage-obj runs/underwater_stage_tiny_v1/underwater_stage.obj \
+  --stage-meta runs/underwater_stage_tiny_v1/underwater_stage_meta.json \
+  --drift-cache-path runs/s2_drift_cache_tiny_t0_d0_bathy.npz \
+  --output-dir runs/oneocean_habitat_s2_underwater_tiny_hero_v5 \
+  --max-steps-task1 260 \
+  --max-steps-task2 260
+```
+
+Outputs (under the run directory):
+- `media_manifest.json` (paths + **exact invocation**)
+- `run_config.json`
+- per-task subfolders with `scene.png`, `rollout.mp4`, `rollout.gif`, `final.png`, `metrics.json`
+
+## Legacy PointNav ocean proxy (smoke-only)
+
+This mode is kept only as a smoke-test baseline (not a 3D underwater scene).
 
 ```bash
 cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
