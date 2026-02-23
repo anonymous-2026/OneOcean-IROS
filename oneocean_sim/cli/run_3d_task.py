@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--render-width", type=int, default=960)
     parser.add_argument("--render-height", type=int, default=544)
     parser.add_argument("--fps", type=int, default=20)
-    parser.add_argument("--camera", type=str, default="cam_main")
+    parser.add_argument("--camera", type=str, default="orbit", help="cam_main|cam_low|orbit")
 
     parser.add_argument("--nav-goal-distance-m", type=float, default=60.0)
     parser.add_argument("--nav-goal-tolerance-m", type=float, default=12.0)
@@ -83,7 +83,8 @@ def main() -> None:
         plume_source_tolerance_m=args.plume_source_tolerance_m,
     )
 
-    outputs = run_task_3d(config=cfg, output_dir=args.output_dir, command=" ".join(sys.argv))
+    cmd = f"{sys.executable} -m oneocean_sim.cli.run_3d_task " + " ".join(sys.argv[1:])
+    outputs = run_task_3d(config=cfg, output_dir=args.output_dir, command=cmd)
     print(json.dumps(outputs, indent=2))
 
 

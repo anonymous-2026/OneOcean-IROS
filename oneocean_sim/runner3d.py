@@ -7,7 +7,7 @@ import json
 from math import atan2, cos, sin, sqrt
 from pathlib import Path
 from time import perf_counter
-from typing import Optional
+from typing import Callable, Optional
 
 import mujoco
 import numpy as np
@@ -16,17 +16,19 @@ from PIL import Image
 from .data import CurrentSampler, DatasetContext, open_dataset, resolve_dataset_path, validate_time_depth_indices
 from .mujoco3d_env import Mujoco3DConfig, OceanMujoco3DEnv
 from .mujoco3d_scene import ObstacleSpec
-from .tasks.nav3d import Nav3DController, Nav3DTaskConfig, count_collisions, sample_obstacles
+from .tasks.nav3d import Nav3DController, Nav3DTaskConfig, count_collisions
 from .tasks.plume3d import (
     CastAndSurgeController,
     PlumeMultiAgentTaskConfig,
-    plume_concentration,
     sample_source_xy,
 )
+from .pollution2d import build_diffusion_plume_field_2d
 
 
 SUPPORTED_TASKS_3D = ("nav_obstacles_3d", "plume_source_localization_3d")
 SUPPORTED_CONTROLLERS_3D = ("auto", "compensated", "naive")
+
+SUPPORTED_CAMERAS = ("cam_main", "cam_low", "orbit")
 
 
 @dataclass
@@ -52,7 +54,7 @@ class Run3DConfig:
     render_width: int = 960
     render_height: int = 544
     fps: int = 20
-    camera: str = "cam_main"
+    camera: str = "orbit"
 
     # Task knobs
     nav_goal_distance_m: float = 60.0
@@ -154,6 +156,154 @@ def _resolve_controller_mode(task: str, controller: str) -> str:
     raise ValueError(f"Unsupported controller: {controller}")
 
 
+def _build_orbit_camera(
+    env: OceanMujoco3DEnv,
+    *,
+    distance: float,
+    azimuth_deg: float,
+    elevation_deg: float,
+    orbit_speed_deg_per_step: float,
+) -> tuple[mujoco.MjvCamera, Callable[[int], None]]:
+    cam = mujoco.MjvCamera()
+    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    cam.distance = float(distance)
+    cam.azimuth = float(azimuth_deg)
+    cam.elevation = float(elevation_deg)
+
+    def _update(step: int) -> None:
+        xs = []
+        ys = []
+        zs = []
+        for idx in range(len(env.agents)):
+            st = env.agent_state(idx)
+            xs.append(float(st["x_m"]))
+            ys.append(float(st["y_m"]))
+            zs.append(float(st["z_m"]))
+        if xs:
+            cam.lookat[:] = np.asarray([np.mean(xs), np.mean(ys), np.mean(zs)], dtype=float)
+        cam.azimuth = float(azimuth_deg + orbit_speed_deg_per_step * float(step))
+
+    return cam, _update
+
+
+def _resolve_camera(
+    env: OceanMujoco3DEnv,
+    camera_mode: str,
+) -> tuple[int | str | mujoco.MjvCamera, Callable[[int], None]]:
+    camera_mode = str(camera_mode)
+    if camera_mode == "orbit":
+        dist = float(max(14.0, 0.045 * max(env.x_half_m, env.y_half_m)))
+        cam, update = _build_orbit_camera(
+            env,
+            distance=dist,
+            azimuth_deg=120.0,
+            elevation_deg=-10.0,
+            orbit_speed_deg_per_step=0.22,
+        )
+        update(0)
+        return cam, update
+
+    camera_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_mode)
+    if camera_id >= 0:
+        return camera_mode, lambda _step: None
+
+    raise ValueError(
+        f"Unknown camera mode '{camera_mode}'. Supported: {', '.join(SUPPORTED_CAMERAS)}"
+    )
+
+
+def _sample_reef_obstacles(
+    rng: np.random.Generator,
+    *,
+    env: OceanMujoco3DEnv,
+    count: int,
+    start_xyz_m: tuple[float, float, float],
+    goal_xyz_m: tuple[float, float, float],
+    keepout_radius_m: float = 16.0,
+) -> tuple[ObstacleSpec, ...]:
+    sx, sy, _sz = start_xyz_m
+    gx, gy, _gz = goal_xyz_m
+    dx = gx - sx
+    dy = gy - sy
+    length = max(1e-6, sqrt(dx * dx + dy * dy))
+    ux = dx / length
+    uy = dy / length
+    cx = -uy
+    cy = ux
+
+    lateral_spread = float(min(0.50 * length, 70.0))
+    corridor_m = float(min(20.0, max(14.0, 0.18 * length)))
+    obstacles: list[ObstacleSpec] = []
+    attempts = 0
+    while len(obstacles) < int(count) and attempts < int(count) * 80:
+        attempts += 1
+        s = float(rng.uniform(0.12 * length, 0.95 * length))
+        side = -1.0 if float(rng.uniform()) < 0.5 else 1.0
+        mag = float(corridor_m + abs(rng.normal(0.0, 0.35 * lateral_spread)))
+        mag = float(np.clip(mag, corridor_m, lateral_spread))
+        lateral = float(side * mag)
+
+        x = float(sx + s * ux + lateral * cx)
+        y = float(sy + s * uy + lateral * cy)
+        if not (-0.88 * env.x_half_m <= x <= 0.88 * env.x_half_m):
+            continue
+        if not (-0.88 * env.y_half_m <= y <= 0.88 * env.y_half_m):
+            continue
+
+        # Enforce a clear corridor around the start->goal centerline.
+        rx = x - sx
+        ry = y - sy
+        cross = float(rx * cx + ry * cy)
+        if abs(cross) < corridor_m:
+            continue
+
+        if sqrt((x - sx) ** 2 + (y - sy) ** 2) < keepout_radius_m:
+            continue
+        if sqrt((x - gx) ** 2 + (y - gy) ** 2) < keepout_radius_m:
+            continue
+
+        p = float(rng.uniform())
+        if p < 0.72:
+            shape = "ellipsoid"
+        elif p < 0.90:
+            shape = "sphere"
+        else:
+            shape = "cylinder"
+        yaw = float(rng.uniform(0.0, 2.0 * np.pi))
+        quat = (float(np.cos(0.5 * yaw)), 0.0, 0.0, float(np.sin(0.5 * yaw)))
+
+        base_z = float(env.seafloor_z_at_xy(x, y))
+        if shape == "ellipsoid":
+            a = float(rng.uniform(1.1, 2.8))
+            b = float(rng.uniform(0.9, 2.4))
+            c = float(rng.uniform(1.2, 3.6))
+            size = (a, b, c)
+            z = float(base_z + c)
+        elif shape == "sphere":
+            r = float(rng.uniform(1.0, 2.8))
+            size = (r, 0.0, 0.0)
+            z = float(base_z + r)
+        else:
+            r = float(rng.uniform(0.7, 1.6))
+            half_h = float(rng.uniform(1.2, 3.5))
+            size = (r, half_h, 0.0)
+            z = float(base_z + half_h)
+
+        obstacles.append(
+            ObstacleSpec(
+                name=f"reef_{len(obstacles):02d}",
+                shape=shape,
+                pos_xyz_m=(x, y, z),
+                size_xyz_m=size,
+                rgba=(1.0, 1.0, 1.0, 1.0),
+                material="mat_rock",
+                quat_wxyz=quat if shape == "ellipsoid" else None,
+            )
+        )
+
+    return tuple(obstacles)
+
+
 def run_task_3d(
     *,
     config: Run3DConfig,
@@ -216,12 +366,26 @@ def run_task_3d(
                 obstacles=(),
                 config=sim_cfg,
             )
-            obstacles = sample_obstacles(
+            # Start near one corner; goal at a random bearing with fixed distance.
+            start = (
+                float(rng.uniform(-0.7 * temp_env.x_half_m, -0.2 * temp_env.x_half_m)),
+                float(rng.uniform(-0.7 * temp_env.y_half_m, -0.2 * temp_env.y_half_m)),
+                float(nav_cfg.desired_depth_z_m),
+            )
+            bearing = float(rng.uniform(0.0, 2.0 * np.pi))
+            goal = (
+                float(np.clip(start[0] + nav_cfg.goal_distance_m * cos(bearing), -0.85 * temp_env.x_half_m, 0.85 * temp_env.x_half_m)),
+                float(np.clip(start[1] + nav_cfg.goal_distance_m * sin(bearing), -0.85 * temp_env.y_half_m, 0.85 * temp_env.y_half_m)),
+                float(nav_cfg.desired_depth_z_m),
+            )
+
+            obstacles = _sample_reef_obstacles(
                 rng,
+                env=temp_env,
                 count=int(config.nav_obstacle_count),
-                x_half_m=temp_env.x_half_m,
-                y_half_m=temp_env.y_half_m,
-                z_center_m=nav_cfg.desired_depth_z_m - 1.6,
+                start_xyz_m=start,
+                goal_xyz_m=goal,
+                keepout_radius_m=18.0,
             )
             env = OceanMujoco3DEnv(
                 ds,
@@ -233,19 +397,6 @@ def run_task_3d(
                 agent_count=1,
                 obstacles=obstacles,
                 config=sim_cfg,
-            )
-
-            # Start near one corner; goal at a random bearing with fixed distance.
-            start = (
-                float(rng.uniform(-0.7 * env.x_half_m, -0.2 * env.x_half_m)),
-                float(rng.uniform(-0.7 * env.y_half_m, -0.2 * env.y_half_m)),
-                float(nav_cfg.desired_depth_z_m),
-            )
-            bearing = float(rng.uniform(0.0, 2.0 * np.pi))
-            goal = (
-                float(np.clip(start[0] + nav_cfg.goal_distance_m * cos(bearing), -0.85 * env.x_half_m, 0.85 * env.x_half_m)),
-                float(np.clip(start[1] + nav_cfg.goal_distance_m * sin(bearing), -0.85 * env.y_half_m, 0.85 * env.y_half_m)),
-                float(nav_cfg.desired_depth_z_m),
             )
             env.reset(agent_xyz_m=[start], goal_xyz_m=goal, source_xyz_m=goal)
 
@@ -259,8 +410,11 @@ def run_task_3d(
 
             renderer = None
             frames: list[np.ndarray] = []
+            camera_arg: int | str | mujoco.MjvCamera = str(config.camera)
+            camera_update: Callable[[int], None] = lambda _step: None
             if config.record_media and (episode == 0 or config.record_all_episodes):
                 renderer = mujoco.Renderer(env.model, height=int(config.render_height), width=int(config.render_width))
+                camera_arg, camera_update = _resolve_camera(env, str(config.camera))
 
             trajectory: list[dict[str, object]] = []
             collisions = 0
@@ -289,7 +443,8 @@ def run_task_3d(
                     invalid_terminated = True
 
                 if renderer is not None:
-                    frames.append(env.render(renderer, camera=config.camera))
+                    camera_update(step)
+                    frames.append(env.render(renderer, camera=camera_arg))
 
                 trajectory.append(
                     {
@@ -386,8 +541,8 @@ def run_task_3d(
                 max_steps=int(config.max_steps),
             )
             plume_field_note = (
-                "Plume concentration is a synthetic analytic field (anisotropic Gaussian aligned with local current). "
-                "Currents are sampled from our dataset; do not interpret plume as measured pollution data."
+                "Plume concentration is generated by a coarse 2D advection-diffusion proxy driven by our dataset "
+                "currents at the chosen (time, depth) slice. It is NOT a measured microplastics field."
             )
 
             env = OceanMujoco3DEnv(
@@ -435,6 +590,24 @@ def run_task_3d(
             )
             env.reset(agent_xyz_m=[start0, start1], goal_xyz_m=source, source_xyz_m=source)
 
+            def _current_uv_at_xy(x_m: float, y_m: float) -> tuple[float, float]:
+                lat_xy, lon_xy = env.geo.xy_to_latlon(float(x_m), float(y_m))
+                return env.sim_uv_mps(lat_xy, lon_xy)
+
+            plume_field = build_diffusion_plume_field_2d(
+                x_half_m=env.x_half_m,
+                y_half_m=env.y_half_m,
+                source_xy_m=(float(source[0]), float(source[1])),
+                current_uv_at_xy=_current_uv_at_xy,
+                nx=96,
+                ny=96,
+                dt_sec=0.35,
+                steps=180,
+                diffusion_m2ps=4.0,
+                decay_rate_per_sec=0.003,
+                source_rate=1.0,
+            )
+
             controllers = [
                 CastAndSurgeController(
                     cruise_speed_mps=float(plume_cfg.cruise_speed_mps),
@@ -456,8 +629,11 @@ def run_task_3d(
 
             renderer = None
             frames: list[np.ndarray] = []
+            camera_arg: int | str | mujoco.MjvCamera = str(config.camera)
+            camera_update: Callable[[int], None] = lambda _step: None
             if config.record_media and (episode == 0 or config.record_all_episodes):
                 renderer = mujoco.Renderer(env.model, height=int(config.render_height), width=int(config.render_width))
+                camera_arg, camera_update = _resolve_camera(env, str(config.camera))
 
             traj0: list[dict[str, object]] = []
             traj1: list[dict[str, object]] = []
@@ -469,26 +645,10 @@ def run_task_3d(
             for step in range(int(plume_cfg.max_steps)):
                 obs0 = env.agent_state(0)
                 obs1 = env.agent_state(1)
-                conc0 = plume_concentration(
-                    xy_m=(obs0["x_m"], obs0["y_m"]),
-                    source_xy_m=(source[0], source[1]),
-                    current_uv_mps=(obs0["current_u_mps"], obs0["current_v_mps"]),
-                    sigma_cross_m=float(plume_cfg.sigma_cross_m),
-                    sigma_down_m=float(plume_cfg.sigma_down_m),
-                    sigma_up_m=float(plume_cfg.sigma_up_m),
-                    upstream_scale=float(plume_cfg.upstream_scale_m),
-                )
-                conc1 = plume_concentration(
-                    xy_m=(obs1["x_m"], obs1["y_m"]),
-                    source_xy_m=(source[0], source[1]),
-                    current_uv_mps=(obs1["current_u_mps"], obs1["current_v_mps"]),
-                    sigma_cross_m=float(plume_cfg.sigma_cross_m),
-                    sigma_down_m=float(plume_cfg.sigma_down_m),
-                    sigma_up_m=float(plume_cfg.sigma_up_m),
-                    upstream_scale=float(plume_cfg.upstream_scale_m),
-                )
-                conc0 = float(max(0.0, conc0 + rng.normal(0.0, float(plume_cfg.sensor_noise_std))))
-                conc1 = float(max(0.0, conc1 + rng.normal(0.0, float(plume_cfg.sensor_noise_std))))
+                conc0 = plume_field.sample(float(obs0["x_m"]), float(obs0["y_m"]))
+                conc1 = plume_field.sample(float(obs1["x_m"]), float(obs1["y_m"]))
+                conc0 = float(np.clip(conc0 + rng.normal(0.0, float(plume_cfg.sensor_noise_std)), 0.0, 1.0))
+                conc1 = float(np.clip(conc1 + rng.normal(0.0, float(plume_cfg.sensor_noise_std)), 0.0, 1.0))
                 detected = (conc0 >= plume_cfg.detection_threshold) or (conc1 >= plume_cfg.detection_threshold)
                 if detected and first_detection_step is None:
                     first_detection_step = int(step)
@@ -510,7 +670,8 @@ def run_task_3d(
                 energy += ((speed0 * speed0) + (speed1 * speed1)) * float(sim_cfg.dt_sec)
 
                 if renderer is not None:
-                    frames.append(env.render(renderer, camera=config.camera))
+                    camera_update(step)
+                    frames.append(env.render(renderer, camera=camera_arg))
 
                 traj0.append(
                     {
@@ -610,7 +771,7 @@ def run_task_3d(
     with run_config_path.open("w", encoding="utf-8") as file:
         task_notes = None
         if config.task == "plume_source_localization_3d":
-            task_notes = "Includes a synthetic plume field (see media_manifest notes)."
+            task_notes = "Includes a diffusion plume field derived from dataset currents (see media_manifest notes)."
         json.dump(
             {
                 "run_config": asdict(config),

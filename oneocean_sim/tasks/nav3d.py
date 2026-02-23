@@ -29,6 +29,8 @@ def _obstacle_bounding_radius(obstacle: ObstacleSpec) -> float:
     if obstacle.shape == "cylinder":
         r, half_h, _ = obstacle.size_xyz_m
         return float(sqrt(r * r + half_h * half_h))
+    if obstacle.shape == "ellipsoid":
+        return float(max(obstacle.size_xyz_m))
     return float(max(obstacle.size_xyz_m))
 
 
@@ -137,25 +139,31 @@ def sample_obstacles(
 ) -> tuple[ObstacleSpec, ...]:
     obstacles: list[ObstacleSpec] = []
     for i in range(int(count)):
-        shape = "sphere" if (i % 3) != 0 else "box"
+        shape = "ellipsoid" if (i % 4) != 0 else "cylinder"
         x = float(rng.uniform(-0.85 * x_half_m, 0.85 * x_half_m))
         y = float(rng.uniform(-0.85 * y_half_m, 0.85 * y_half_m))
-        z = float(z_center_m + rng.uniform(-1.2, 1.2))
-        if shape == "sphere":
-            r = float(rng.uniform(0.9, 1.9))
-            size = (r, r, r)
+        z = float(z_center_m + rng.uniform(-2.4, 1.4))
+        if shape == "ellipsoid":
+            a = float(rng.uniform(1.0, 2.8))
+            b = float(rng.uniform(0.9, 2.4))
+            c = float(rng.uniform(1.2, 4.8))
+            size = (a, b, c)
+            yaw = float(rng.uniform(0.0, 2.0 * np.pi))
+            quat = (float(np.cos(0.5 * yaw)), 0.0, 0.0, float(np.sin(0.5 * yaw)))
         else:
-            hx = float(rng.uniform(0.8, 2.2))
-            hy = float(rng.uniform(0.8, 2.2))
-            hz = float(rng.uniform(0.6, 1.6))
-            size = (hx, hy, hz)
+            r = float(rng.uniform(0.7, 1.6))
+            half_h = float(rng.uniform(1.6, 5.2))
+            size = (r, half_h, 0.0)
+            quat = None
         obstacles.append(
             ObstacleSpec(
                 name=f"obstacle{i:02d}",
                 shape=shape,
                 pos_xyz_m=(x, y, z),
                 size_xyz_m=size,
-                rgba=(0.45, 0.5, 0.55, 1.0),
+                rgba=(1.0, 1.0, 1.0, 1.0),
+                material="mat_rock",
+                quat_wxyz=quat,
             )
         )
     return tuple(obstacles)

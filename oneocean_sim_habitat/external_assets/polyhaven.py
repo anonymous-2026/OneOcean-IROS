@@ -156,6 +156,7 @@ def ensure_underwater_asset_pack(
     out_dir: Path,
     resolution: str = "1k",
     sand_texture_id: str = "aerial_sand",
+    rock_texture_id: str = "mossy_rock",
     rock_model_id: str = "rock_07",
     overwrite: bool = False,
 ) -> dict[str, PolyHavenAsset]:
@@ -177,6 +178,23 @@ def ensure_underwater_asset_pack(
         local_root=out_dir / sand_texture_id,
         primary_path=sand_primary,
         manifest_path=sand_manifest,
+    )
+
+    rock_maps = download_texture_maps(
+        asset_id=rock_texture_id,
+        out_dir=out_dir,
+        resolution=resolution,
+        maps=("Diffuse", "nor_gl"),
+        file_format="png",
+        overwrite=overwrite,
+    )
+    rock_primary = rock_maps["Diffuse"]
+    rock_tex_manifest = out_dir / rock_texture_id / "polyhaven_manifest.json"
+    write_polyhaven_manifest(
+        asset_id=rock_texture_id,
+        local_root=out_dir / rock_texture_id,
+        primary_path=rock_primary,
+        manifest_path=rock_tex_manifest,
     )
 
     rock_gltf = download_gltf_model(
@@ -202,6 +220,15 @@ def ensure_underwater_asset_pack(
             local_root=out_dir / sand_texture_id,
             manifest_path=sand_manifest,
             primary_path=sand_primary,
+        ),
+        "rock_texture": PolyHavenAsset(
+            asset_id=rock_texture_id,
+            asset_type="texture",
+            license="CC0 (Poly Haven)",
+            source_url=f"{POLYHAVEN_ASSET_PAGE}/{rock_texture_id}",
+            local_root=out_dir / rock_texture_id,
+            manifest_path=rock_tex_manifest,
+            primary_path=rock_primary,
         ),
         "rock_model": PolyHavenAsset(
             asset_id=rock_model_id,

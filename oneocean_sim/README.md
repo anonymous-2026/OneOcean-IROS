@@ -8,6 +8,14 @@ Quality gate note:
 
 ## Run (3D, quality-gate compliant)
 
+Fetch underwater textures (local cache; do not commit):
+
+```bash
+cd oneocean(iros-2026-code)
+/data/private/user2/workspace/robosuite_learning/.venv/bin/python \
+  -m oneocean_sim.cli.fetch_underwater_assets
+```
+
 ```bash
 cd oneocean(iros-2026-code)
 MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
@@ -44,7 +52,7 @@ MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python 
 
 - `nav_obstacles_3d`: 3D goal navigation under dataset currents with obstacles + bathymetry heightfield.
 - `plume_source_localization_3d` (**multi-agent**): 2 vehicles cooperate via cast-and-surge to localize a source.
-  - Plume concentration is a **synthetic analytic field** aligned with dataset currents (see `media_manifest.json` notes).
+  - Plume concentration is a **coarse advection-diffusion proxy** driven by dataset currents (see `media_manifest.json` notes).
 
 ## CLI arguments (3D runner)
 
@@ -59,7 +67,7 @@ MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python 
   - `--current-scale` (amplify dataset currents in sim for visibility/ablation)
 - media:
   - `--no-media`, `--record-all-episodes`
-  - `--render-width`, `--render-height`, `--fps`, `--camera`
+  - `--render-width`, `--render-height`, `--fps`, `--camera` (`cam_main|cam_low|orbit`, default: `orbit`)
 
 ## Outputs (3D runner)
 
