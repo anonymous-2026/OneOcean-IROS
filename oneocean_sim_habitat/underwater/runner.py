@@ -35,6 +35,7 @@ class CameraConfig:
 class UnderwaterRunConfig:
     stage_obj: str
     stage_meta: str
+    base_scene: Optional[str] = None
     output_dir: Optional[str] = None
     invocation: str = ""
     seed: int = 0
@@ -56,14 +57,33 @@ class UnderwaterRunConfig:
     vehicle_max_vertical_mps: float = 0.8
     vehicle_clearance_m: float = 0.6
 
-    plume_sigma_m: float = 35.0
+    plume_sigma_m: float = 220.0
     plume_advect_gain: float = 0.8
+    plume_diffusion_m2ps: float = 0.35
+    plume_cloud_scale: float = 0.10
     success_radius_m: float = 2.5
 
     formation_radius_m: float = 7.0
     formation_kp: float = 0.55
     formation_success_error_m: float = 1.25
     formation_success_hold_steps: int = 60
+
+    rock_model_gltf: Optional[str] = None
+    rock_count: int = 10
+    rock_scale_min: float = 0.9
+    rock_scale_max: float = 1.7
+
+    silt_particle_count: int = 90
+    silt_particle_scale: float = 0.035
+    silt_advect_gain: float = 0.35
+    silt_rise_mps: float = 0.015
+
+    plume_particle_count: int = 45
+    plume_particle_scale: float = 0.060
+
+    underwater_fog_density: float = 0.065
+    underwater_water_rgb: tuple[int, int, int] = (10, 55, 80)
+    underwater_attenuation_rgb: tuple[float, float, float] = (0.14, 0.07, 0.03)
 
 
 def _default_output_dir() -> Path:
@@ -86,6 +106,49 @@ def _normalize_rgb(rgba: np.ndarray) -> np.ndarray:
     if frame.shape[-1] == 4:
         frame = frame[..., :3]
     return frame
+
+
+def _normalize_depth(depth: np.ndarray) -> np.ndarray:
+    d = np.asarray(depth)
+    if d.ndim == 3 and d.shape[-1] == 1:
+        d = d[..., 0]
+    if d.ndim != 2:
+        raise ValueError(f"Unexpected depth shape: {d.shape}")
+    d = d.astype(np.float32)
+    return np.nan_to_num(d, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _apply_underwater_postprocess(
+    rgb: np.ndarray,
+    depth_m: np.ndarray,
+    *,
+    fog_density: float,
+    water_rgb: tuple[int, int, int],
+    attenuation_rgb: tuple[float, float, float],
+) -> np.ndarray:
+    """Cheap underwater look: depth fog + wavelength attenuation (postprocess)."""
+    rgb_f = rgb.astype(np.float32) / 255.0
+    d = np.clip(depth_m.astype(np.float32), 0.0, 250.0)
+
+    fog = 1.0 - np.exp(-d * float(fog_density))
+    fog = fog[..., None]
+
+    r_att, g_att, b_att = (float(attenuation_rgb[0]), float(attenuation_rgb[1]), float(attenuation_rgb[2]))
+    att = np.stack(
+        [
+            np.exp(-d * r_att),
+            np.exp(-d * g_att),
+            np.exp(-d * b_att),
+        ],
+        axis=-1,
+    )
+    rgb_f = rgb_f * att
+
+    water = np.array(water_rgb, dtype=np.float32) / 255.0
+    out = rgb_f * (1.0 - fog) + water * fog
+
+    out = np.clip(out * 255.0, 0.0, 255.0).astype(np.uint8)
+    return out
 
 
 def _draw_hud(
@@ -130,10 +193,10 @@ def _draw_hud(
     return np.asarray(img)
 
 
-def _setup_sim(stage_obj: Path, camera: CameraConfig) -> tuple[habitat_sim.Simulator, habitat_sim.Agent]:
+def _setup_sim(scene_id: Path, camera: CameraConfig) -> tuple[habitat_sim.Simulator, habitat_sim.Agent]:
     sim_cfg = habitat_sim.SimulatorConfiguration()
     sim_cfg.scene_dataset_config_file = "default"
-    sim_cfg.scene_id = str(stage_obj)
+    sim_cfg.scene_id = str(scene_id)
     sim_cfg.enable_physics = True
 
     rgb_spec = habitat_sim.CameraSensorSpec()
@@ -143,8 +206,15 @@ def _setup_sim(stage_obj: Path, camera: CameraConfig) -> tuple[habitat_sim.Simul
     rgb_spec.sensor_subtype = habitat_sim.SensorSubType.PINHOLE
     rgb_spec.position = [0.0, 0.0, 0.0]
 
+    depth_spec = habitat_sim.CameraSensorSpec()
+    depth_spec.uuid = "depth"
+    depth_spec.sensor_type = habitat_sim.SensorType.DEPTH
+    depth_spec.resolution = [int(camera.height), int(camera.width)]
+    depth_spec.sensor_subtype = habitat_sim.SensorSubType.PINHOLE
+    depth_spec.position = [0.0, 0.0, 0.0]
+
     agent_cfg = habitat_sim.AgentConfiguration()
-    agent_cfg.sensor_specifications = [rgb_spec]
+    agent_cfg.sensor_specifications = [rgb_spec, depth_spec]
 
     sim = habitat_sim.Simulator(habitat_sim.Configuration(sim_cfg, [agent_cfg]))
     agent = sim.initialize_agent(0)
@@ -237,7 +307,10 @@ def _sample_drift_sim_xz(
         x_m=x_real, z_m=z_real, origin_lat=float(origin_lat), origin_lon=float(origin_lon)
     )
     gain = float(current_gain)
-    return float(drift_x_real * gain), float(drift_z_real * gain), f"cache:{drift_field.path}"
+    # Convert real m/s into sim units using the same horizontal_scale that mapped meters -> sim.
+    drift_x_sim = float(drift_x_real * gain * scale)
+    drift_z_sim = float(drift_z_real * gain * scale)
+    return drift_x_sim, drift_z_sim, f"cache:{drift_field.path}"
 
 
 def _seafloor_y_sim(
@@ -354,7 +427,14 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
     task1_dir.mkdir(parents=True, exist_ok=True)
     task2_dir.mkdir(parents=True, exist_ok=True)
 
-    sim, cam_agent = _setup_sim(stage_obj=stage_obj, camera=config.camera)
+    scene_id = stage_obj
+    if config.base_scene:
+        base_scene = Path(config.base_scene).expanduser().resolve()
+        if not base_scene.exists():
+            raise FileNotFoundError(f"Base scene not found: {base_scene}")
+        scene_id = base_scene
+
+    sim, cam_agent = _setup_sim(scene_id=scene_id, camera=config.camera)
 
     drift_field: Optional[CachedDriftField] = None
     drift_origin_lat = config.drift_origin_lat if config.drift_origin_lat is not None else origin_lat
@@ -369,7 +449,9 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
     uuv_green = assets_root / "uuv_green.obj"
     uuv_blue = assets_root / "uuv_blue.obj"
     marker = assets_root / "marker_yellow.obj"
-    for p in (uuv_red, uuv_green, uuv_blue, marker):
+    particle_silt = assets_root / "particle_silt.obj"
+    particle_plume = assets_root / "particle_plume.obj"
+    for p in (uuv_red, uuv_green, uuv_blue, marker, particle_silt, particle_plume):
         if not p.exists():
             sim.close()
             raise FileNotFoundError(f"Missing mesh asset: {p}")
@@ -378,6 +460,8 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
     tpl_green = _register_mesh_template(sim, "uuv_green", uuv_green, scale=1.0)
     tpl_blue = _register_mesh_template(sim, "uuv_blue", uuv_blue, scale=1.0)
     tpl_marker = _register_mesh_template(sim, "marker_yellow", marker, scale=1.0)
+    tpl_silt = _register_mesh_template(sim, "particle_silt", particle_silt, scale=float(config.silt_particle_scale))
+    tpl_plume = _register_mesh_template(sim, "particle_plume", particle_plume, scale=float(config.plume_particle_scale))
 
     rng = np.random.default_rng(int(config.seed))
 
@@ -406,13 +490,195 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
         out[1] = float(min(out[1], -0.4))
         return out, collided
 
+    def clamp_above_seafloor(pos_sim: np.ndarray, *, clearance_m: float) -> np.ndarray:
+        out = np.asarray(pos_sim, dtype=np.float32).copy()
+        y_floor = seafloor_y(out)
+        if y_floor is not None:
+            out[1] = float(max(out[1], float(y_floor) + float(clearance_m)))
+        out[1] = float(min(out[1], -0.55))
+        return out
+
+    x_min, x_max = float(extents["x_min"]), float(extents["x_max"])
+    z_min, z_max = float(extents["z_min"]), float(extents["z_max"])
+    y_min, y_max = float(extents["y_min"]), float(extents["y_max"])
+
+    stage_tpl: Optional[int] = None
+    if config.base_scene:
+        stage_tpl = _register_mesh_template(sim, "underwater_stage_obj", stage_obj, scale=1.0)
+
+    rock_path: Optional[Path] = None
+    if config.rock_model_gltf:
+        rock_path = Path(config.rock_model_gltf).expanduser().resolve()
+        if not rock_path.exists():
+            sim.close()
+            raise FileNotFoundError(f"Rock model not found: {rock_path}")
+
+    env_rng = np.random.default_rng(int(config.seed) + 12345)
+    rock_specs: list[dict[str, Any]] = []
+    if rock_path is not None and int(config.rock_count) > 0:
+        for i in range(int(config.rock_count)):
+            scale = float(env_rng.uniform(float(config.rock_scale_min), float(config.rock_scale_max)))
+            tpl = _register_mesh_template(sim, f"rock_{i:02d}", rock_path, scale=scale)
+            x = float(env_rng.uniform(x_min, x_max))
+            z = float(env_rng.uniform(z_min, z_max))
+            pos = np.array([x, -2.0, z], dtype=np.float32)
+            y_floor = seafloor_y(pos)
+            base_y = float(y_floor) if y_floor is not None else float(y_min)
+            pos[1] = float(min(base_y + 0.10, -0.85))
+            rock_specs.append(
+                {
+                    "template_id": int(tpl),
+                    "translation": pos,
+                    "yaw_rad": float(env_rng.uniform(0.0, 2.0 * math.pi)),
+                }
+            )
+
+    silt_init_positions: list[np.ndarray] = []
+    silt_phases: list[float] = []
+    for i in range(int(config.silt_particle_count)):
+        x = float(env_rng.uniform(x_min, x_max))
+        z = float(env_rng.uniform(z_min, z_max))
+        pos = np.array([x, -2.0, z], dtype=np.float32)
+        y_floor = seafloor_y(pos)
+        base_y = float(y_floor) if y_floor is not None else float(y_min)
+        pos[1] = float(min(base_y + float(env_rng.uniform(1.0, 9.0)), -0.85))
+        silt_init_positions.append(pos)
+        silt_phases.append(float(env_rng.uniform(0.0, 2.0 * math.pi)))
+
+    def spawn_environment() -> dict[str, Any]:
+        env: dict[str, Any] = {"stage_obj": None, "rocks": [], "silt": []}
+        if stage_tpl is not None:
+            env["stage_obj"] = _spawn_object(
+                sim,
+                int(stage_tpl),
+                translation=np.array([0.0, 0.0, 0.0], dtype=np.float32),
+                motion_type=habitat_sim.physics.MotionType.STATIC,
+            )
+        for spec in rock_specs:
+            obj = _spawn_object(
+                sim,
+                int(spec["template_id"]),
+                translation=np.asarray(spec["translation"], dtype=np.float32),
+                motion_type=habitat_sim.physics.MotionType.STATIC,
+            )
+            obj.rotation = _yaw_quat_magnum(float(spec["yaw_rad"]))
+            env["rocks"].append(obj)
+        for pos in silt_init_positions:
+            obj = _spawn_object(
+                sim,
+                int(tpl_silt),
+                translation=np.asarray(pos, dtype=np.float32),
+                motion_type=habitat_sim.physics.MotionType.KINEMATIC,
+            )
+            env["silt"].append(obj)
+        return env
+
+    def step_silt_particles(step: int, silt_objs: list[habitat_sim.physics.ManagedRigidObject]) -> None:
+        for idx, obj in enumerate(silt_objs):
+            pos = np.asarray(obj.translation, dtype=np.float32)
+            drift_x, drift_z, _ = _sample_drift_sim_xz(
+                drift_field,
+                pos,
+                step,
+                horizontal_scale,
+                drift_origin_lat,
+                drift_origin_lon,
+                config.synthetic_drift_amplitude_mps,
+                config.current_gain,
+            )
+            pos[0] = float(pos[0] + float(drift_x) * float(config.dt_s) * float(config.silt_advect_gain))
+            pos[2] = float(pos[2] + float(drift_z) * float(config.dt_s) * float(config.silt_advect_gain))
+            pos[1] = float(
+                pos[1]
+                + float(config.silt_rise_mps) * float(config.dt_s)
+                + 0.10 * math.sin(float(silt_phases[idx]) + 0.18 * float(step))
+            )
+
+            if float(pos[0]) < x_min:
+                pos[0] = float(x_max)
+            elif float(pos[0]) > x_max:
+                pos[0] = float(x_min)
+            if float(pos[2]) < z_min:
+                pos[2] = float(z_max)
+            elif float(pos[2]) > z_max:
+                pos[2] = float(z_min)
+
+            pos = clamp_above_seafloor(pos, clearance_m=0.25)
+            if float(pos[1]) > -0.60:
+                pos = np.asarray(silt_init_positions[idx], dtype=np.float32).copy()
+            obj.translation = pos
+
+    def spawn_plume_cloud(
+        plume_center: np.ndarray,
+        *,
+        rng: np.random.Generator,
+        sigma_m: float,
+    ) -> tuple[list[habitat_sim.physics.ManagedRigidObject], np.ndarray]:
+        n = max(0, int(config.plume_particle_count))
+        if n == 0:
+            return [], np.zeros((0, 3), dtype=np.float32)
+        offsets = rng.normal(loc=0.0, scale=1.0, size=(n, 3)).astype(np.float32)
+        offsets[:, 1] = offsets[:, 1] * 0.35
+        norms = np.linalg.norm(offsets, axis=1, keepdims=True)
+        norms = np.clip(norms, 1e-6, None)
+        radii = rng.uniform(0.15, 1.0, size=(n, 1)).astype(np.float32)
+        offsets = offsets / norms * radii
+
+        objs: list[habitat_sim.physics.ManagedRigidObject] = []
+        scale = float(float(config.plume_cloud_scale) * max(1e-6, float(sigma_m)))
+        for i in range(n):
+            pos = np.asarray(plume_center, dtype=np.float32) + offsets[i] * scale
+            pos = _clamp_to_stage_bounds(pos, extents)
+            pos = clamp_above_seafloor(pos, clearance_m=0.25)
+            objs.append(
+                _spawn_object(
+                    sim,
+                    int(tpl_plume),
+                    translation=pos,
+                    motion_type=habitat_sim.physics.MotionType.KINEMATIC,
+                )
+            )
+        return objs, offsets
+
+    def update_plume_cloud(
+        plume_objs: list[habitat_sim.physics.ManagedRigidObject],
+        offsets: np.ndarray,
+        plume_center: np.ndarray,
+        *,
+        sigma_m: float,
+        step: int,
+    ) -> None:
+        if not plume_objs:
+            return
+        theta = 0.12 * float(step)
+        c = float(math.cos(theta))
+        s = float(math.sin(theta))
+        scale = float(float(config.plume_cloud_scale) * max(1e-6, float(sigma_m)))
+        for i, obj in enumerate(plume_objs):
+            off = offsets[i]
+            ox = float(off[0] * c - off[2] * s)
+            oz = float(off[0] * s + off[2] * c)
+            oy = float(off[1] + 0.08 * math.sin(0.25 * float(step) + float(i)))
+            pos = np.asarray(plume_center, dtype=np.float32) + np.array([ox, oy, oz], dtype=np.float32) * scale
+            pos = _clamp_to_stage_bounds(pos, extents)
+            pos = clamp_above_seafloor(pos, clearance_m=0.25)
+            obj.translation = pos
+
     def update_camera(step: int, focus: np.ndarray) -> None:
         state = _camera_state_from_orbit(step=step, center=focus, camera=config.camera)
         cam_agent.set_state(state)
 
     def render_frame(step: int, hud_lines: list[str], drift_x: float, drift_z: float) -> np.ndarray:
-        rgba = sim.get_sensor_observations()["rgb"]
-        rgb = _normalize_rgb(rgba)
+        obs = sim.get_sensor_observations()
+        rgb = _normalize_rgb(obs["rgb"])
+        depth = _normalize_depth(obs["depth"])
+        rgb = _apply_underwater_postprocess(
+            rgb,
+            depth,
+            fog_density=float(config.underwater_fog_density),
+            water_rgb=tuple(config.underwater_water_rgb),
+            attenuation_rgb=tuple(config.underwater_attenuation_rgb),
+        )
         return _draw_hud(rgb, lines=hud_lines, drift_x_mps=drift_x, drift_z_mps=drift_z)
 
     def write_video_and_gif(
@@ -447,12 +713,26 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
         "invocation": str(config.invocation or ""),
         "output_dir": str(output_dir),
         "stage": {
+            "scene_id": str(scene_id),
+            "base_scene": str(Path(config.base_scene).expanduser().resolve()) if config.base_scene else "",
             "obj": str(stage_obj),
             "meta": str(stage_meta_path),
             "drift_cache": str(Path(config.drift_cache_path).resolve()) if config.drift_cache_path else "",
             "drift_origin_lat": drift_origin_lat,
             "drift_origin_lon": drift_origin_lon,
             "drift_source": "synthetic" if drift_field is None else f"cache:{drift_field.path}",
+            "rock_model_gltf": str(Path(config.rock_model_gltf).expanduser().resolve())
+            if config.rock_model_gltf
+            else "",
+            "underwater_postprocess": {
+                "fog_density": float(config.underwater_fog_density),
+                "water_rgb": list(config.underwater_water_rgb),
+                "attenuation_rgb": list(config.underwater_attenuation_rgb),
+            },
+            "particles": {
+                "silt_count": int(config.silt_particle_count),
+                "plume_count": int(config.plume_particle_count),
+            },
         },
         "tasks": [],
     }
@@ -461,18 +741,23 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
         # -----------------------
         # Task 1: Plume localization (single agent)
         # -----------------------
-        x_min, x_max = float(extents["x_min"]), float(extents["x_max"])
-        z_min, z_max = float(extents["z_min"]), float(extents["z_max"])
+        sim.get_rigid_object_manager().remove_all_objects()
+        env1 = spawn_environment()
 
-        # Use far-apart start/target so the rollout is long enough to be visually meaningful.
-        start_pos = np.array([0.70 * x_min, -2.8, 0.70 * z_min], dtype=np.float32)
+        # Choose a non-trivial but reachable start/target separation (avoid spanning the entire 1° scene).
+        x_span = float(x_max - x_min)
+        z_span = float(z_max - z_min)
+        start_pos = np.array([x_min + 0.25 * x_span, -2.8, z_min + 0.25 * z_span], dtype=np.float32)
         start_pos, _ = apply_depth_clamp(start_pos)
         vehicle = _spawn_object(sim, tpl_red, translation=start_pos)
 
         # Initialize plume marker at an offset, then let currents advect it.
-        plume_center = np.array([0.65 * x_max, -3.3, 0.65 * z_max], dtype=np.float32)
+        plume_center = np.array([x_min + 0.35 * x_span, -3.3, z_min + 0.35 * z_span], dtype=np.float32)
         plume_center, _ = apply_depth_clamp(plume_center)
         plume_obj = _spawn_object(sim, tpl_marker, translation=plume_center)
+        plume_rng1 = np.random.default_rng(int(config.seed) + 202)
+        sigma0 = float(config.plume_sigma_m)
+        plume_particles, plume_offsets = spawn_plume_cloud(plume_center, rng=plume_rng1, sigma_m=sigma0)
 
         frames: list[np.ndarray] = []
         traj_rows: list[dict[str, Any]] = []
@@ -516,9 +801,14 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             plume_center, _ = apply_depth_clamp(plume_center)
             plume_obj.translation = plume_center
 
+            t_s = float(step) * float(config.dt_s)
+            sigma_t = math.sqrt(sigma0 * sigma0 + 2.0 * float(config.plume_diffusion_m2ps) * t_s)
+            update_plume_cloud(plume_particles, plume_offsets, plume_center, sigma_m=sigma_t, step=step)
+            step_silt_particles(step, env1["silt"])
+
             # Control toward plume based on concentration gradient.
             ctrl = _vehicle_controller_plume(
-                pos=pos, plume_center=plume_center, speed=float(config.vehicle_speed_mps), rng=rng, sigma_m=float(config.plume_sigma_m)
+                pos=pos, plume_center=plume_center, speed=float(config.vehicle_speed_mps), rng=rng, sigma_m=float(sigma_t)
             )
             drift_x, drift_z, drift_tag = _sample_drift_sim_xz(
                 drift_field,
@@ -547,7 +837,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             vehicle.translation = pos
 
             dist = float(np.linalg.norm((pos - plume_center)[[0, 2]]))
-            conc = _plume_concentration(pos, plume_center, sigma_m=float(config.plume_sigma_m))
+            conc = _plume_concentration(pos, plume_center, sigma_m=float(sigma_t))
             if success < 0.5 and dist <= float(config.success_radius_m):
                 success = 1.0
                 t_success = step
@@ -556,7 +846,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             update_camera(step, focus=focus)
             hud = [
                 "Task1: Plume localization (single AUV)",
-                f"step={step:03d}  dist_to_plume={dist:.2f} m  conc={conc:.3f}",
+                f"step={step:03d}  dist_to_plume={dist:.2f} m  conc={conc:.3f}  sigma={sigma_t:.1f}",
                 f"energy_proxy={energy:.1f}  collisions={int(collisions)}",
                 f"drift={drift_tag}",
             ]
@@ -576,6 +866,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
                     "drift_z_mps": float(drift_z),
                     "dist_to_plume_m": float(dist),
                     "concentration": float(conc),
+                    "sigma_m": float(sigma_t),
                 }
             )
 
@@ -597,6 +888,12 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             "energy_proxy": float(energy),
             "seafloor_collision_count": float(collisions),
             "dataset_grounded": bool(drift_field is not None),
+            "plume_diffusion_m2ps": float(config.plume_diffusion_m2ps),
+            "environment": {
+                "rock_count": int(len(rock_specs)),
+                "silt_particle_count": int(config.silt_particle_count),
+                "plume_particle_count": int(config.plume_particle_count),
+            },
         }
         metrics_path = task1_dir / "metrics.json"
         with metrics_path.open("w", encoding="utf-8") as f:
@@ -622,6 +919,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
         # Task 2: Plume containment (multi-agent)
         # -----------------------
         sim.get_rigid_object_manager().remove_all_objects()
+        env2 = spawn_environment()
 
         n_agents = 3
         plume_center = np.array([0.0, -3.2, 0.0], dtype=np.float32)
@@ -656,6 +954,8 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             vehicles[i].translation = positions[i]
 
         plume_obj = _spawn_object(sim, tpl_marker, translation=plume_center)
+        plume_rng2 = np.random.default_rng(int(config.seed) + 303)
+        plume_particles2, plume_offsets2 = spawn_plume_cloud(plume_center, rng=plume_rng2, sigma_m=sigma0)
 
         frames = []
         traj_rows = []
@@ -698,6 +998,11 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             plume_center = _clamp_to_stage_bounds(plume_center, extents)
             plume_center, _ = apply_depth_clamp(plume_center)
             plume_obj.translation = plume_center
+
+            t_s = float(step) * float(config.dt_s)
+            sigma_t = math.sqrt(sigma0 * sigma0 + 2.0 * float(config.plume_diffusion_m2ps) * t_s)
+            update_plume_cloud(plume_particles2, plume_offsets2, plume_center, sigma_m=sigma_t, step=step)
+            step_silt_particles(step, env2["silt"])
 
             desired_positions: list[np.ndarray] = []
             for i in range(n_agents):
@@ -761,7 +1066,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             hud = [
                 "Task2: Plume containment (3 AUVs)",
                 f"step={step:03d}  mean_formation_error={mean_err:.2f} m  hold={formation_hold}/{config.formation_success_hold_steps}",
-                f"energy_proxy={sum(energy_by_agent):.1f}  collisions={sum(int(c) for c in collisions_by_agent)}",
+                f"energy_proxy={sum(energy_by_agent):.1f}  collisions={sum(int(c) for c in collisions_by_agent)}  sigma={sigma_t:.1f}",
                 f"drift={drift_tag}",
             ]
             frame = render_frame(step, hud, drift_px, drift_pz)
@@ -777,6 +1082,7 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
                     "drift_x_mps": float(drift_px),
                     "drift_z_mps": float(drift_pz),
                     "energy_proxy_total": float(sum(energy_by_agent)),
+                    "sigma_m": float(sigma_t),
                 }
             )
             for i in range(n_agents):
@@ -809,6 +1115,12 @@ def run_underwater_tasks(config: UnderwaterRunConfig) -> dict[str, Any]:
             "energy_proxy_total": float(sum(energy_by_agent)),
             "seafloor_collision_count_total": float(sum(collisions_by_agent)),
             "dataset_grounded": bool(drift_field is not None),
+            "plume_diffusion_m2ps": float(config.plume_diffusion_m2ps),
+            "environment": {
+                "rock_count": int(len(rock_specs)),
+                "silt_particle_count": int(config.silt_particle_count),
+                "plume_particle_count": int(config.plume_particle_count),
+            },
             "formation": {
                 "radius_m": float(config.formation_radius_m),
                 "kp": float(config.formation_kp),
