@@ -1,0 +1,85 @@
+{
+  "generated_at_utc": "2026-02-23T18:30:14.924037+00:00",
+  "generated_by": "oneocean_sim_s3.experiments.build_s3_media_manifest",
+  "suite_root": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1",
+  "suite_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/suite_manifest.json",
+  "media_count": 4,
+  "gif_count": 4,
+  "missing_media_case_ids": [],
+  "task_counts": [
+    {
+      "task": "formation_navigation",
+      "items": 2
+    },
+    {
+      "task": "reef_navigation",
+      "items": 2
+    }
+  ],
+  "media": [
+    {
+      "case_id": 0,
+      "task": "reef_navigation",
+      "variant": "scene",
+      "tide_mode": "on",
+      "episode": 0,
+      "scene_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/media/scene.png",
+      "final_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/media/final.png",
+      "rollout_gif": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/media/rollout.gif",
+      "width": 640,
+      "height": 480,
+      "fps": 12,
+      "frame_count": 178,
+      "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on",
+      "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/media/media_manifest.json"
+    },
+    {
+      "case_id": 1,
+      "task": "formation_navigation",
+      "variant": "scene",
+      "tide_mode": "on",
+      "episode": 0,
+      "scene_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/media/scene.png",
+      "final_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/media/final.png",
+      "rollout_gif": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/media/rollout.gif",
+      "width": 640,
+      "height": 480,
+      "fps": 12,
+      "frame_count": 172,
+      "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on",
+      "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/media/media_manifest.json"
+    },
+    {
+      "case_id": 2,
+      "task": "reef_navigation",
+      "variant": "scene",
+      "tide_mode": "off",
+      "episode": 0,
+      "scene_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/media/scene.png",
+      "final_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/media/final.png",
+      "rollout_gif": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/media/rollout.gif",
+      "width": 640,
+      "height": 480,
+      "fps": 12,
+      "frame_count": 146,
+      "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off",
+      "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/media/media_manifest.json"
+    },
+    {
+      "case_id": 3,
+      "task": "formation_navigation",
+      "variant": "scene",
+      "tide_mode": "off",
+      "episode": 0,
+      "scene_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/media/scene.png",
+      "final_png": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/media/final.png",
+      "rollout_gif": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/media/rollout.gif",
+      "width": 640,
+      "height": 480,
+      "fps": 12,
+      "frame_count": 165,
+      "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off",
+      "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/media/media_manifest.json"
+    }
+  ]
+}
