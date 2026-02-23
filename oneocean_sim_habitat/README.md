@@ -16,41 +16,67 @@ Use the locked Habitat environment:
 
 ## Underwater tasks (recommended, quality-gate compliant)
 
-1) Prepare a drift cache (runs in the base conda Python because Habitat env does not ship `h5py`):
+This track targets the “looks underwater” quality gate by combining:
+- dataset-grounded bathymetry (stage mesh),
+- dataset-grounded currents (drift cache),
+- CC0 external assets (sand texture + rock model from Poly Haven),
+- depth-based fog/attenuation + 3D particulate + plume particles (postprocess + geometry).
+
+### 0) Fetch a small CC0 underwater asset pack (Poly Haven; cached locally)
+
+Downloads are stored under `runs/_cache/` (not committed).
+
+```bash
+cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
+PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python -m oneocean_sim_habitat.cli.fetch_polyhaven_assets \
+  --output-dir runs/_cache/polyhaven \
+  --resolution 1k \
+  --sand-texture-id aerial_sand \
+  --rock-model-id rock_07
+```
+
+### 1) Prepare a drift cache (runs in the base conda Python because Habitat env does not ship `h5py`)
 
 ```bash
 cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
 PYTHONPATH=. /home/shuaijun/miniconda3/bin/python -m oneocean_sim_habitat.cli.prepare_drift_cache \
-  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc \
-  --output-path runs/s2_drift_cache_tiny_t0_d0_bathy.npz \
+  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --output-path runs/s2_drift_cache_scene_t0_d0_bathy_v2.npz \
   --time-index 0 --depth-index 0
 ```
 
-2) Build an underwater stage mesh from bathymetry (also needs `h5py`):
+### 2) Build an underwater stage mesh from bathymetry (also needs `h5py`)
 
 ```bash
 cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
 PYTHONPATH=. /home/shuaijun/miniconda3/bin/python -m oneocean_sim_habitat.cli.build_underwater_stage \
-  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc \
-  --output-dir runs/underwater_stage_tiny_v1 \
-  --horizontal-scale 0.01 \
+  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --output-dir runs/underwater_stage_scene_polyhaven_v1 \
+  --horizontal-scale 0.02 \
   --vertical-scale 0.01 \
   --floor-offset-m 6 \
-  --obstacle-count 12 \
-  --seed 0
+  --obstacle-count 0 \
+  --seed 0 \
+  --seafloor-diffuse-texture runs/_cache/polyhaven/aerial_sand/aerial_sand_diff_1k.png
 ```
 
-3) Run the underwater tasks (Habitat-Sim renderer):
+### 3) Run the underwater tasks (Habitat-Sim renderer)
 
 ```bash
 cd /data/private/user2/workspace/ocean/oneocean(iros-2026-code)
 PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python -m oneocean_sim_habitat.cli.run_underwater_tasks \
-  --stage-obj runs/underwater_stage_tiny_v1/underwater_stage.obj \
-  --stage-meta runs/underwater_stage_tiny_v1/underwater_stage_meta.json \
-  --drift-cache-path runs/s2_drift_cache_tiny_t0_d0_bathy.npz \
-  --output-dir runs/oneocean_habitat_s2_underwater_tiny_hero_v5 \
+  --stage-obj runs/underwater_stage_scene_polyhaven_v1/underwater_stage.obj \
+  --stage-meta runs/underwater_stage_scene_polyhaven_v1/underwater_stage_meta.json \
+  --drift-cache-path runs/s2_drift_cache_scene_t0_d0_bathy_v2.npz \
+  --rock-model-gltf runs/_cache/polyhaven/rock_07/rock_07_1k.gltf \
+  --rock-count 12 \
+  --current-gain 25 \
+  --output-dir runs/oneocean_habitat_s2_underwater_scene_polyhaven_hero_v3 \
   --max-steps-task1 260 \
-  --max-steps-task2 260
+  --max-steps-task2 260 \
+  --cam-orbit-radius-m 30 \
+  --cam-orbit-height-m 2.3 \
+  --cam-orbit-period-steps 260
 ```
 
 Outputs (under the run directory):

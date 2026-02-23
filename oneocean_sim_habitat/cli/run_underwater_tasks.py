@@ -12,6 +12,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Habitat-Sim underwater qualitative tasks (Agent H / S2).")
     parser.add_argument("--stage-obj", required=True, help="Path to underwater stage OBJ (from build_underwater_stage).")
     parser.add_argument("--stage-meta", required=True, help="Path to underwater stage meta JSON.")
+    parser.add_argument(
+        "--base-scene",
+        default="",
+        help="Optional base scene (GLB/PLY). If set, stage-obj is added as a static object on top.",
+    )
     parser.add_argument("--drift-cache-path", default="", help="Optional npz drift cache (from prepare_drift_cache).")
     parser.add_argument("--output-dir", default="", help="Optional output directory under runs/.")
     parser.add_argument("--seed", type=int, default=0)
@@ -22,6 +27,12 @@ def main() -> int:
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--gif-stride", type=int, default=2)
     parser.add_argument("--current-gain", type=float, default=1.0, help="Multiply sampled currents for stronger drift.")
+
+    parser.add_argument("--rock-model-gltf", default="", help="Optional external rock model (gltf) for obstacles.")
+    parser.add_argument("--rock-count", type=int, default=10)
+    parser.add_argument("--silt-particle-count", type=int, default=90)
+    parser.add_argument("--plume-particle-count", type=int, default=45)
+    parser.add_argument("--fog-density", type=float, default=0.065)
 
     parser.add_argument("--cam-width", type=int, default=960)
     parser.add_argument("--cam-height", type=int, default=540)
@@ -41,6 +52,7 @@ def main() -> int:
     cfg = UnderwaterRunConfig(
         stage_obj=str(Path(args.stage_obj).expanduser()),
         stage_meta=str(Path(args.stage_meta).expanduser()),
+        base_scene=str(Path(args.base_scene).expanduser()) if args.base_scene else None,
         drift_cache_path=str(Path(args.drift_cache_path).expanduser()) if args.drift_cache_path else None,
         output_dir=str(Path(args.output_dir).expanduser()) if args.output_dir else None,
         invocation=" ".join([sys.executable] + sys.argv),
@@ -52,6 +64,11 @@ def main() -> int:
         video_fps=float(args.video_fps),
         gif_stride=int(args.gif_stride),
         current_gain=float(args.current_gain),
+        rock_model_gltf=str(Path(args.rock_model_gltf).expanduser()) if args.rock_model_gltf else None,
+        rock_count=int(args.rock_count),
+        silt_particle_count=int(args.silt_particle_count),
+        plume_particle_count=int(args.plume_particle_count),
+        underwater_fog_density=float(args.fog_density),
         camera=cam,
     )
     outputs = run_underwater_tasks(cfg)

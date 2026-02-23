@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -25,6 +26,7 @@ class StageGenConfig:
     obstacle_radius_m: float = 3.0
     obstacle_height_m: float = 2.5
     seed: int = 0
+    seafloor_diffuse_texture: Path | None = None
 
 
 def _local_xz_from_latlon(
@@ -59,6 +61,8 @@ def _write_obj(
     obj_path: Path,
     mtl_name: str,
     vertices: list[tuple[float, float, float]],
+    uvs: list[tuple[float, float]],
+    normals: list[tuple[float, float, float]],
     seafloor_faces: list[tuple[int, int, int]],
     obstacle_faces: list[tuple[int, int, int]],
 ) -> None:
@@ -68,26 +72,32 @@ def _write_obj(
         f.write("o seafloor\n")
         for x, y, z in vertices:
             f.write(f"v {x:.6f} {y:.6f} {z:.6f}\n")
+        for u, v in uvs:
+            f.write(f"vt {u:.6f} {v:.6f}\n")
+        for nx, ny, nz in normals:
+            f.write(f"vn {nx:.6f} {ny:.6f} {nz:.6f}\n")
         f.write("usemtl seafloor\n")
         for a, b, c in seafloor_faces:
-            f.write(f"f {a} {b} {c}\n")
+            f.write(f"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}\n")
         if obstacle_faces:
             f.write("o obstacles\n")
             f.write("usemtl obstacle\n")
             for a, b, c in obstacle_faces:
-                f.write(f"f {a} {b} {c}\n")
+                f.write(f"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}\n")
 
 
-def _write_mtl(mtl_path: Path) -> None:
+def _write_mtl(mtl_path: Path, seafloor_texture_name: str | None) -> None:
     mtl_path.parent.mkdir(parents=True, exist_ok=True)
     with mtl_path.open("w", encoding="utf-8") as f:
         f.write("newmtl seafloor\n")
         f.write("Ka 0.09 0.11 0.12\n")
-        f.write("Kd 0.20 0.25 0.28\n")
+        f.write("Kd 0.75 0.75 0.75\n")
         f.write("Ks 0.03 0.03 0.03\n")
         f.write("Ns 12.0\n")
         f.write("d 1.0\n")
         f.write("illum 2\n\n")
+        if seafloor_texture_name:
+            f.write(f"map_Kd {seafloor_texture_name}\n\n")
         f.write("newmtl obstacle\n")
         f.write("Ka 0.08 0.07 0.06\n")
         f.write("Kd 0.18 0.16 0.14\n")
@@ -140,11 +150,41 @@ def build_underwater_stage(config: StageGenConfig) -> dict[str, Any]:
     y = np.nan_to_num(y, nan=-float(config.floor_offset_m))
 
     vertices: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    normals: list[tuple[float, float, float]] = []
+
+    # Approximate vertex normals from local slopes (heightfield-style).
+    dy_dx = np.zeros_like(y, dtype=np.float64)
+    dy_dz = np.zeros_like(y, dtype=np.float64)
+    for j in range(n_lon):
+        j0 = max(0, j - 1)
+        j1 = min(n_lon - 1, j + 1)
+        denom = float(x_lon[j1] - x_lon[j0])
+        if abs(denom) < 1e-9:
+            continue
+        dy_dx[:, j] = (y[:, j1] - y[:, j0]) / denom
+    for i in range(n_lat):
+        i0 = max(0, i - 1)
+        i1 = min(n_lat - 1, i + 1)
+        denom = float(z_lat[i1] - z_lat[i0])
+        if abs(denom) < 1e-9:
+            continue
+        dy_dz[i, :] = (y[i1, :] - y[i0, :]) / denom
+
+    nvec = np.stack([-dy_dx, np.ones_like(y, dtype=np.float64), -dy_dz], axis=-1)
+    n_norm = np.linalg.norm(nvec, axis=-1, keepdims=True)
+    nvec = nvec / np.clip(n_norm, 1e-9, None)
     for i in range(n_lat):
         for j in range(n_lon):
             vertices.append((float(x_lon[j]), float(y[i, j]), float(z_lat[i])))
+            u = float(j) / max(1.0, float(n_lon - 1))
+            v = float(i) / max(1.0, float(n_lat - 1))
+            uvs.append((u, v))
+            normals.append((float(nvec[i, j, 0]), float(nvec[i, j, 1]), float(nvec[i, j, 2])))
 
     seafloor_faces = list(_iter_grid_faces(n_rows=n_lat, n_cols=n_lon, vertex_offset=0))
+    x_min, x_max = float(np.min(x_lon)), float(np.max(x_lon))
+    z_min, z_max = float(np.min(z_lat)), float(np.max(z_lat))
 
     rng = np.random.default_rng(int(config.seed))
     obstacle_faces: list[tuple[int, int, int]] = []
@@ -178,6 +218,11 @@ def build_underwater_stage(config: StageGenConfig) -> dict[str, Any]:
                     (cx, cy + h, cz),
                 ]
             )
+            for vx, vy, vz in vertices[-5:]:
+                uu = (float(vx) - x_min) / max(1e-6, x_max - x_min)
+                vv = (float(vz) - z_min) / max(1e-6, z_max - z_min)
+                uvs.append((float(np.clip(uu, 0.0, 1.0)), float(np.clip(vv, 0.0, 1.0))))
+                normals.append((0.0, 1.0, 0.0))
             a, b, c, d, top = v0, v0 + 1, v0 + 2, v0 + 3, v0 + 4
             obstacle_faces.extend(
                 [
@@ -201,11 +246,23 @@ def build_underwater_stage(config: StageGenConfig) -> dict[str, Any]:
 
     obj_path = out_dir / "underwater_stage.obj"
     mtl_path = out_dir / "underwater_stage.mtl"
-    _write_mtl(mtl_path)
+    seafloor_texture_name = None
+    if config.seafloor_diffuse_texture is not None:
+        texture_path = Path(config.seafloor_diffuse_texture).expanduser().resolve()
+        if not texture_path.exists():
+            raise FileNotFoundError(f"Seafloor texture not found: {texture_path}")
+        texture_dst = out_dir / texture_path.name
+        if texture_dst.resolve() != texture_path:
+            shutil.copyfile(texture_path, texture_dst)
+        seafloor_texture_name = texture_dst.name
+
+    _write_mtl(mtl_path, seafloor_texture_name=seafloor_texture_name)
     _write_obj(
         obj_path=obj_path,
         mtl_name=mtl_path.name,
         vertices=vertices,
+        uvs=uvs,
+        normals=normals,
         seafloor_faces=seafloor_faces,
         obstacle_faces=obstacle_faces,
     )
@@ -219,6 +276,7 @@ def build_underwater_stage(config: StageGenConfig) -> dict[str, Any]:
         "stride": int(stride),
         "origin_latlon_deg": [lat0, lon0],
         "elevation_max_m": elev_max,
+        "seafloor_diffuse_texture": seafloor_texture_name or "",
         "grid": {"lat": int(n_lat), "lon": int(n_lon)},
         "extents_sim_m": {
             "x_min": float(np.min(x_lon)),
@@ -261,6 +319,11 @@ def main() -> int:
     parser.add_argument("--obstacle-radius-m", type=float, default=3.0)
     parser.add_argument("--obstacle-height-m", type=float, default=2.5)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--seafloor-diffuse-texture",
+        default="",
+        help="Optional path to a diffuse texture image for the seafloor (copied into output-dir).",
+    )
     args = parser.parse_args()
 
     cfg = StageGenConfig(
@@ -274,6 +337,9 @@ def main() -> int:
         obstacle_radius_m=float(args.obstacle_radius_m),
         obstacle_height_m=float(args.obstacle_height_m),
         seed=int(args.seed),
+        seafloor_diffuse_texture=Path(args.seafloor_diffuse_texture).expanduser()
+        if args.seafloor_diffuse_texture
+        else None,
     )
     outputs = build_underwater_stage(cfg)
     print(json.dumps(outputs, indent=2))
@@ -282,4 +348,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

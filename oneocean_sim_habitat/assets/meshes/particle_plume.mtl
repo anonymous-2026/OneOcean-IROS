@@ -1,0 +1,8 @@
+newmtl particle_plume
+Ka 0.10 0.06 0.02
+Kd 0.98 0.55 0.18
+Ks 0.02 0.02 0.02
+Ns 5.0
+d 0.60
+illum 2
+
