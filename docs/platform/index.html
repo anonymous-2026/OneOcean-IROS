@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOcean | Platform Website</title>
+  <meta name="description" content="OneOcean platform website: pipeline usage, task setup, and reproducible workflows.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../static/css/site.css">
+</head>
+<body>
+  <header class="top-nav">
+    <a class="brand" href="../">OneOcean</a>
+    <nav>
+      <a href="../project/">Project</a>
+      <a href="#" aria-disabled="true">Demo (pending)</a>
+      <a href="../">Hub</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="hero-card reveal">
+      <p class="eyebrow">Website (2)</p>
+      <h1>Platform Website</h1>
+      <p class="lead">
+        Practical guide for using the OneOcean data pipeline and environment/task stack.
+      </p>
+    </section>
+
+    <section class="content-grid">
+      <article class="content-card reveal delay-1">
+        <h2>Quickstart</h2>
+        <p>Run data generation and the first navigation task with local variants.</p>
+        <pre><code>python OceanEnv/Data_pipeline/run_pipeline.py --overwrite
+python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
+python -m oneocean_sim.cli.run_navigation_task --variant tiny --episodes 3 --output-dir runs/e1_smoke</code></pre>
+      </article>
+
+      <article class="content-card reveal delay-2">
+        <h2>Dataset Tiers</h2>
+        <ul>
+          <li><strong>tiny</strong>: fast iteration and sanity checks</li>
+          <li><strong>scene</strong>: main simulation/task construction tier</li>
+          <li><strong>public</strong>: distribution-oriented, larger coverage</li>
+        </ul>
+      </article>
+
+      <article class="content-card reveal delay-3">
+        <h2>Task Development Flow</h2>
+        <ol>
+          <li>Load variant and resolve schema contract.</li>
+          <li>Select simulator adapter (S1 primary / S3 backup / S2 visual).</li>
+          <li>Run task with fixed seed and export metrics.</li>
+        </ol>
+      </article>
+
+      <article class="content-card reveal delay-4">
+        <h2>Integration Hooks</h2>
+        <p>Cross-lane placeholders to be filled as artifacts arrive.</p>
+        <ul>
+          <li>Lane A/H: media showcase and scenario clips</li>
+          <li>Lane C: benchmark cards and plots</li>
+          <li>Lane F: release policy, DOI, citation block</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <script src="../static/js/site.js" defer></script>
+</body>
+</html>

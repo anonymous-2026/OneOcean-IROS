@@ -4,11 +4,13 @@ import argparse
 import json
 from pathlib import Path
 
-from ..external_assets.polyhaven import ensure_underwater_asset_pack
+from oneocean_sim_habitat.external_assets.polyhaven import ensure_underwater_asset_pack
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Fetch small CC0 underwater asset pack from Poly Haven (local cache).")
+    parser = argparse.ArgumentParser(
+        description="Fetch small CC0 underwater textures into runs/_cache (do not commit to Git)."
+    )
     parser.add_argument(
         "--output-dir",
         default="runs/_cache/polyhaven",

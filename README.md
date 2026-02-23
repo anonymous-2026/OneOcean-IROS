@@ -23,6 +23,14 @@ See `DATA_PIPELINE_LOG.md` for the full rationale, assumptions (tides), and repr
 
 ## S1 3D Tasks (MuJoCo primary track; quality-gate compliant)
 
+Fetch underwater textures (local cache; do not commit):
+
+```bash
+cd oneocean(iros-2026-code)
+/data/private/user2/workspace/robosuite_learning/.venv/bin/python \
+  -m oneocean_sim.cli.fetch_underwater_assets
+```
+
 Run a 3D underwater scene + task with dataset-driven currents:
 
 ```bash

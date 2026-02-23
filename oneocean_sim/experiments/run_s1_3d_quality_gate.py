@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--render-width", type=int, default=960)
     parser.add_argument("--render-height", type=int, default=544)
     parser.add_argument("--fps", type=int, default=20)
-    parser.add_argument("--camera", type=str, default="cam_main")
+    parser.add_argument("--camera", type=str, default="orbit")
     parser.add_argument("--record-all-episodes", action="store_true")
     parser.add_argument("--disable-tides", action="store_true")
     return parser.parse_args()

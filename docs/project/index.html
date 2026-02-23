@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OneOcean | Project Website</title>
+  <meta name="description" content="OneOcean project website for IROS 2026: method, tasks, and results.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../static/css/site.css">
+</head>
+<body>
+  <header class="top-nav">
+    <a class="brand" href="../">OneOcean</a>
+    <nav>
+      <a href="../platform/">Platform</a>
+      <a href="#" aria-disabled="true">Demo (pending)</a>
+      <a href="../">Hub</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    <section class="hero-card reveal">
+      <p class="eyebrow">Website (1)</p>
+      <h1>Project Website</h1>
+      <p class="lead">
+        Ocean environment generation and robotics tasks for IROS 2026 transfer submission.
+      </p>
+      <div class="link-row">
+        <a class="btn" href="../../README.md">Code README</a>
+        <a class="btn secondary" href="../../DATA_PIPELINE_LOG.md">Pipeline Log</a>
+      </div>
+    </section>
+
+    <section class="content-grid">
+      <article class="content-card reveal delay-1">
+        <h2>Problem</h2>
+        <p>
+          Existing ocean robotics benchmarks are fragmented across environment generation, dynamics assumptions,
+          and task reproducibility. OneOcean focuses on a unified pipeline from environmental data to task execution.
+        </p>
+      </article>
+
+      <article class="content-card reveal delay-2">
+        <h2>Method Snapshot</h2>
+        <p>
+          We combine terrain, currents, and optional tide fields into standardized NetCDF variants and feed them
+          into a deterministic task runner for navigation and control studies.
+        </p>
+        <ul>
+          <li>Canonical + multi-size dataset variants (`tiny`, `scene`, `public`)</li>
+          <li>Simulator adapters (S1 primary, S3 backup, S2 visual track)</li>
+          <li>Run-level metrics and reproducibility metadata</li>
+        </ul>
+      </article>
+
+      <article class="content-card reveal delay-3">
+        <h2>Results Placeholder</h2>
+        <p>Waiting for Lane C quantitative artifacts.</p>
+        <div class="placeholder">Lane C table/figure goes here</div>
+      </article>
+
+      <article class="content-card reveal delay-4">
+        <h2>Media Placeholder</h2>
+        <p>Waiting for Lane A/H visuals.</p>
+        <div class="placeholder">Lane A/H rollout image or short clip</div>
+      </article>
+
+      <article class="content-card reveal delay-5">
+        <h2>Data Availability Placeholder</h2>
+        <p>Waiting for Lane F release/licensing text.</p>
+        <div class="placeholder">Lane F data release block</div>
+      </article>
+    </section>
+  </main>
+
+  <script src="../static/js/site.js" defer></script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import numpy as np
 
 from .data import CombinedDataset, CurrentSampler
 from .mujoco3d_scene import AgentSpec, ObstacleSpec, OceanSceneSpec, build_ocean_scene_xml, write_heightfield_png
+from .underwater_assets import resolve_underwater_asset_pack
 
 
 METERS_PER_DEG_LAT = 111_320.0
@@ -124,6 +125,17 @@ class OceanMujoco3DEnv:
         self.rng = np.random.default_rng(seed)
         self.cfg = config or Mujoco3DConfig()
 
+        elev = ds.elevation_grid()
+        finite = np.isfinite(elev)
+        if not np.any(finite):
+            self._elev_vmin = 0.0
+            self._elev_denom = 1.0
+        else:
+            vmin = float(np.min(elev[finite]))
+            vmax = float(np.max(elev[finite]))
+            self._elev_vmin = vmin
+            self._elev_denom = float(max(1e-6, vmax - vmin))
+
         real_w_m, real_h_m = _dataset_real_extents_m(ds)
         default_mpsm = max(1e-6, max(real_w_m, real_h_m) / max(1e-6, self.cfg.target_domain_size_m))
         meters_per_sim_meter = float(self.cfg.meters_per_sim_meter) if self.cfg.meters_per_sim_meter else float(default_mpsm)
@@ -147,7 +159,34 @@ class OceanMujoco3DEnv:
         if not heightfield_png.exists():
             write_heightfield_png(ds.elevation_grid(), heightfield_png, flipud=True)
 
-        agents = tuple(AgentSpec(name=f"agent{i}") for i in range(agent_count))
+        repo_root = Path(__file__).resolve().parents[1]
+        mesh_dir = repo_root / "oneocean_sim_habitat" / "assets" / "meshes"
+        candidate_meshes = [
+            mesh_dir / "uuv_red.obj",
+            mesh_dir / "uuv_green.obj",
+            mesh_dir / "uuv_blue.obj",
+        ]
+        meshes = [p for p in candidate_meshes if p.exists()]
+        palette = [
+            (0.90, 0.22, 0.22, 1.0),
+            (0.25, 0.90, 0.35, 1.0),
+            (0.20, 0.55, 0.95, 1.0),
+            (0.92, 0.82, 0.18, 1.0),
+        ]
+        agents: list[AgentSpec] = []
+        for i in range(agent_count):
+            mesh_obj = meshes[i % len(meshes)] if meshes else None
+            agents.append(
+                AgentSpec(
+                    name=f"agent{i}",
+                    rgba=palette[i % len(palette)],
+                    mesh_obj=mesh_obj,
+                )
+            )
+
+        assets = resolve_underwater_asset_pack()
+        sand_texture = assets.sand_diffuse if assets.sand_diffuse.exists() else None
+        rock_texture = assets.rock_diffuse if assets.rock_diffuse.exists() else None
         scene_spec = OceanSceneSpec(
             model_name="oneocean_ocean3d",
             dt_sec=self.cfg.dt_sec,
@@ -158,11 +197,15 @@ class OceanMujoco3DEnv:
             heightfield_png=heightfield_png,
             heightfield_rows=int(ds.elevation_grid().shape[0]),
             heightfield_cols=int(ds.elevation_grid().shape[1]),
-            agents=agents,
+            agents=tuple(agents),
             obstacles=obstacles,
             water_depth_m=self.cfg.water_depth_m,
             camera_distance_m=self.cfg.camera_distance_m,
             camera_elevation_m=self.cfg.camera_elevation_m,
+            sand_texture=sand_texture,
+            rock_texture=rock_texture,
+            particle_count=220,
+            particle_seed=int(seed),
         )
         xml = build_ocean_scene_xml(scene_spec)
         self.model = mujoco.MjModel.from_xml_string(xml)
@@ -209,6 +252,15 @@ class OceanMujoco3DEnv:
             raise RuntimeError("Expected goal/source markers to be mocap bodies")
 
         self.obstacles = obstacles
+
+    def seafloor_z_at_xy(self, x_m: float, y_m: float) -> float:
+        lat, lon = self.geo.xy_to_latlon(float(x_m), float(y_m))
+        lat_idx, lon_idx = self.ds.nearest_latlon_indices(lat, lon)
+        elev = float(self.ds.elevation_grid()[lat_idx, lon_idx])
+        if not np.isfinite(elev):
+            elev = float(self._elev_vmin)
+        norm = float(np.clip((elev - float(self._elev_vmin)) / float(self._elev_denom), 0.0, 1.0))
+        return float(self.cfg.terrain_base_z_m + self.cfg.terrain_height_m * norm)
 
     def close(self) -> None:
         pass
@@ -324,6 +376,11 @@ class OceanMujoco3DEnv:
 
         mujoco.mj_step(self.model, self.data)
 
-    def render(self, renderer: mujoco.Renderer, *, camera: str = "cam_main") -> np.ndarray:
+    def render(
+        self,
+        renderer: mujoco.Renderer,
+        *,
+        camera: int | str | mujoco.MjvCamera = "cam_main",
+    ) -> np.ndarray:
         renderer.update_scene(self.data, camera=camera)
         return renderer.render()
