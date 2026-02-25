@@ -20,6 +20,13 @@ Do **not** commit any third-party binaries or large assets. Use `runs/_cache/ext
 - Use `tools/external_scenes/oceangym_extract_client.py` to extract only the `client/` folder from the zip.
 - Then install it into a dedicated Python environment.
 
+Practical note (this machine):
+- The system-wide `conda` entrypoint is broken due to a bad shebang, so H3 uses a repo-local venv:
+  - `.venv_h3_oceangym/` (Python 3.9)
+- The `holoocean` client fetches world packages from `robots.et.byu.edu` via `urllib`. If you see
+  SSL verification errors, set:
+  - `SSL_CERT_FILE=$(python -c "import certifi; print(certifi.where())")`
+
 ### Next implementation steps (once client is installed)
 
 - Discover the installed `holoocean` API (package manager functions, scenario loader).
@@ -28,4 +35,13 @@ Do **not** commit any third-party binaries or large assets. Use `runs/_cache/ext
   - `combined_environment.nc` currents → drift/force
   - pollution diffusion field → observation/reward/success
 - Implement our tasks with **N=2–10** vehicles (hero attempt N=8/10).
+
+### Baseline media (after installing package `Ocean`)
+
+Run:
+```bash
+cd "oneocean(iros-2026-code)"
+SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.where())") \\
+  .venv_h3_oceangym/bin/python oneocean_sim_oceangym/run_baseline_render.py --scenario Dam-Hovering --steps 300
+```
 

@@ -6,6 +6,14 @@ from pathlib import Path
 
 
 def _client_root_prefix(zip_names: list[str]) -> str | None:
+    # Case A: zip contains top-level "client/..."
+    for name in zip_names:
+        p = name.replace("\\", "/")
+        parts = [x for x in p.split("/") if x]
+        if len(parts) >= 2 and parts[0] == "client":
+            return ""
+
+    # Case B: zip contains "<root>/client/..."
     for name in zip_names:
         p = name.replace("\\", "/")
         parts = [x for x in p.split("/") if x]
@@ -19,18 +27,25 @@ def extract_client(zip_path: Path, out_dir: Path) -> Path:
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = zf.namelist()
         prefix = _client_root_prefix(names)
-        if not prefix:
-            raise RuntimeError("Could not find <root>/client/ in the zip. Inspect the zip contents first.")
+        if prefix is None:
+            raise RuntimeError(
+                "Could not find client/ in the zip (expected either client/... or <root>/client/...)."
+            )
 
         extracted = 0
         for member in names:
             p = member.replace("\\", "/")
             parts = [x for x in p.split("/") if x]
-            if len(parts) >= 2 and parts[0] == prefix and parts[1] == "client":
+            if prefix == "":
+                ok = len(parts) >= 1 and parts[0] == "client"
+            else:
+                ok = len(parts) >= 2 and parts[0] == prefix and parts[1] == "client"
+            if ok:
                 zf.extract(member, out_dir)
                 extracted += 1
 
-    client_dir = out_dir / prefix / "client"
+    client_dir = out_dir / ("client" if prefix == "" else prefix) / ("." if prefix == "" else "client")
+    client_dir = client_dir.resolve()
     if not client_dir.exists():
         raise RuntimeError(f"Client dir not found after extraction: {client_dir}")
     if not (client_dir / "setup.py").exists() and not (client_dir / "pyproject.toml").exists():
@@ -41,7 +56,10 @@ def extract_client(zip_path: Path, out_dir: Path) -> Path:
 
 
 def pip_install(client_dir: Path, python_exe: str) -> None:
-    cmd = [python_exe, "-m", "pip", "install", "."]
+    py = Path(python_exe).expanduser()
+    if not py.is_absolute():
+        py = (Path.cwd() / py).resolve()
+    cmd = [str(py), "-m", "pip", "install", "."]
     print("[oceangym] pip install:", " ".join(cmd), "(cwd:", str(client_dir), ")")
     subprocess.check_call(cmd, cwd=str(client_dir))
 
@@ -79,4 +97,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
