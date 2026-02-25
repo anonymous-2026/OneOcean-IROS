@@ -81,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--scene", type=str, required=True, help="Path to stage file (e.g., stage.obj)")
     ap.add_argument("--out-dir", type=str, required=True)
     ap.add_argument("--width", type=int, default=960)
-    ap.add_argument("--height", type=int, default=540)
+    ap.add_argument("--height", type=int, default=544)
     ap.add_argument("--hfov", type=float, default=80.0)
     ap.add_argument("--zfar", type=float, default=120.0)
     ap.add_argument("--frames", type=int, default=180)

@@ -1,0 +1,17 @@
+{
+  "render_asset": "uuv_proxy.obj",
+  "collision_asset": "uuv_proxy.obj",
+  "up": [0.0, 1.0, 0.0],
+  "front": [0.0, 0.0, -1.0],
+  "requires_lighting": true,
+  "scale": [1.0, 1.0, 1.0],
+  "margin": 0.01,
+  "friction_coefficient": 0.5,
+  "restitution_coefficient": 0.1,
+  "units_to_meters": 1.0,
+  "force_flat_shading": false,
+  "mass": 1.0,
+  "COM": [0.0, 0.0, 0.0],
+  "use_bounding_box_for_collision": true,
+  "join_collision_meshes": true
+}
