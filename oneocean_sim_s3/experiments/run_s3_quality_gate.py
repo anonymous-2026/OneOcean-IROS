@@ -19,6 +19,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed-base", type=int, default=800)
     parser.add_argument("--time-index", type=int, default=0)
     parser.add_argument("--depth-index", type=int, default=0)
+    parser.add_argument(
+        "--external-scene",
+        type=str,
+        default="uuvsim_herkules_shipwreck",
+        choices=["uuvsim_herkules_shipwreck", "none"],
+    )
+    parser.add_argument("--external-scene-max-faces", type=int, default=4000)
 
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument("--render-width", type=int, default=640)
@@ -55,6 +62,8 @@ def main() -> None:
                     seed=int(args.seed_base + case_id * 10),
                     time_index=int(args.time_index),
                     depth_index=int(args.depth_index),
+                    external_scene=None if args.external_scene == "none" else str(args.external_scene),
+                    external_scene_max_faces=int(args.external_scene_max_faces),
                     include_tides=bool(include_tides),
                     max_steps=int(args.max_steps),
                     render=not bool(args.no_render),
