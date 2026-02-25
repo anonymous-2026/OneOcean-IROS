@@ -64,7 +64,8 @@ class DecayModule:
             Decay rate field (1/s)
         """
         if name not in self.base_decay_rates:
-            raise ValueError(f"Pollutant {name} not found in decay parameters")
+            # If a pollutant was added without decay parameters, treat as no-decay.
+            return np.zeros_like(temperature, dtype=float)
             
         # Get base decay rate
         lambda_0 = self.base_decay_rates[name]

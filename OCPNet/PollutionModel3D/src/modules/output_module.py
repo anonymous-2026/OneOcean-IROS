@@ -1,6 +1,4 @@
 import numpy as np
-import netCDF4 as nc
-import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Optional, Union
 from pathlib import Path
 from datetime import datetime
@@ -122,7 +120,15 @@ class OutputModule:
             
         output_file = self.output_dir / filename
         
-        # Create NetCDF file
+        # Create NetCDF file (optional dependency).
+        try:
+            import netCDF4 as nc  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "netCDF4 is required to write PollutionModel3D outputs. "
+                "Install netCDF4 or disable output writing in the caller."
+            ) from e
+
         with nc.Dataset(output_file, 'w') as ds:
             # Create dimensions
             ds.createDimension('x', self.nx)
@@ -168,6 +174,15 @@ class OutputModule:
             filename = f"visualization_{time:.0f}.png"
             
         output_file = self.output_dir / filename
+
+        # Optional dependency.
+        try:
+            import matplotlib.pyplot as plt  # type: ignore
+        except Exception as e:
+            raise RuntimeError(
+                "matplotlib is required to render PollutionModel3D visualizations. "
+                "Install matplotlib or disable visualization in the caller."
+            ) from e
         
         # Create figure
         n_fields = len(self.visualization_fields)
