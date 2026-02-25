@@ -14,6 +14,8 @@ class DriftCacheInfo:
     npz_path: str
     meta_json: dict[str, Any] | None
     mapping: GridMapping
+    has_elevation: bool
+    has_land_mask: bool
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -27,6 +29,11 @@ def load_drift_cache(npz_path: str | Path) -> tuple[CachedDriftField, DriftCache
     from oneocean_sim_habitat.drift import CachedDriftField
 
     cache_path = Path(npz_path).expanduser().resolve()
+    try:
+        with np.load(cache_path, allow_pickle=False) as z:
+            keys = set(z.files)
+    except Exception:
+        keys = set()
     try:
         field = CachedDriftField(cache_path)
     except KeyError as e:
@@ -42,6 +49,8 @@ def load_drift_cache(npz_path: str | Path) -> tuple[CachedDriftField, DriftCache
         npz_path=str(cache_path),
         meta_json=try_load_adjacent_json(cache_path),
         mapping=mapping,
+        has_elevation=("elevation" in keys),
+        has_land_mask=("land_mask" in keys),
     )
     return field, info
 

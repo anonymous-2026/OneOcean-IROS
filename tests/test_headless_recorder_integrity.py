@@ -39,6 +39,8 @@ def test_headless_recording_validates(tmp_path: Path, monkeypatch) -> None:
             "0",
             "--dt",
             "1.0",
+            "--constraint-mode",
+            "off",
             "--max-steps",
             "8",
             "--out-dir",
@@ -50,4 +52,3 @@ def test_headless_recording_validates(tmp_path: Path, monkeypatch) -> None:
     assert code == 0
     res = validate_run_dir(out_dir)
     assert res.ok, res.reason
-

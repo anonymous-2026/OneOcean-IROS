@@ -27,6 +27,9 @@ class EnvConfig:
     tile_size_x_m: float = 600.0
     tile_size_z_m: float = 600.0
     land_mask_threshold: float = 0.5
+    constraint_mode: Literal["off", "hard"] = "hard"
+    bathy_mode: Literal["off", "hard"] = "off"
+    seafloor_clearance_m: float = 1.0
     max_speed_mps: float = 1.2
     current_gain: float = 1.0
 
@@ -129,20 +132,58 @@ class HeadlessOceanEnv:
         )
         return float(drift_x) * float(self.cfg.current_gain), float(drift_z) * float(self.cfg.current_gain)
 
-    def _is_blocked(self, x_m: float, z_m: float) -> bool:
-        return self.drift_field.is_blocked_xz(
+    def _violates_constraints(self, p_xyz: np.ndarray) -> bool:
+        if str(self.cfg.constraint_mode) == "off":
+            return False
+        x_m = float(p_xyz[0])
+        y_depth_m = float(p_xyz[1])
+        z_m = float(p_xyz[2])
+
+        m = self.drift_field.sample_land_mask_xz(
             x_m=x_m,
             z_m=z_m,
             origin_lat=self.origin_lat,
             origin_lon=self.origin_lon,
-            land_mask_threshold=float(self.cfg.land_mask_threshold),
-            elevation_threshold=None,
         )
+        if m is not None and float(m) >= float(self.cfg.land_mask_threshold):
+            return True
+
+        if str(self.cfg.bathy_mode) != "hard":
+            return False
+
+        elev = self.drift_field.sample_elevation_xz(
+            x_m=x_m,
+            z_m=z_m,
+            origin_lat=self.origin_lat,
+            origin_lon=self.origin_lon,
+        )
+        if elev is None or not np.isfinite(float(elev)):
+            return True
+        elev_m = float(elev)
+        # Convention: elevation is seafloor height relative to sea surface (meters),
+        # typically negative for underwater seabed.
+        if elev_m >= 0.0:
+            return True
+        water_depth_m = -elev_m
+        if (y_depth_m + float(self.cfg.seafloor_clearance_m)) > water_depth_m:
+            return True
+        return False
 
     def reset(self, *, task: TaskConfig, controller: ControllerConfig) -> dict[str, Any]:
         self.task_cfg = task
         self.controller_cfg = controller
         self.task_state = reset_task(self.rng, self.bounds_xyz, task)
+
+        if str(self.cfg.constraint_mode) != "off" and not bool(self.drift_info.has_land_mask):
+            raise ValueError(
+                "constraint_mode is enabled but drift cache is missing 'land_mask'. "
+                "Re-export the drift cache with land_mask or set constraint_mode=off."
+            )
+        if str(self.cfg.bathy_mode) == "hard" and not bool(self.drift_info.has_elevation):
+            raise ValueError(
+                "bathy_mode=hard but drift cache is missing 'elevation'. "
+                "Re-export the drift cache with elevation or set bathy_mode=off."
+            )
 
         # Pick a dataset tile origin such that the sim tile maps inside the cached lat/lon extent.
         lat_span_deg = float(self.tile_size_z_m) / METERS_PER_DEG_LAT
@@ -162,7 +203,7 @@ class HeadlessOceanEnv:
         for i in range(self.n_agents):
             for _ in range(200):
                 p = self.rng.uniform(lo, hi).astype(np.float64)
-                if not self._is_blocked(float(p[0]), float(p[2])):
+                if not self._violates_constraints(p):
                     self._positions[i] = p
                     break
             self._yaws[i] = float(self.rng.uniform(-math.pi, math.pi))
@@ -178,7 +219,7 @@ class HeadlessOceanEnv:
                 ang = float(self.rng.uniform(0, 2 * math.pi))
                 off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
                 goal = np.minimum(np.maximum(center + off, lo), hi)
-                if not self._is_blocked(float(goal[0]), float(goal[2])):
+                if not self._violates_constraints(goal):
                     self.task_state.goal_xyz = goal
                     break
         elif task.kind == "pollution_containment_multiagent":
@@ -259,8 +300,8 @@ class HeadlessOceanEnv:
             currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
             new_p = self._positions[i] + (act[i] + currents[i]) * float(self.cfg.dt_s)
             new_p = np.minimum(np.maximum(new_p, lo), hi)
-            if self._is_blocked(float(new_p[0]), float(new_p[2])):
-                # simple rejection: stay put if blocked
+            if self._violates_constraints(new_p):
+                # Hard constraint: reject invalid states (land/NoData/touchdown).
                 new_p = self._positions[i]
                 self._constraint_violations += 1
             self._positions[i] = new_p
@@ -278,14 +319,14 @@ class HeadlessOceanEnv:
                 origin_lat=self.origin_lat,
                 origin_lon=self.origin_lon,
             )
-            elev_arr[i] = float(0.0 if elev is None else elev)
+            elev_arr[i] = float(np.nan if elev is None else elev)
             m = self.drift_field.sample_land_mask_xz(
                 x_m=float(self._positions[i, 0]),
                 z_m=float(self._positions[i, 2]),
                 origin_lat=self.origin_lat,
                 origin_lon=self.origin_lon,
             )
-            mask_arr[i] = float(0.0 if m is None else m)
+            mask_arr[i] = float(np.nan if m is None else m)
 
             self._energy += float(np.dot(act[i], act[i])) * float(self.cfg.dt_s)
 

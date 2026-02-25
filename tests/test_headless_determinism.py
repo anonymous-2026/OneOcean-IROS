@@ -51,6 +51,8 @@ def test_headless_determinism_same_seed(tmp_path: Path, monkeypatch) -> None:
                 "123",
                 "--dt",
                 "1.0",
+                "--constraint-mode",
+                "off",
                 "--max-steps",
                 "10",
                 "--out-dir",
@@ -62,4 +64,3 @@ def test_headless_determinism_same_seed(tmp_path: Path, monkeypatch) -> None:
     p1 = _read_pose(out1, agent=0)
     p2 = _read_pose(out2, agent=0)
     assert p1[:6] == p2[:6]
-

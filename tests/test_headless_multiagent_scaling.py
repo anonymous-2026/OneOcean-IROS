@@ -39,6 +39,8 @@ def test_multiagent_smoke(tmp_path: Path, monkeypatch) -> None:
                 "0",
                 "--dt",
                 "1.0",
+                "--constraint-mode",
+                "off",
                 "--max-steps",
                 "6",
                 "--out-dir",
@@ -46,4 +48,3 @@ def test_multiagent_smoke(tmp_path: Path, monkeypatch) -> None:
             ],
         )
         assert run_main() == 0
-

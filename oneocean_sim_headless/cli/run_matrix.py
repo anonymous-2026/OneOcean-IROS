@@ -86,6 +86,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--dt", type=float, default=1.0)
     ap.add_argument("--tile-x", type=float, default=600.0)
     ap.add_argument("--tile-z", type=float, default=600.0)
+    ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"])
+    ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
+    ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     return ap.parse_args()
 
 
@@ -184,6 +187,9 @@ def main() -> int:
             dt_s=float(args.dt),
             tile_size_x_m=float(args.tile_x),
             tile_size_z_m=float(args.tile_z),
+            constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
+            bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
+            seafloor_clearance_m=float(args.seafloor_clearance_m),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
         ctrl_cfg = preset_controller(kind=str(sc.controller), max_speed_mps=env_cfg.max_speed_mps)  # type: ignore[arg-type]

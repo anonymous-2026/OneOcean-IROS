@@ -29,6 +29,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--episodes", type=int, default=1, help="Number of episodes to run (writes episode subfolders when >1).")
     ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode.")
     ap.add_argument("--dt", type=float, default=1.0)
+    ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"], help="Hard constraints using land_mask (invalid regions).")
+    ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"], help="Hard constraints using elevation vs agent depth (touchdown/too-shallow).")
+    ap.add_argument("--seafloor-clearance-m", type=float, default=1.0, help="Minimum clearance above seafloor when bathy-mode=hard.")
     ap.add_argument("--max-steps", type=int, default=-1, help="Override max steps; -1 uses task preset.")
     ap.add_argument("--success-radius", type=float, default=-1.0, help="Override success radius (meters); -1 uses task preset.")
     ap.add_argument("--out-dir", type=str, default="")
@@ -43,7 +46,14 @@ def main() -> int:
     base_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else (Path("runs") / "headless" / batch_id).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    env_cfg = EnvConfig(drift_cache_npz=str(Path(args.drift_npz).expanduser()), pollution_model=str(args.pollution_model), dt_s=float(args.dt))
+    env_cfg = EnvConfig(
+        drift_cache_npz=str(Path(args.drift_npz).expanduser()),
+        pollution_model=str(args.pollution_model),
+        dt_s=float(args.dt),
+        constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
+        bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
+        seafloor_clearance_m=float(args.seafloor_clearance_m),
+    )
     preset = preset_task(kind=str(args.task), difficulty=str(args.difficulty))  # type: ignore[arg-type]
     if int(args.max_steps) >= 1:
         preset = TaskConfig(**{**preset.to_dict(), "max_steps": int(args.max_steps)})

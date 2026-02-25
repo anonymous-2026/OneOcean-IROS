@@ -33,6 +33,8 @@ python3 -m oneocean_sim_headless.cli.run \
   --pollution-model gaussian \
   --n-agents 4 \
   --seed 0 \
+  --constraint-mode hard \
+  --bathy-mode off \
   --validate
 ```
 
@@ -47,6 +49,8 @@ python3 -m oneocean_sim_headless.cli.run \
   --pollution-model ocpnet_3d \
   --n-agents 10 \
   --seed 0 \
+  --constraint-mode hard \
+  --bathy-mode off \
   --validate
 ```
 
@@ -73,6 +77,18 @@ Replay + summarize:
 python3 -m oneocean_sim_headless.cli.replay --run-dir runs/headless/<run_id>
 ```
 
+## Constraints (bathymetry / land_mask)
+
+This headless backend supports explicit **hard constraint** checks so tasks are not “just planar drift”:
+
+- `--constraint-mode hard` (default): reject invalid regions using `land_mask` (agent stays put; increments `constraint_violations`).
+- `--bathy-mode hard`: reject “touchdown / too-shallow” states using `elevation` vs agent depth `y` (positive down) with a clearance margin `--seafloor-clearance-m`.
+
+Notes:
+- These constraints are an engineering realism gate, not a full contact/hydrodynamics model.
+- `--constraint-mode hard` requires `land_mask` in the drift cache `.npz`; `--bathy-mode hard` requires `elevation`.
+- When hard constraints are enabled, `--validate` will also check recordings for invalid-region / touchdown samples.
+
 ## 2) Run an experiment matrix (and aggregate CSV)
 
 ```bash
@@ -80,6 +96,8 @@ python3 -m oneocean_sim_headless.cli.run_matrix \
   --drift-npz runs/headless/_cache/drift_scene_t0_d0.npz \
   --seeds 0-9 \
   --pollution-models gaussian \
+  --constraint-mode hard \
+  --bathy-mode off \
   --validate
 ```
 
