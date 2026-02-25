@@ -11,6 +11,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+_LEGACY_LAND_COLORS = [(0.0, "#2e4536"), (0.5, "#4e5e3c"), (1.0, "#a69176")]
+_LEGACY_POLLUTANT_COLORS = [
+    (0.0, "#b3e6ff"),
+    (0.2, "#9ad1f0"),
+    (0.4, "#80bccc"),
+    (0.6, "#f0e68c"),
+    (0.8, "#ff9999"),
+    (1.0, "#ff0000"),
+]
+
+
 def _as_path(path_like: Union[str, Path]) -> Path:
     path = Path(path_like)
     path.mkdir(parents=True, exist_ok=True)
@@ -168,14 +179,76 @@ def plot_pollutant_diffusion(
     pollutant_data_all_days: Optional[Sequence[np.ndarray]] = None,
     output_dir: Union[str, Path] = ".",
     prefix: str = "pollutant_diffusion",
-    concentration_floor: float = 0.08,
+    concentration_floor: float = 0.2,
+    basemap_elevation: Optional[np.ndarray] = None,
+    basemap_land_mask: Optional[np.ndarray] = None,
 ) -> Dict[str, str]:
     output_path = _as_path(output_dir)
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        "pollution_scale",
-        [(0.0, "#0b2e57"), (0.25, "#2a71b8"), (0.5, "#46b2c9"), (0.75, "#f0b24b"), (1.0, "#d9483b")],
-    )
-    levels = np.linspace(concentration_floor, 1.0, 11)
+    land_cmap = mcolors.LinearSegmentedColormap.from_list("legacy_land", _LEGACY_LAND_COLORS)
+    pollutant_cmap = mcolors.LinearSegmentedColormap.from_list("legacy_pollutant", _LEGACY_POLLUTANT_COLORS)
+    pollutant_cmap.set_bad((0, 0, 0, 0))
+    levels = np.linspace(concentration_floor, 1.0, 9)
+
+    def _format_axes(axis):
+        # Cartopy is not available in the current runtime, so we use explicit degree ticks.
+        x_min, x_max = float(np.min(lon_grid)), float(np.max(lon_grid))
+        y_min, y_max = float(np.min(lat_grid)), float(np.max(lat_grid))
+        x_ticks = np.linspace(x_min, x_max, num=7)
+        y_ticks = np.linspace(y_min, y_max, num=7)
+        axis.set_xticks(x_ticks)
+        axis.set_yticks(y_ticks)
+
+        def _fmt_lon(value, _pos=None):
+            suffix = "E" if value >= 0 else "W"
+            return f"{abs(value):.0f}°{suffix}"
+
+        def _fmt_lat(value, _pos=None):
+            suffix = "N" if value >= 0 else "S"
+            return f"{abs(value):.0f}°{suffix}"
+
+        axis.set_xticklabels([_fmt_lon(v) for v in x_ticks], rotation=0)
+        axis.set_yticklabels([_fmt_lat(v) for v in y_ticks], rotation=0)
+        axis.grid(alpha=0.35, linestyle="--", linewidth=0.6)
+        axis.set_xlim(x_min, x_max)
+        axis.set_ylim(y_min, y_max)
+
+    def _draw_basemap(axis):
+        axis.set_facecolor("#000c3f")
+        if basemap_elevation is None:
+            return
+
+        elevation = np.asarray(basemap_elevation, dtype=float)
+        if basemap_land_mask is not None:
+            land = np.asarray(basemap_land_mask, dtype=float) > 0.5
+        else:
+            land = elevation >= 0
+
+        land_height = np.where(land, elevation, np.nan)
+        ocean_depth = np.where(~land, elevation, np.nan)
+
+        if np.any(np.isfinite(ocean_depth)):
+            ocean_cmap = mcolors.LinearSegmentedColormap.from_list(
+                "ocean_bathy",
+                [(0.0, "#00122b"), (0.35, "#00315f"), (0.7, "#0a4b7e"), (1.0, "#1b6fa6")],
+            )
+            axis.pcolormesh(
+                lon_grid,
+                lat_grid,
+                ocean_depth,
+                cmap=ocean_cmap,
+                shading="auto",
+                alpha=0.9,
+            )
+
+        if np.any(np.isfinite(land_height)):
+            axis.pcolormesh(
+                lon_grid,
+                lat_grid,
+                land_height,
+                cmap=land_cmap,
+                shading="auto",
+                alpha=0.95,
+            )
 
     n = len(days)
     ncols = min(3, n)
@@ -185,15 +258,16 @@ def plot_pollutant_diffusion(
     contour = None
     for index, day in enumerate(days):
         axis = axes[index]
+        _draw_basemap(axis)
         pollutant = np.array(pollutant_data[index], dtype=float)
         pollutant[pollutant < concentration_floor] = np.nan
-        contour = axis.contourf(lon_grid, lat_grid, pollutant, levels=levels, cmap=cmap, extend="max")
+        contour = axis.contourf(lon_grid, lat_grid, pollutant, levels=levels, cmap=pollutant_cmap, extend="max")
         axis.contour(lon_grid, lat_grid, pollutant, levels=levels, colors="white", linewidths=0.3, alpha=0.35)
         axis.set_title(f"Day {day}")
         axis.set_xlabel("Longitude")
         axis.set_ylabel("Latitude")
         axis.set_aspect("equal")
-        axis.grid(alpha=0.25, linestyle="--")
+        _format_axes(axis)
     for index in range(n, len(axes)):
         fig.delaxes(axes[index])
     if contour is not None:
@@ -208,31 +282,33 @@ def plot_pollutant_diffusion(
     outputs = {"panel_png": str(panel_file)}
     if pollutant_data_all_days:
         fig_anim, ax_anim = plt.subplots(figsize=(8, 6))
+        _draw_basemap(ax_anim)
         base = np.array(pollutant_data_all_days[0], dtype=float)
         base[base < concentration_floor] = np.nan
+        extent = [float(np.min(lon_grid)), float(np.max(lon_grid)), float(np.min(lat_grid)), float(np.max(lat_grid))]
         img = ax_anim.imshow(
-            base,
+            np.ma.masked_invalid(base),
             origin="lower",
-            cmap=cmap,
+            cmap=pollutant_cmap,
             vmin=concentration_floor,
             vmax=1.0,
-            extent=[np.min(lon_grid), np.max(lon_grid), np.min(lat_grid), np.max(lat_grid)],
+            extent=extent,
             interpolation="nearest",
         )
         ax_anim.set_title("Day 1")
         ax_anim.set_xlabel("Longitude")
         ax_anim.set_ylabel("Latitude")
-        ax_anim.grid(alpha=0.25, linestyle="--")
-        fig_anim.colorbar(img, ax=ax_anim, label="Relative concentration")
+        _format_axes(ax_anim)
+        fig_anim.colorbar(img, ax=ax_anim, label="Relative concentration", shrink=0.9, pad=0.02)
 
         def update(frame: int):
             field = np.array(pollutant_data_all_days[frame], dtype=float)
             field[field < concentration_floor] = np.nan
-            img.set_data(field)
+            img.set_data(np.ma.masked_invalid(field))
             ax_anim.set_title(f"Day {frame + 1}")
             return [img]
 
-        ani = animation.FuncAnimation(fig_anim, update, frames=len(pollutant_data_all_days), interval=120, blit=True)
+        ani = animation.FuncAnimation(fig_anim, update, frames=len(pollutant_data_all_days), interval=140, blit=True)
         gif_file = output_path / f"{prefix}.gif"
         ani.save(gif_file, writer=animation.PillowWriter(fps=8))
         plt.close(fig_anim)
@@ -285,6 +361,17 @@ def simulate_diffusion_from_dataset(
         lons = u_da["longitude"].values
         u_series = np.asarray(u_da.values, dtype=float)
         v_series = np.asarray(v_da.values, dtype=float)
+
+        basemap_elevation = None
+        basemap_land_mask = None
+        if "elevation" in ds.variables:
+            elev = ds["elevation"]
+            elev = elev.isel(latitude=slice(None, None, spatial_stride), longitude=slice(None, None, spatial_stride))
+            basemap_elevation = np.asarray(elev.values, dtype=float)
+        if "land_mask" in ds.variables:
+            lm = ds["land_mask"]
+            lm = lm.isel(latitude=slice(None, None, spatial_stride), longitude=slice(None, None, spatial_stride))
+            basemap_land_mask = np.asarray(lm.values, dtype=float)
 
     n_frames = min(u_series.shape[0], v_series.shape[0])
     if n_frames < 2:
@@ -350,6 +437,8 @@ def simulate_diffusion_from_dataset(
         pollutant_data_all_days=frames,
         output_dir=output_path,
         prefix=prefix,
+        basemap_elevation=basemap_elevation,
+        basemap_land_mask=basemap_land_mask,
     )
     media["frame_count"] = int(n_frames)
     media["u_variable"] = u_name
