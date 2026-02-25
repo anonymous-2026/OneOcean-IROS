@@ -9,6 +9,7 @@ import matplotlib.animation as animation
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
+import colorsys
 
 
 _LEGACY_LAND_COLORS = [(0.0, "#2e4536"), (0.5, "#4e5e3c"), (1.0, "#a69176")]
@@ -94,10 +95,34 @@ def plot_3d_currents(
 
     lon_grid, lat_grid = np.meshgrid(lons, lats)
 
+    def _desaturate(hex_color: str, sat_scale: float = 0.75, light_scale: float = 1.0) -> Tuple[float, float, float]:
+        hex_color = hex_color.lstrip("#")
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+        h, l, s = colorsys.rgb_to_hls(r, g, b)
+        s = max(0.0, min(1.0, s * sat_scale))
+        l = max(0.0, min(1.0, l * light_scale))
+        r2, g2, b2 = colorsys.hls_to_rgb(h, l, s)
+        return r2, g2, b2
+
+    plume_like_cmap = mcolors.LinearSegmentedColormap.from_list(
+        "plume_like_current",
+        [
+            (0.0, _desaturate("#0b2e57", 0.8, 0.95)),
+            (0.25, _desaturate("#2a71b8", 0.75, 0.98)),
+            (0.5, _desaturate("#46b2c9", 0.7, 1.0)),
+            (0.75, _desaturate("#f0b24b", 0.7, 1.0)),
+            (1.0, _desaturate("#d9483b", 0.75, 1.0)),
+        ],
+    )
+
+    views = [(25, 45), (32, 125), (25, 215)]
+
     def _render(speed_u, speed_v, color_speed, out_name: str, title: str):
         fig, axis = plt.subplots(figsize=(12, 10), subplot_kw={"projection": "3d"})
-        cmap = plt.cm.viridis
         norm = mcolors.Normalize(vmin=float(np.nanmin(color_speed)), vmax=float(np.nanmax(color_speed)))
+        cmap = plt.cm.viridis
         axis.plot_surface(
             lon_grid,
             lat_grid,
@@ -126,26 +151,91 @@ def plot_3d_currents(
             alpha=arrow_alpha,
             length=arrow_size,
             normalize=True,
-            arrow_length_ratio=0.3,
+            arrow_length_ratio=0.55,
+            linewidth=1.1,
         )
 
         scalar = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         scalar.set_array([])
-        fig.colorbar(scalar, ax=axis, shrink=0.55, aspect=14, label="Speed (m/s)")
+        fig.subplots_adjust(right=0.86)
+        cax = fig.add_axes([0.88, 0.18, 0.02, 0.62])
+        fig.colorbar(scalar, cax=cax, label="Speed (m/s)")
         axis.set_xlabel("Longitude")
         axis.set_ylabel("Latitude")
         axis.set_zlabel("Elevation (m)")
-        axis.set_title(title)
         out_file = output_path / out_name
         fig.savefig(out_file, dpi=240, bbox_inches="tight")
+        eps_file = out_file.with_suffix(".eps")
+        fig.savefig(eps_file, format="eps", bbox_inches="tight")
         plt.close(fig)
-        return str(out_file)
+        return str(out_file), str(eps_file)
+
+    def _render_multi_view(speed_u, speed_v, color_speed, stem: str, cmap_style: str):
+        outputs = {}
+        for elev, azim in views:
+            fig, axis = plt.subplots(figsize=(12, 10), subplot_kw={"projection": "3d"})
+            axis.view_init(elev=elev, azim=azim)
+            norm = mcolors.Normalize(vmin=float(np.nanmin(color_speed)), vmax=float(np.nanmax(color_speed)))
+            cmap = plume_like_cmap if cmap_style == "plume" else plt.cm.viridis
+            axis.plot_surface(
+                lon_grid,
+                lat_grid,
+                elevation,
+                facecolors=cmap(norm(color_speed)),
+                edgecolor="none",
+                alpha=1.0,
+                linewidth=0.0,
+            )
+
+            lon_sample = lon_grid[::skip, ::skip]
+            lat_sample = lat_grid[::skip, ::skip]
+            u_sample = speed_u[::skip, ::skip]
+            v_sample = speed_v[::skip, ::skip]
+            speed = np.sqrt(u_sample ** 2 + v_sample ** 2)
+            safe = speed > 1e-8
+            arrow_height = float(np.nanmax(elevation)) + arrow_height_offset
+            axis.quiver(
+                lon_sample[safe],
+                lat_sample[safe],
+                np.full(np.count_nonzero(safe), arrow_height),
+                (u_sample[safe] / speed[safe]),
+                (v_sample[safe] / speed[safe]),
+                np.zeros(np.count_nonzero(safe)),
+                color="black",
+                alpha=arrow_alpha,
+                length=arrow_size,
+                normalize=True,
+                arrow_length_ratio=0.7,
+                linewidth=1.2,
+            )
+
+            scalar = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            scalar.set_array([])
+            fig.subplots_adjust(right=0.86)
+            cax = fig.add_axes([0.88, 0.18, 0.02, 0.62])
+            fig.colorbar(scalar, cax=cax, label="Speed (m/s)")
+            axis.set_xlabel("Longitude")
+            axis.set_ylabel("Latitude")
+            axis.set_zlabel("Elevation (m)")
+
+            out_name = f"{stem}_{cmap_style}_el{elev:02d}_az{azim:03d}.png"
+            out_file = output_path / out_name
+            fig.savefig(out_file, dpi=240, bbox_inches="tight")
+            eps_file = out_file.with_suffix(".eps")
+            fig.savefig(eps_file, format="eps", bbox_inches="tight")
+            plt.close(fig)
+            outputs[out_name] = str(out_file)
+            outputs[out_name.replace(".png", ".eps")] = str(eps_file)
+        return outputs
 
     base_speed = np.sqrt(uo ** 2 + vo ** 2)
     total_speed = np.sqrt(utotal ** 2 + vtotal ** 2)
-    base_file = _render(uo, vo, base_speed, "base_current_3d.png", "Base Current (uo/vo) over Bathymetry")
-    total_file = _render(utotal, vtotal, total_speed, "total_current_3d.png", "Total Current (utotal/vtotal) over Bathymetry")
-    return {"base_current_3d": base_file, "total_current_3d": total_file}
+    outputs = {}
+    outputs.update(_render_multi_view(uo, vo, base_speed, "base_current_3d", "viridis"))
+    outputs.update(_render_multi_view(uo, vo, base_speed, "base_current_3d", "plume"))
+    outputs.update(_render_multi_view(utotal, vtotal, total_speed, "total_current_3d", "viridis"))
+    outputs.update(_render_multi_view(utotal, vtotal, total_speed, "total_current_3d", "plume"))
+    return outputs
 
 
 def generate_synthetic_diffusion_series(
@@ -261,30 +351,35 @@ def plot_pollutant_diffusion(
         _draw_basemap(axis)
         pollutant = np.array(pollutant_data[index], dtype=float)
         pollutant[pollutant < concentration_floor] = np.nan
+        if basemap_land_mask is not None:
+            pollutant[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
         contour = axis.contourf(lon_grid, lat_grid, pollutant, levels=levels, cmap=pollutant_cmap, extend="max")
-        axis.contour(lon_grid, lat_grid, pollutant, levels=levels, colors="white", linewidths=0.3, alpha=0.35)
-        axis.set_title(f"Day {day}")
+        axis.contour(lon_grid, lat_grid, pollutant, levels=levels, colors="#aa66f5", linewidths=0.5, alpha=0.6)
         axis.set_xlabel("Longitude")
         axis.set_ylabel("Latitude")
         axis.set_aspect("equal")
         _format_axes(axis)
     for index in range(n, len(axes)):
         fig.delaxes(axes[index])
+    fig.subplots_adjust(left=0.06, right=0.86, bottom=0.08, top=0.95, wspace=0.22, hspace=0.28)
     if contour is not None:
-        colorbar = fig.colorbar(contour, ax=axes[:n], shrink=0.9, pad=0.02)
+        cax = fig.add_axes([0.88, 0.18, 0.02, 0.62])
+        colorbar = fig.colorbar(contour, cax=cax)
         colorbar.set_label("Relative concentration")
-    fig.suptitle(pollutant_name)
-    fig.subplots_adjust(left=0.06, right=0.93, bottom=0.08, top=0.9, wspace=0.22, hspace=0.28)
     panel_file = output_path / f"{prefix}_panel.png"
     fig.savefig(panel_file, dpi=260)
+    panel_eps = panel_file.with_suffix(".eps")
+    fig.savefig(panel_eps, format="eps")
     plt.close(fig)
 
-    outputs = {"panel_png": str(panel_file)}
+    outputs = {"panel_png": str(panel_file), "panel_eps": str(panel_eps)}
     if pollutant_data_all_days:
         fig_anim, ax_anim = plt.subplots(figsize=(8, 6))
         _draw_basemap(ax_anim)
         base = np.array(pollutant_data_all_days[0], dtype=float)
         base[base < concentration_floor] = np.nan
+        if basemap_land_mask is not None:
+            base[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
         extent = [float(np.min(lon_grid)), float(np.max(lon_grid)), float(np.min(lat_grid)), float(np.max(lat_grid))]
         img = ax_anim.imshow(
             np.ma.masked_invalid(base),
@@ -295,17 +390,19 @@ def plot_pollutant_diffusion(
             extent=extent,
             interpolation="nearest",
         )
-        ax_anim.set_title("Day 1")
         ax_anim.set_xlabel("Longitude")
         ax_anim.set_ylabel("Latitude")
         _format_axes(ax_anim)
-        fig_anim.colorbar(img, ax=ax_anim, label="Relative concentration", shrink=0.9, pad=0.02)
+        fig_anim.subplots_adjust(right=0.86)
+        cax = fig_anim.add_axes([0.88, 0.18, 0.02, 0.62])
+        fig_anim.colorbar(img, cax=cax, label="Relative concentration")
 
         def update(frame: int):
             field = np.array(pollutant_data_all_days[frame], dtype=float)
             field[field < concentration_floor] = np.nan
+            if basemap_land_mask is not None:
+                field[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
             img.set_data(np.ma.masked_invalid(field))
-            ax_anim.set_title(f"Day {frame + 1}")
             return [img]
 
         ani = animation.FuncAnimation(fig_anim, update, frames=len(pollutant_data_all_days), interval=140, blit=True)
@@ -328,6 +425,8 @@ def simulate_diffusion_from_dataset(
     frame_seconds: float = 1800.0,
     substeps: int = 3,
     prefix: str = "dataset_diffusion",
+    auto_coast: bool = True,
+    coast_halfspan_deg: float = 3.0,
 ) -> Dict[str, Union[str, float, int]]:
     import xarray as xr
 
@@ -340,8 +439,42 @@ def simulate_diffusion_from_dataset(
         u_name = "utotal" if "utotal" in ds.variables else "uo"
         v_name = "vtotal" if "vtotal" in ds.variables else "vo"
 
-        u_da = ds[u_name]
-        v_da = ds[v_name]
+        ds_use = ds
+        if auto_coast and "land_mask" in ds.variables:
+            lm = ds["land_mask"]
+            search_stride = max(4, spatial_stride)
+            lm_s = lm.isel(latitude=slice(None, None, search_stride), longitude=slice(None, None, search_stride))
+            lm_sv = np.asarray(lm_s.values, dtype=float)
+            land = lm_sv > 0.5
+            if np.any(land) and np.any(~land):
+                # Find an ocean cell adjacent to land (coastline proxy).
+                ocean = ~land
+                coast_ocean = ocean.copy()
+                coast_ocean[:-1, :] &= land[1:, :]
+                coast_ocean[1:, :] |= (ocean[1:, :] & land[:-1, :])
+                coast_ocean[:, :-1] |= (ocean[:, :-1] & land[:, 1:])
+                coast_ocean[:, 1:] |= (ocean[:, 1:] & land[:, :-1])
+                candidates = np.argwhere(coast_ocean)
+                if candidates.size > 0:
+                    ci, cj = candidates[len(candidates) // 2]
+                    lat0 = float(lm_s["latitude"].values[ci])
+                    lon0 = float(lm_s["longitude"].values[cj])
+
+                    lat_min = lat0 - coast_halfspan_deg
+                    lat_max = lat0 + coast_halfspan_deg
+                    lon_min = lon0 - coast_halfspan_deg
+                    lon_max = lon0 + coast_halfspan_deg
+
+                    lats = ds["latitude"].values
+                    lons = ds["longitude"].values
+                    lat_inc = bool(lats[0] < lats[-1])
+                    lon_inc = bool(lons[0] < lons[-1])
+                    lat_slice = slice(lat_min, lat_max) if lat_inc else slice(lat_max, lat_min)
+                    lon_slice = slice(lon_min, lon_max) if lon_inc else slice(lon_max, lon_min)
+                    ds_use = ds.sel(latitude=lat_slice, longitude=lon_slice)
+
+        u_da = ds_use[u_name]
+        v_da = ds_use[v_name]
 
         if "depth" in u_da.dims:
             u_da = u_da.isel(depth=depth_index)
@@ -364,12 +497,12 @@ def simulate_diffusion_from_dataset(
 
         basemap_elevation = None
         basemap_land_mask = None
-        if "elevation" in ds.variables:
-            elev = ds["elevation"]
+        if "elevation" in ds_use.variables:
+            elev = ds_use["elevation"]
             elev = elev.isel(latitude=slice(None, None, spatial_stride), longitude=slice(None, None, spatial_stride))
             basemap_elevation = np.asarray(elev.values, dtype=float)
-        if "land_mask" in ds.variables:
-            lm = ds["land_mask"]
+        if "land_mask" in ds_use.variables:
+            lm = ds_use["land_mask"]
             lm = lm.isel(latitude=slice(None, None, spatial_stride), longitude=slice(None, None, spatial_stride))
             basemap_land_mask = np.asarray(lm.values, dtype=float)
 
@@ -383,8 +516,8 @@ def simulate_diffusion_from_dataset(
 
     center_a = (float(np.min(lons) + 0.36 * lon_span), float(np.min(lats) + 0.45 * lat_span))
     center_b = (float(np.min(lons) + 0.68 * lon_span), float(np.min(lats) + 0.62 * lat_span))
-    sigma_lon = max(lon_span * 0.08, 1e-6)
-    sigma_lat = max(lat_span * 0.08, 1e-6)
+    sigma_lon = max(lon_span * 0.12, 1e-6)
+    sigma_lat = max(lat_span * 0.12, 1e-6)
 
     concentration = np.exp(
         -(((lon_grid - center_a[0]) ** 2) / (2.0 * sigma_lon**2) + ((lat_grid - center_a[1]) ** 2) / (2.0 * sigma_lat**2))
@@ -393,6 +526,8 @@ def simulate_diffusion_from_dataset(
         -(((lon_grid - center_b[0]) ** 2) / (2.0 * sigma_lon**2) + ((lat_grid - center_b[1]) ** 2) / (2.0 * sigma_lat**2))
     )
     concentration = concentration / np.max(concentration)
+    if basemap_land_mask is not None:
+        concentration[np.asarray(basemap_land_mask, dtype=float) > 0.5] = 0.0
 
     mean_lat = float(np.mean(lats))
     meters_per_deg_lat = 110_540.0
@@ -418,6 +553,8 @@ def simulate_diffusion_from_dataset(
             tendency = (-u_frame * dc_dx) + (-v_frame * dc_dy) + (diffusion_coeff * lap)
             concentration = concentration + dt * tendency
             concentration = np.clip(concentration, 0.0, None)
+            if basemap_land_mask is not None:
+                concentration[np.asarray(basemap_land_mask, dtype=float) > 0.5] = 0.0
             max_value = np.max(concentration)
             if max_value > 0:
                 concentration = concentration / max_value
