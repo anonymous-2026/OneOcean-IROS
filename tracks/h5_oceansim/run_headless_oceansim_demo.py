@@ -125,6 +125,12 @@ def _json_dump(path: Path, payload: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Headless OceanSim UW camera + sonar demo (writes PNG/NPY).")
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--usd",
+        type=str,
+        default="",
+        help="Optional USD path to load as scene. If empty, uses OceanSim's official MHL example scene.",
+    )
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--warmup_frames", type=int, default=20)
     parser.add_argument("--debug_raw_frames", type=int, default=0, help="Dump raw LdrColor + depth for first N frames.")
@@ -195,7 +201,7 @@ def main() -> int:
         import omni.usd
 
         from isaacsim.core.utils.extensions import enable_extension
-        from pxr import Gf, UsdGeom, UsdLux
+        from pxr import Gf, Usd, UsdGeom, UsdLux
 
         try:
             enable_extension("omni.sensors.nv.camera")
@@ -223,66 +229,56 @@ def main() -> int:
         world_xf = UsdGeom.Xform.Define(stage, "/World")
         stage.SetDefaultPrim(world_xf.GetPrim())
 
+        from isaacsim.core.utils.stage import add_reference_to_stage
+
+        # Load an external scene (official OceanSim MHL by default).
+        if str(args.usd).strip():
+            scene_usd = str(args.usd).strip()
+            scene_prim = "/World/scene"
+            add_reference_to_stage(usd_path=scene_usd, prim_path=scene_prim)
+        else:
+            from isaacsim.oceansim.utils.assets_utils import get_oceansim_assets_path
+
+            assets_root = Path(get_oceansim_assets_path())
+            scene_usd = str((assets_root / "collected_MHL" / "mhl_scaled.usd").resolve())
+            scene_prim = "/World/mhl"
+            add_reference_to_stage(usd_path=scene_usd, prim_path=scene_prim)
+
+        simulation_app.update()
+        simulation_app.update()
+
         dome = UsdLux.DomeLight.Define(stage, "/World/DomeLight")
-        dome.CreateIntensityAttr(100.0)
+        dome.CreateIntensityAttr(250.0)
         dome.CreateColorAttr((0.35, 0.6, 1.0))
 
         key_light = UsdLux.DistantLight.Define(stage, "/World/KeyLight")
-        key_light.CreateIntensityAttr(25000.0)
+        key_light.CreateIntensityAttr(60000.0)
         key_light.CreateColorAttr((0.95, 0.98, 1.0))
-
-        floor = UsdGeom.Cube.Define(stage, "/World/SeaFloor")
-        floor.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -2.0))
-        floor.AddScaleOp().Set(Gf.Vec3f(100.0, 100.0, 0.2))
-        try:
-            floor.CreateDisplayColorAttr([Gf.Vec3f(0.25, 0.23, 0.20)])
-        except Exception:
-            pass
-
-        rng = np.random.default_rng(0)
-        for i in range(14):
-            rock = UsdGeom.Sphere.Define(stage, f"/World/Rock_{i:02d}")
-            rock.AddTranslateOp().Set(
-                Gf.Vec3d(float(rng.uniform(-10, 10)), float(rng.uniform(-10, 10)), float(rng.uniform(-1.9, -1.0)))
-            )
-            rock.AddScaleOp().Set(Gf.Vec3f(float(rng.uniform(0.4, 1.6)), float(rng.uniform(0.4, 1.6)), float(rng.uniform(0.2, 1.2))))
-            try:
-                rock.CreateDisplayColorAttr([Gf.Vec3f(0.10, 0.11, 0.12)])
-            except Exception:
-                pass
-
-        # Particulate matter ("silt") to help the scene read as underwater (parallax + suspended particles).
-        silt_ops: list[tuple[UsdGeom.Sphere, "UsdGeom.XformOp"]] = []
-        for i in range(160):
-            p = UsdGeom.Sphere.Define(stage, f"/World/Silt/Silt_{i:03d}")
-            t_op = p.AddTranslateOp()
-            t_op.Set(Gf.Vec3d(float(rng.uniform(-12, 12)), float(rng.uniform(-12, 12)), float(rng.uniform(-2.0, 3.0))))
-            p.AddScaleOp().Set(Gf.Vec3f(float(rng.uniform(0.02, 0.05))))
-            try:
-                p.CreateDisplayColorAttr([Gf.Vec3f(0.75, 0.9, 1.0)])
-            except Exception:
-                pass
-            silt_ops.append((p, t_op))
-
-        uuv = UsdGeom.Cube.Define(stage, "/World/UUV")
-        uuv_t = uuv.AddTranslateOp()
-        uuv_s = uuv.AddScaleOp()
-        uuv_s.Set(Gf.Vec3f(0.6, 0.25, 0.25))
-        uuv_t.Set(Gf.Vec3d(-6.0, 0.0, -1.2))
-        try:
-            uuv.CreateDisplayColorAttr([Gf.Vec3f(0.75, 0.82, 0.9)])
-        except Exception:
-            pass
 
         from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
 
-        cam_tgt = np.array([0.0, 0.0, -1.4], dtype=float)
+        cam_tgt = np.array([0.0, 0.0, 0.0], dtype=float)
+        dist = 20.0
+        try:
+            prim = stage.GetPrimAtPath(scene_prim)
+            if prim.IsValid():
+                bbox_cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), includedPurposes=[UsdGeom.Tokens.default_])
+                world_box = bbox_cache.ComputeWorldBound(prim)
+                box_range = world_box.ComputeAlignedBox().GetRange()
+                mn = np.array([box_range.GetMin()[0], box_range.GetMin()[1], box_range.GetMin()[2]], dtype=float)
+                mx = np.array([box_range.GetMax()[0], box_range.GetMax()[1], box_range.GetMax()[2]], dtype=float)
+                cam_tgt = 0.5 * (mn + mx)
+                diag = float(np.linalg.norm(mx - mn))
+                dist = max(5.0, 0.8 * diag)
+        except Exception:
+            pass
+
         if args.camera_preset == "topdown":
-            cam_pos = np.array([0.0, -0.5, 4.5], dtype=float)
+            cam_pos = cam_tgt + np.array([0.0, -0.2 * dist, 0.9 * dist], dtype=float)
         elif args.camera_preset == "forward_y":
-            cam_pos = np.array([0.0, -12.0, -1.0], dtype=float)
+            cam_pos = cam_tgt + np.array([0.0, -1.2 * dist, 0.15 * dist], dtype=float)
         else:
-            cam_pos = np.array([10.0, -10.0, 2.0], dtype=float)
+            cam_pos = cam_tgt + np.array([0.9 * dist, -0.9 * dist, 0.35 * dist], dtype=float)
 
         cam_q_world = _look_at_quat_world_wxyz(cam_pos, cam_tgt, up=np.array([0.0, 0.0, 1.0], dtype=float))
 
@@ -360,19 +356,18 @@ def main() -> int:
 
         frames_written = 0
         for i in range(int(args.frames)):
-            theta = 2.0 * np.pi * (i / max(1.0, float(args.frames)))
-            x = -6.0 + 12.0 * (i / max(1.0, float(max(1, args.frames - 1))))
-            y = 2.0 * np.sin(theta)
-            z = -1.25 + 0.15 * np.cos(theta)
-            uuv_t.Set(Gf.Vec3d(float(x), float(y), float(z)))
-
-            # Slow silt drift for parallax.
-            for _, op in silt_ops:
-                v = op.Get()
-                new_y = float(v[1]) + 0.01
-                if new_y > 12.0:
-                    new_y = -12.0
-                op.Set(Gf.Vec3d(float(v[0]), new_y, float(v[2])))
+            # Simple camera orbit to create visible motion without modifying the scene content.
+            theta = 2.0 * np.pi * (i / max(1.0, float(max(1, args.frames - 1))))
+            orbit = cam_tgt + np.array([np.cos(theta), np.sin(theta), 0.0], dtype=float) * (0.25 * dist)
+            cam_pos_i = orbit + (cam_pos - cam_tgt)
+            cam_q_i = _look_at_quat_world_wxyz(cam_pos_i, cam_tgt, up=np.array([0.0, 0.0, 1.0], dtype=float))
+            try:
+                uw_cam.set_world_pose(position=cam_pos_i.tolist(), orientation=cam_q_i.tolist(), camera_axes="world")
+                cam_light.GetPrim().GetAttribute("xformOp:translate").Set(
+                    Gf.Vec3d(float(cam_pos_i[0]), float(cam_pos_i[1]), float(cam_pos_i[2]))
+                )
+            except Exception:
+                pass
 
             simulation_app.update()
             if int(args.debug_raw_frames) > 0 and i < int(args.debug_raw_frames):
@@ -440,6 +435,9 @@ def main() -> int:
             "track": "H5_OceanSim",
             "isaacsim_root": "/home/shuaijun/isaacsim",
             "oceansim_ext_root": str(oceansim_ext_root) if oceansim_ext_root.exists() else None,
+            "scene_usd": scene_usd,
+            "scene_prim_path": scene_prim,
+            "camera_preset": args.camera_preset,
             "frames": int(args.frames),
             "warmup_frames": int(args.warmup_frames),
             "frames_written": int(frames_written),

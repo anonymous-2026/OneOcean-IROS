@@ -11,6 +11,13 @@ cd "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)"
 python3 tracks/h5_oceansim/fetch_oceansim_extension.py --overwrite
 ```
 
+Download + register OceanSim **official assets** (required for the default MHL example scene):
+
+```bash
+cd "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)"
+python3 tracks/h5_oceansim/fetch_oceansim_assets.py
+```
+
 ## Run (headless)
 
 ```bash
@@ -18,6 +25,13 @@ cd "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)"
 OUT="runs/h5_oceansim/demo_$(date +%Y%m%d_%H%M%S)"
 /home/shuaijun/isaacsim/python.sh tracks/h5_oceansim/run_headless_oceansim_demo.py \
   --out "$OUT" --frames 120 --warmup_frames 20 --gpu 0
+```
+
+Optional: render on your own external scene USD instead of the official MHL scene:
+
+```bash
+/home/shuaijun/isaacsim/python.sh tracks/h5_oceansim/run_headless_oceansim_demo.py \
+  --out "$OUT" --usd "/abs/path/to/scene.usd" --frames 120 --warmup_frames 20 --gpu 0
 ```
 
 Make MP4/GIF from camera frames:
