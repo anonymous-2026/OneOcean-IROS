@@ -13,13 +13,13 @@ TaskKind = Literal[
     "pollution_containment_multiagent",
 ]
 
-DifficulyKind = Literal["easy", "medium", "hard"]
+DifficultyKind = Literal["easy", "medium", "hard"]
 
 
 @dataclass(frozen=True)
 class TaskConfig:
     kind: TaskKind
-    difficulty: DifficulyKind = "medium"
+    difficulty: DifficultyKind = "medium"
     success_radius_m: float = 6.0
     max_steps: int = 240
     hold_steps: int = 30  # for station-keeping
@@ -35,7 +35,7 @@ class TaskState:
     hold_counter: int = 0
 
 
-def preset_task(kind: TaskKind, difficulty: DifficulyKind) -> TaskConfig:
+def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
     d = str(difficulty)
     if kind == "go_to_goal_current":
         return TaskConfig(

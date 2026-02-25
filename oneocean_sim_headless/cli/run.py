@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..controllers import ControllerConfig, preset_controller
 from ..env import EnvConfig, HeadlessOceanEnv
-from ..tasks import DifficulyKind, TaskConfig, preset_task
+from ..tasks import TaskConfig, preset_task
 from ..validators import validate_run_dir
 
 
