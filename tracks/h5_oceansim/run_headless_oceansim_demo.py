@@ -27,6 +27,97 @@ def _look_at_quat_wxyz(camera_pos: np.ndarray, target_pos: np.ndarray, up: np.nd
     return quat
 
 
+def _look_at_quat_world_wxyz(camera_pos: np.ndarray, target_pos: np.ndarray, up: np.ndarray) -> np.ndarray:
+    """
+    Build a quaternion in Isaac Sim "world camera" convention:
+    - +X forward, +Z up, +Y left.
+    This matches Camera.set_world_pose(..., camera_axes="world").
+    """
+    cam = np.asarray(camera_pos, dtype=float).reshape(3)
+    tgt = np.asarray(target_pos, dtype=float).reshape(3)
+    up = np.asarray(up, dtype=float).reshape(3)
+
+    forward = tgt - cam
+    forward_norm = float(np.linalg.norm(forward))
+    if forward_norm < 1e-9:
+        forward = np.array([1.0, 0.0, 0.0], dtype=float)
+    else:
+        forward = forward / forward_norm
+
+    up_norm = float(np.linalg.norm(up))
+    if up_norm < 1e-9:
+        up = np.array([0.0, 0.0, 1.0], dtype=float)
+    else:
+        up = up / up_norm
+
+    # Camera Y axis is LEFT. Use left = up x forward.
+    left = np.cross(up, forward)
+    left_norm = float(np.linalg.norm(left))
+    if left_norm < 1e-9:
+        # forward ~ up; choose an arbitrary left
+        left = np.array([0.0, 1.0, 0.0], dtype=float)
+    else:
+        left = left / left_norm
+
+    up_ortho = np.cross(forward, left)
+    up_ortho_norm = float(np.linalg.norm(up_ortho))
+    if up_ortho_norm < 1e-9:
+        up_ortho = up
+    else:
+        up_ortho = up_ortho / up_ortho_norm
+
+    # Rotation matrix mapping camera(world-convention) axes -> world axes.
+    # Columns are world vectors of camera basis: [forward, left, up].
+    R = np.stack([forward, left, up_ortho], axis=1)
+
+    # Convert rotation matrix to quaternion (w,x,y,z), right-handed.
+    tr = float(np.trace(R))
+    if tr > 0.0:
+        S = np.sqrt(tr + 1.0) * 2.0
+        qw = 0.25 * S
+        qx = (R[2, 1] - R[1, 2]) / S
+        qy = (R[0, 2] - R[2, 0]) / S
+        qz = (R[1, 0] - R[0, 1]) / S
+    elif (R[0, 0] > R[1, 1]) and (R[0, 0] > R[2, 2]):
+        S = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2.0
+        qw = (R[2, 1] - R[1, 2]) / S
+        qx = 0.25 * S
+        qy = (R[0, 1] + R[1, 0]) / S
+        qz = (R[0, 2] + R[2, 0]) / S
+    elif R[1, 1] > R[2, 2]:
+        S = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2.0
+        qw = (R[0, 2] - R[2, 0]) / S
+        qx = (R[0, 1] + R[1, 0]) / S
+        qy = 0.25 * S
+        qz = (R[1, 2] + R[2, 1]) / S
+    else:
+        S = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2.0
+        qw = (R[1, 0] - R[0, 1]) / S
+        qx = (R[0, 2] + R[2, 0]) / S
+        qy = (R[1, 2] + R[2, 1]) / S
+        qz = 0.25 * S
+
+    quat = np.array([qw, qx, qy, qz], dtype=float)
+    quat = quat / max(1e-12, float(np.linalg.norm(quat)))
+    return quat
+
+
+def _maybe_to_numpy(arr):
+    if arr is None:
+        return None
+    if isinstance(arr, np.ndarray):
+        return arr
+    if hasattr(arr, "numpy"):
+        try:
+            return arr.numpy()
+        except Exception:
+            pass
+    try:
+        return np.asarray(arr)
+    except Exception:
+        return None
+
+
 def _json_dump(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -36,6 +127,13 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--frames", type=int, default=120)
     parser.add_argument("--warmup_frames", type=int, default=20)
+    parser.add_argument("--debug_raw_frames", type=int, default=0, help="Dump raw LdrColor + depth for first N frames.")
+    parser.add_argument(
+        "--camera_preset",
+        choices=("isometric", "forward_y", "topdown"),
+        default="isometric",
+        help="Camera preset to help get readable frames in headless mode.",
+    )
     parser.add_argument("--no_sonar", action="store_true")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--limit_cpu_threads", type=int, default=32)
@@ -44,6 +142,8 @@ def main() -> int:
     out_dir = args.out.expanduser().resolve()
     (out_dir / "uw_camera").mkdir(parents=True, exist_ok=True)
     (out_dir / "sonar").mkdir(parents=True, exist_ok=True)
+    if int(args.debug_raw_frames) > 0:
+        (out_dir / "raw_camera").mkdir(parents=True, exist_ok=True)
 
     oceansim_ext_root = Path("/home/shuaijun/isaacsim/extsUser/OceanSim").resolve()
     args_json = {}
@@ -124,12 +224,20 @@ def main() -> int:
         stage.SetDefaultPrim(world_xf.GetPrim())
 
         dome = UsdLux.DomeLight.Define(stage, "/World/DomeLight")
-        dome.CreateIntensityAttr(500.0)
-        dome.CreateColorAttr((0.45, 0.7, 1.0))
+        dome.CreateIntensityAttr(100.0)
+        dome.CreateColorAttr((0.35, 0.6, 1.0))
+
+        key_light = UsdLux.DistantLight.Define(stage, "/World/KeyLight")
+        key_light.CreateIntensityAttr(25000.0)
+        key_light.CreateColorAttr((0.95, 0.98, 1.0))
 
         floor = UsdGeom.Cube.Define(stage, "/World/SeaFloor")
         floor.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -2.0))
         floor.AddScaleOp().Set(Gf.Vec3f(100.0, 100.0, 0.2))
+        try:
+            floor.CreateDisplayColorAttr([Gf.Vec3f(0.25, 0.23, 0.20)])
+        except Exception:
+            pass
 
         rng = np.random.default_rng(0)
         for i in range(14):
@@ -138,6 +246,10 @@ def main() -> int:
                 Gf.Vec3d(float(rng.uniform(-10, 10)), float(rng.uniform(-10, 10)), float(rng.uniform(-1.9, -1.0)))
             )
             rock.AddScaleOp().Set(Gf.Vec3f(float(rng.uniform(0.4, 1.6)), float(rng.uniform(0.4, 1.6)), float(rng.uniform(0.2, 1.2))))
+            try:
+                rock.CreateDisplayColorAttr([Gf.Vec3f(0.10, 0.11, 0.12)])
+            except Exception:
+                pass
 
         # Particulate matter ("silt") to help the scene read as underwater (parallax + suspended particles).
         silt_ops: list[tuple[UsdGeom.Sphere, "UsdGeom.XformOp"]] = []
@@ -146,6 +258,10 @@ def main() -> int:
             t_op = p.AddTranslateOp()
             t_op.Set(Gf.Vec3d(float(rng.uniform(-12, 12)), float(rng.uniform(-12, 12)), float(rng.uniform(-2.0, 3.0))))
             p.AddScaleOp().Set(Gf.Vec3f(float(rng.uniform(0.02, 0.05))))
+            try:
+                p.CreateDisplayColorAttr([Gf.Vec3f(0.75, 0.9, 1.0)])
+            except Exception:
+                pass
             silt_ops.append((p, t_op))
 
         uuv = UsdGeom.Cube.Define(stage, "/World/UUV")
@@ -153,21 +269,67 @@ def main() -> int:
         uuv_s = uuv.AddScaleOp()
         uuv_s.Set(Gf.Vec3f(0.6, 0.25, 0.25))
         uuv_t.Set(Gf.Vec3d(-6.0, 0.0, -1.2))
+        try:
+            uuv.CreateDisplayColorAttr([Gf.Vec3f(0.75, 0.82, 0.9)])
+        except Exception:
+            pass
 
         from isaacsim.oceansim.sensors.UW_Camera import UW_Camera
 
-        cam_pos = np.array([9.0, 7.0, 1.8], dtype=float)
-        cam_tgt = np.array([0.0, 0.0, -1.3], dtype=float)
-        cam_q = _look_at_quat_wxyz(cam_pos, cam_tgt, up=np.array([0.0, 0.0, 1.0], dtype=float))
+        cam_tgt = np.array([0.0, 0.0, -1.4], dtype=float)
+        if args.camera_preset == "topdown":
+            cam_pos = np.array([0.0, -0.5, 4.5], dtype=float)
+        elif args.camera_preset == "forward_y":
+            cam_pos = np.array([0.0, -12.0, -1.0], dtype=float)
+        else:
+            cam_pos = np.array([10.0, -10.0, 2.0], dtype=float)
+
+        cam_q_world = _look_at_quat_world_wxyz(cam_pos, cam_tgt, up=np.array([0.0, 0.0, 1.0], dtype=float))
+
+        cam_light = UsdLux.SphereLight.Define(stage, "/World/CameraLight")
+        cam_light.AddTranslateOp().Set(Gf.Vec3d(float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])))
+        cam_light.CreateIntensityAttr(35000.0)
+        cam_light.CreateRadiusAttr(2.0)
+        cam_light.CreateColorAttr((0.95, 0.98, 1.0))
 
         uw_cam = UW_Camera(
             prim_path="/World/UWCamera",
             name="UWCamera",
             resolution=(1280, 720),
             position=cam_pos.tolist(),
-            orientation=cam_q.tolist(),
+            orientation=[1.0, 0.0, 0.0, 0.0],
         )
-        uw_cam.initialize(viewport=False, writing_dir=str(out_dir / "uw_camera"))
+        try:
+            cam_prim = stage.GetPrimAtPath("/World/UWCamera")
+            usd_cam = UsdGeom.Camera(cam_prim)
+            usd_cam.CreateClippingRangeAttr().Set((0.05, 250.0))
+            usd_cam.CreateFocalLengthAttr().Set(18.0)
+        except Exception:
+            pass
+        # NOTE: OceanSim's UW_Camera currently maps UW_param indices as:
+        # - backscatter_value = [0:3]
+        # - attenuation_coeff = [6:9]  (swapped vs docstring)
+        # - backscatter_coeff = [3:6]  (swapped vs docstring)
+        # We set a mild haze but avoid the "solid green wash".
+        uw_param = np.array(
+            [
+                0.02,
+                0.06,
+                0.08,  # backscatter_value (0..1)
+                0.010,
+                0.012,
+                0.016,  # backscatter_coeff (interpreted from [3:6])
+                0.020,
+                0.030,
+                0.050,  # attenuation_coeff (interpreted from [6:9])
+            ],
+            dtype=float,
+        )
+        uw_cam.initialize(UW_param=uw_param, viewport=False, writing_dir=str(out_dir / "uw_camera"))
+        try:
+            uw_cam.set_world_pose(position=cam_pos.tolist(), orientation=cam_q_world.tolist(), camera_axes="world")
+        except Exception:
+            pass
 
         sonar = None
         if not args.no_sonar:
@@ -213,6 +375,43 @@ def main() -> int:
                 op.Set(Gf.Vec3d(float(v[0]), new_y, float(v[2])))
 
             simulation_app.update()
+            if int(args.debug_raw_frames) > 0 and i < int(args.debug_raw_frames):
+                try:
+                    from PIL import Image
+
+                    raw_rgba = None
+                    raw_depth = None
+                    annot_rgba = getattr(uw_cam, "_rgba_annot", None)
+                    annot_depth = getattr(uw_cam, "_depth_annot", None)
+                    if annot_rgba is not None:
+                        raw_rgba = annot_rgba.get_data()
+                    if annot_depth is not None:
+                        raw_depth = annot_depth.get_data()
+
+                    rgba_np = _maybe_to_numpy(raw_rgba)
+                    depth_np = _maybe_to_numpy(raw_depth)
+
+                    if rgba_np is not None and getattr(rgba_np, "shape", None) is not None and rgba_np.size != 0:
+                        Image.fromarray(rgba_np.astype("uint8"), mode="RGBA").save(
+                            out_dir / "raw_camera" / f"ldr_{i:04d}.png"
+                        )
+
+                    if depth_np is not None and getattr(depth_np, "shape", None) is not None and depth_np.size != 0:
+                        depth_np = np.asarray(depth_np, dtype=np.float32)
+                        np.save(out_dir / "raw_camera" / f"depth_{i:04d}.npy", depth_np)
+                        finite = np.isfinite(depth_np)
+                        if finite.any():
+                            d = depth_np[finite]
+                            d_min = float(np.percentile(d, 1.0))
+                            d_max = float(np.percentile(d, 99.0))
+                            if d_max <= d_min + 1e-6:
+                                d_max = d_min + 1.0
+                            depth_vis = np.zeros_like(depth_np, dtype=np.uint8)
+                            depth_norm = (np.clip(depth_np, d_min, d_max) - d_min) / (d_max - d_min)
+                            depth_vis[finite] = (255.0 * (1.0 - depth_norm[finite])).astype(np.uint8)
+                            Image.fromarray(depth_vis, mode="L").save(out_dir / "raw_camera" / f"depth_{i:04d}.png")
+                except Exception:
+                    pass
             uw_cam.render()
             if sonar is not None:
                 sonar.make_sonar_data()
