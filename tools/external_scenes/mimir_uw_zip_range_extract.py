@@ -30,6 +30,8 @@ from pathlib import Path
 EOCD_SIG = b"PK\x05\x06"
 CD_SIG = b"PK\x01\x02"
 LFH_SIG = b"PK\x03\x04"
+ZIP64_LOC_SIG = b"PK\x06\x07"
+ZIP64_EOCD_SIG = b"PK\x06\x06"
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,19 @@ def _parse_eocd(tail: bytes, eocd_offset_in_tail: int) -> tuple[int, int]:
     cd_size = struct.unpack_from("<I", tail, base + 12)[0]
     cd_offset = struct.unpack_from("<I", tail, base + 16)[0]
     return cd_size, cd_offset
+
+
+def _parse_zip64_eocd(url: str, tail: bytes) -> tuple[int, int]:
+    loc_idx = tail.rfind(ZIP64_LOC_SIG)
+    if loc_idx < 0:
+        raise RuntimeError("zip64 locator not found in tail; increase tail-bytes")
+    zip64_eocd_offset = struct.unpack_from("<Q", tail, loc_idx + 8)[0]
+    hdr = _http_range(url, zip64_eocd_offset, zip64_eocd_offset + 56 - 1)
+    if hdr[:4] != ZIP64_EOCD_SIG:
+        raise RuntimeError("zip64 EOCD signature not found at locator offset")
+    cd_size = struct.unpack_from("<Q", hdr, 40)[0]
+    cd_offset = struct.unpack_from("<Q", hdr, 48)[0]
+    return int(cd_size), int(cd_offset)
 
 
 def _parse_central_directory(cd: bytes) -> list[CentralDirEntry]:
@@ -216,6 +231,8 @@ def main() -> int:
     tail = _http_range(url, tail_start, size - 1)
     eocd_idx = _find_eocd(tail)
     cd_size, cd_offset = _parse_eocd(tail, eocd_idx)
+    if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF:
+        cd_size, cd_offset = _parse_zip64_eocd(url, tail)
     print(
         f"[mimir-uw-zip-extract] GET central_directory bytes={cd_offset}-{cd_offset + cd_size - 1} ({cd_size} bytes) ...",
         file=sys.stderr,

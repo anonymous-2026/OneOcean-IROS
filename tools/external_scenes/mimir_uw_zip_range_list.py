@@ -24,6 +24,8 @@ from typing import Iterable
 
 EOCD_SIG = b"PK\x05\x06"  # end of central directory
 CD_SIG = b"PK\x01\x02"  # central directory file header
+ZIP64_LOC_SIG = b"PK\x06\x07"  # zip64 end of central directory locator
+ZIP64_EOCD_SIG = b"PK\x06\x06"  # zip64 end of central directory record
 
 
 @dataclass(frozen=True)
@@ -123,6 +125,19 @@ def _parse_eocd(tail: bytes, eocd_offset_in_tail: int) -> tuple[int, int]:
     return cd_size, cd_offset
 
 
+def _parse_zip64_eocd(url: str, tail: bytes) -> tuple[int, int]:
+    loc_idx = tail.rfind(ZIP64_LOC_SIG)
+    if loc_idx < 0:
+        raise RuntimeError("zip64 locator not found in tail; increase tail size")
+    zip64_eocd_offset = struct.unpack_from("<Q", tail, loc_idx + 8)[0]
+    hdr = _http_range(url, zip64_eocd_offset, zip64_eocd_offset + 56 - 1)
+    if hdr[:4] != ZIP64_EOCD_SIG:
+        raise RuntimeError("zip64 EOCD signature not found at locator offset")
+    cd_size = struct.unpack_from("<Q", hdr, 40)[0]
+    cd_offset = struct.unpack_from("<Q", hdr, 48)[0]
+    return int(cd_size), int(cd_offset)
+
+
 def _parse_central_directory(cd: bytes) -> list[ZipEntry]:
     entries: list[ZipEntry] = []
     i = 0
@@ -190,6 +205,8 @@ def main() -> int:
     tail = _http_range(url, tail_start, size - 1)
     eocd_idx = _find_eocd(tail)
     cd_size, cd_offset = _parse_eocd(tail, eocd_idx)
+    if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF:
+        cd_size, cd_offset = _parse_zip64_eocd(url, tail)
 
     if cd_size > 0:
         print(
