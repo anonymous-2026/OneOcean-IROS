@@ -64,3 +64,7 @@ Streams:
 Validation:
 - `python3 -c "from oneocean_sim_headless.validators import validate_run_dir; print(validate_run_dir('...'))"`
 
+Replay + summarize:
+```bash
+python3 -m oneocean_sim_headless.cli.replay --run-dir runs/headless/<run_id>
+```
