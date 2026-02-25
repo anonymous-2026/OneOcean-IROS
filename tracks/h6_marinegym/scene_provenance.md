@@ -20,7 +20,12 @@ Local compatibility patches (this machine):
     - `--/validate/iommu/enabled=false`
     - `--/validate/wait=0`
 
-Fallback “Isaac Sim–native” scene/tasks (current deliverable):
+Official H6 runner (MarineGym robot/dynamics + our data):
+- Files:
+  - `tracks/h6_marinegym/run_marinegym_plume_tasks.py`
+  - `tracks/h6_marinegym/patch_marinegym_for_isaacsim51.py`
+
+Fallback “Isaac Sim–native” scene/tasks (debug-only):
 - Files:
   - `tracks/h6_marinegym/run_fallback_multiagent_scene.py`
   - `tracks/h6_marinegym/run_fallback_plume_tasks.py`

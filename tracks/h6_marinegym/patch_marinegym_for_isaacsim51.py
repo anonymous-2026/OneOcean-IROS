@@ -5,44 +5,54 @@ from pathlib import Path
 
 
 def _replace_in_file(path: Path, replacements: list[tuple[str, str]]) -> None:
+    if not path.exists():
+        return
     text = path.read_text(encoding="utf-8")
     new = text
     for a, b in replacements:
-        if a not in new:
-            continue
-        new = new.replace(a, b)
+        if a in new:
+            new = new.replace(a, b)
+    if new != text:
+        path.write_text(new, encoding="utf-8")
+
+
+def _rewrite_block_between(path: Path, *, start_pat: str, end_pat: str, new_block: str) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    start = text.find(start_pat)
+    if start == -1:
+        return
+    end = text.find(end_pat, start)
+    if end == -1:
+        return
+    new = text[:start] + new_block + text[end:]
     if new != text:
         path.write_text(new, encoding="utf-8")
 
 
 def _rewrite_debug_draw_block(path: Path) -> None:
     """
-    Make DebugDraw optional and idempotent.
-
-    MarineGym upstream imports `omni.isaac.debug_draw`, which may be missing in Isaac Sim 5.1.
-    This function overwrites the entire DebugDraw section (import + class) with a safe version.
+    Isaac Sim 5.1 may not ship omni.isaac.debug_draw.
+    Overwrite the debug draw import+class with an optional safe version (idempotent).
     """
 
+    if not path.exists():
+        return
     text = path.read_text(encoding="utf-8")
 
-    # Prefer locating any reference to omni.isaac.debug_draw (handles previously-corrupted states).
     idx_mod = text.find("omni.isaac.debug_draw")
     start = -1
     if idx_mod != -1:
-        line_start = text.rfind("\n", 0, idx_mod) + 1
-        start = line_start
-        # If there are preceding `try:` lines (possibly multiple due to prior edits), include them.
+        start = text.rfind("\n", 0, idx_mod) + 1
         while True:
             prev_start = text.rfind("\n", 0, start - 1) + 1
-            prev_line = text[prev_start:start].strip()
-            if prev_line == "try:":
+            if text[prev_start:start].strip() == "try:":
                 start = prev_start
                 continue
             break
     else:
         start = text.find("from omni.isaac.debug_draw import _debug_draw")
-        if start == -1:
-            start = text.find("try:\n    from omni.isaac.debug_draw import _debug_draw")
         if start == -1:
             start = text.find("class DebugDraw:")
     if start == -1:
@@ -108,16 +118,138 @@ def _rewrite_debug_draw_block(path: Path) -> None:
         path.write_text(new, encoding="utf-8")
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Patch MarineGym sources for Isaac Sim 5.1 + TorchRL>=0.11.")
-    parser.add_argument("--src", type=Path, required=True, help="Path to MarineGym-main (cached copy under runs/_cache).")
-    args = parser.parse_args()
+def _patch_underwatervehicle_make_functional(path: Path) -> None:
+    """
+    tensordict>=0.11 removed make_functional; also functorch vmap pathway is brittle.
+    Replace rotor functionalization + vmap step with an explicit per-env rotor TensorDict state and vectorized update.
+    """
 
-    src: Path = args.src.expanduser().resolve()
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    if "tensordict>=0.11 removed make_functional" in text:
+        return
+
+    start_pat = "        rotor_params = make_functional(self.rotors)\n"
+    end_pat = "        self.thrusts = torch.zeros"
+    if start_pat in text and end_pat in text:
+        new_block = (
+            "        # tensordict>=0.11 removed make_functional; keep an explicit per-env rotor state TensorDict instead.\n"
+            "        self.TIME_CONSTANTS_0 = torch.tensor(\n"
+            "            self.params[\"rotor_configuration\"][\"time_constants\"], device=self.device\n"
+            "        )\n"
+            "        self.FORCE_CONSTANTS_0 = torch.tensor(\n"
+            "            self.params[\"rotor_configuration\"][\"force_constants\"], device=self.device\n"
+            "        )\n"
+            "        self.rotor_params = TensorDict(\n"
+            "            {\n"
+            "                \"force_constants\": self.FORCE_CONSTANTS_0.expand(*self.shape, self.num_rotors).clone(),\n"
+            "                \"time_constants\": self.TIME_CONSTANTS_0.expand(*self.shape, self.num_rotors).clone(),\n"
+            "                \"tau_up\": self.rotors.tau_up.detach().clone().expand(*self.shape, self.num_rotors),\n"
+            "                \"tau_down\": self.rotors.tau_down.detach().clone().expand(*self.shape, self.num_rotors),\n"
+            "                \"throttle\": torch.zeros(*self.shape, self.num_rotors, device=self.device),\n"
+            "                \"directions\": self.rotors.directions.detach().clone().expand(*self.shape, self.num_rotors),\n"
+            "                \"rpm\": torch.zeros(*self.shape, self.num_rotors, device=self.device),\n"
+            "            },\n"
+            "            batch_size=self.shape,\n"
+            "            device=self.device,\n"
+            "        )\n"
+            "\n"
+            "        self.tau_up = self.rotor_params[\"tau_up\"]\n"
+            "        self.tau_down = self.rotor_params[\"tau_down\"]\n"
+            "        self.throttle = self.rotor_params[\"throttle\"]\n"
+            "        self.directions = self.rotor_params[\"directions\"]\n"
+            "\n"
+        )
+        _rewrite_block_between(path, start_pat=start_pat, end_pat=end_pat, new_block=new_block)
+        text = path.read_text(encoding="utf-8")
+
+    vmap_pat = (
+        "        thrusts, moments = vmap(vmap(self.rotors, randomness=\"different\"), randomness=\"same\")(\n"
+        "            rotor_cmds, self.rotor_params\n"
+        "        )\n"
+    )
+    if vmap_pat in text:
+        vec = (
+            "        # Vectorized T200 step using per-env rotor_params.\n"
+            "        rotor_cmds = torch.clamp(rotor_cmds, -1, 1)\n"
+            "        throttle = self.rotor_params[\"throttle\"]\n"
+            "        tau = torch.where(\n"
+            "            rotor_cmds > throttle, self.rotor_params[\"tau_up\"], self.rotor_params[\"tau_down\"]\n"
+            "        )\n"
+            "        tau = torch.clamp(tau, 0, 1)\n"
+            "        throttle.add_(tau * (rotor_cmds - throttle))\n"
+            "\n"
+            "        target_rpm = torch.where(\n"
+            "            throttle > 0.075,\n"
+            "            3.6599e03 * throttle + 3.4521e02,\n"
+            "            torch.where(\n"
+            "                throttle < -0.075,\n"
+            "                3.4944e03 * throttle - 4.3350e02,\n"
+            "                torch.zeros_like(throttle),\n"
+            "            ),\n"
+            "        )\n"
+            "        alpha = torch.exp(-self.dt / self.rotor_params[\"time_constants\"])\n"
+            "        rpm = self.rotor_params[\"rpm\"]\n"
+            "        rpm.copy_(torch.clamp(alpha * rpm + (1 - alpha) * target_rpm, -3900.0, 3900.0))\n"
+            "\n"
+            "        fc = self.rotor_params[\"force_constants\"]\n"
+            "        thrusts = fc / 4.4e-7 * 9.81 * torch.where(\n"
+            "            rpm > 0,\n"
+            "            4.7368e-07 * torch.square(rpm) - 1.9275e-04 * rpm + 8.4452e-02,\n"
+            "            -3.8442e-07 * torch.square(rpm) - 1.6186e-04 * rpm - 3.9139e-02,\n"
+            "        )\n"
+            "        moments = thrusts * (-self.directions) * 0.0\n"
+        )
+        text = text.replace(vmap_pat, vec)
+
+    path.write_text(text, encoding="utf-8")
+
+
+def _patch_underwatervehicle_multiagent_hydro(path: Path) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    if "H6_PATCH_MULTIAGENT_HYDRO" in text:
+        return
+
+    start_pat = "    def apply_hydrodynamic_forces(self, flow_vels_w) -> TensorDict:\n"
+    end_pat = "\n    def calculate_acc"
+    new_block = (
+        "    def apply_hydrodynamic_forces(self, flow_vels_w) -> TensorDict:\n"
+        "\n"
+        "        # H6_PATCH_MULTIAGENT_HYDRO: support shape=(num_envs, num_robots) (multi-agent)\n"
+        "        body_vels = self.vel_b.clone()\n"
+        "        body_rpy = quaternion_to_euler(self.rot)\n"
+        "        flow_vels_b = torch.cat([\n"
+        "            quat_rotate_inverse(self.rot, flow_vels_w[..., :3]),\n"
+        "            quat_rotate_inverse(self.rot, flow_vels_w[..., 3:])\n"
+        "        ], dim=-1)\n"
+        "        body_vels -= flow_vels_b\n"
+        "        body_vels[..., [1,2,4,5]] *= -1\n"
+        "        body_rpy[..., [1,2]] *= -1\n"
+        "\n"
+        "        body_acc = self.calculate_acc(body_vels)\n"
+        "        damping = self.calculate_damping(body_vels)\n"
+        "        added_mass = self.calculate_added_mass(body_acc)\n"
+        "        coriolis = self.calculate_corilis(body_vels)\n"
+        "        buoyancy = self.calculate_buoyancy(body_rpy)\n"
+        "\n"
+        "        hydro = - (added_mass + coriolis + damping)\n"
+        "        hydro[..., [1,2,4,5]] *= -1\n"
+        "        buoyancy[..., [1,2,4,5]] *= -1\n"
+        "\n"
+        "        return hydro[..., 0:3] + buoyancy[..., 0:3], hydro[..., 3:6] + buoyancy[..., 3:6]\n"
+        "\n"
+    )
+    _rewrite_block_between(path, start_pat=start_pat, end_pat=end_pat, new_block=new_block)
+
+
+def patch_marinegym(src: Path) -> None:
+    src = src.expanduser().resolve()
     if not src.exists():
-        raise SystemExit(f"Missing src: {src}")
+        raise FileNotFoundError(src)
 
-    # 1) Make envs import robust (Track/Landing may not exist in this snapshot).
     _replace_in_file(
         src / "marinegym/envs/__init__.py",
         [
@@ -128,7 +260,6 @@ def main() -> int:
         ],
     )
 
-    # 2) TorchRL spec API compatibility (CompositeSpec/DiscreteTensorSpec moved in torchrl>=0.11).
     _replace_in_file(
         src / "marinegym/envs/isaac_env.py",
         [
@@ -137,45 +268,9 @@ def main() -> int:
                 "from torchrl.data.tensor_specs import Composite as CompositeSpec\n"
                 "from torchrl.data.tensor_specs import TensorSpec, Unbounded\n",
             ),
-            (
-                '        self.done_spec = CompositeSpec({\n'
-                '            "done": DiscreteTensorSpec(2, (1,), dtype=torch.bool),\n'
-                '            "terminated": DiscreteTensorSpec(2, (1,), dtype=torch.bool),\n'
-                '            "truncated": DiscreteTensorSpec(2, (1,), dtype=torch.bool),\n'
-                "        }).expand(self.num_envs).to(self.device)\n",
-                '        self.done_spec = CompositeSpec({\n'
-                '            "done": Unbounded((1,), dtype=torch.bool),\n'
-                '            "terminated": Unbounded((1,), dtype=torch.bool),\n'
-                '            "truncated": Unbounded((1,), dtype=torch.bool),\n'
-                "        }).expand(self.num_envs).to(self.device)\n",
-            ),
         ],
     )
-
-    # 2b) Isaac Sim 5.1: omni.isaac.debug_draw may be missing. Make DebugDraw optional (idempotent).
     _rewrite_debug_draw_block(src / "marinegym/envs/isaac_env.py")
-
-    _replace_in_file(
-        src / "marinegym/envs/single/hover.py",
-        [
-            (
-                "from torchrl.data import UnboundedContinuousTensorSpec, CompositeSpec, DiscreteTensorSpec\n",
-                "from torchrl.data.tensor_specs import Composite as CompositeSpec\n"
-                "from torchrl.data.tensor_specs import UnboundedContinuous as UnboundedContinuousTensorSpec\n",
-            )
-        ],
-    )
-
-    _replace_in_file(
-        src / "marinegym/utils/torchrl/env.py",
-        [
-            (
-                "from torchrl.data import TensorSpec, CompositeSpec\n",
-                "from torchrl.data.tensor_specs import TensorSpec\n"
-                "from torchrl.data.tensor_specs import Composite as CompositeSpec\n",
-            )
-        ],
-    )
 
     _replace_in_file(
         src / "marinegym/robots/drone/underwaterVehicle.py",
@@ -186,67 +281,21 @@ def main() -> int:
                 "from torchrl.data.tensor_specs import Composite as CompositeSpec\n"
                 "from torchrl.data.tensor_specs import UnboundedContinuous as UnboundedContinuousTensorSpec\n",
             ),
-            (
-                "        self.action_spec = BoundedTensorSpec(-1, 1, self.num_rotors, device=self.device)\n",
-                "        self.action_spec = BoundedTensorSpec(-1, 1, shape=(self.num_rotors,), device=self.device)\n",
-            ),
         ],
     )
+    _patch_underwatervehicle_make_functional(src / "marinegym/robots/drone/underwaterVehicle.py")
+    _patch_underwatervehicle_multiagent_hydro(src / "marinegym/robots/drone/underwaterVehicle.py")
 
-    # 3) Python 3.11 dataclass strictness: mutable defaults must use default_factory.
-    _replace_in_file(
-        src / "marinegym/robots/config.py",
-        [
-            ("from dataclasses import dataclass\n", "from dataclasses import dataclass, field\n"),
-            (
-                "class RobotCfg:\n"
-                "    rigid_props: RigidBodyPropertiesCfg = RigidBodyPropertiesCfg()\n"
-                "    articulation_props: ArticulationRootPropertiesCfg = ArticulationRootPropertiesCfg()\n",
-                "class RobotCfg:\n"
-                "    rigid_props: RigidBodyPropertiesCfg = field(default_factory=RigidBodyPropertiesCfg)\n"
-                "    articulation_props: ArticulationRootPropertiesCfg = field(default_factory=ArticulationRootPropertiesCfg)\n",
-            ),
-        ],
-    )
 
-    # 4) Isaac Sim 5.1: SimulationContext private attributes changed; avoid hard dependency on _physics_sim_view.
-    _replace_in_file(
-        src / "marinegym/robots/robot.py",
-        [
-            (
-                "        if SimulationContext.instance()._physics_sim_view is not None:\n",
-                "        if getattr(SimulationContext.instance(), \"_physics_sim_view\", None) is not None:\n",
-            )
-            ,
-            (
-                "        if SimulationContext.instance()._physics_sim_view is None:\n",
-                "        if getattr(SimulationContext.instance(), \"_physics_sim_view\", \"missing\") is None:\n",
-            ),
-        ],
-    )
-
-    # 5) Isaac Sim 5.1: view wrappers need to tolerate missing SimulationContext._physics_sim_view and new get_world_poses API.
-    _replace_in_file(
-        src / "marinegym/views/__init__.py",
-        [
-            (
-                "        if SimulationContext.instance()._physics_sim_view is None:\n",
-                "        if getattr(SimulationContext.instance(), \"_physics_sim_view\", \"missing\") is None:\n",
-            ),
-            (
-                "    def get_world_poses(\n"
-                "        self, env_indices: Optional[torch.Tensor] = None, clone: bool = True\n"
-                "    ) -> Tuple[torch.Tensor, torch.Tensor]:\n",
-                "    def get_world_poses(\n"
-                "        self, env_indices: Optional[torch.Tensor] = None, clone: bool = True, usd: bool = False\n"
-                "    ) -> Tuple[torch.Tensor, torch.Tensor]:\n",
-            ),
-        ],
-    )
-
-    print(f"[patch] patched MarineGym at: {src}")
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Patch MarineGym cached sources for Isaac Sim 5.1 / Py3.11.")
+    parser.add_argument("--src", type=Path, required=True)
+    args = parser.parse_args()
+    patch_marinegym(args.src)
+    print(f"[patch] patched MarineGym at: {Path(args.src).expanduser().resolve()}")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

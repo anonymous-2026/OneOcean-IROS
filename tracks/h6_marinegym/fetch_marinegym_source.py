@@ -5,6 +5,7 @@ import os
 import ssl
 import time
 import zipfile
+import importlib.util
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -148,9 +149,21 @@ def main() -> int:
     tmp_extract.rmdir()
 
     print(f"[fetch] extracted: {out_dir}")
+
+    # Patch the cached sources for Isaac Sim 5.1 + multi-agent use (idempotent).
+    try:
+        patcher_path = Path(__file__).with_name("patch_marinegym_for_isaacsim51.py")
+        spec = importlib.util.spec_from_file_location("_mg_patch", patcher_path)
+        if spec is not None and spec.loader is not None:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.patch_marinegym(out_dir)
+            print(f"[fetch] patched: {out_dir}")
+    except Exception as e:
+        print(f"[fetch] patch_warning: {type(e).__name__}: {e}")
+
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

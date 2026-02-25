@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import traceback
+import importlib.util
 from pathlib import Path
 
 from omegaconf import OmegaConf
@@ -27,6 +28,15 @@ def main() -> int:
             f"Missing MarineGym source at {marinegym_src}. "
             "Run: python3 tracks/h6_marinegym/fetch_marinegym_source.py"
         )
+
+    patcher_path = Path(__file__).with_name("patch_marinegym_for_isaacsim51.py")
+    spec = importlib.util.spec_from_file_location("_mg_patch", patcher_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to import patcher: {patcher_path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.patch_marinegym(marinegym_src)
+
     sys.path.insert(0, str(marinegym_src))
 
     # Isaac Sim requirement: instantiate SimulationApp before importing other omni.* modules.
@@ -169,4 +179,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
