@@ -13,12 +13,14 @@ from oneocean_sim.data import CurrentSampler
 from .software_renderer import (
     CameraConfig,
     CameraPose,
+    RenderMesh,
     RenderSphere,
     RenderVehicle,
     render_scene,
     yaw_from_velocity,
 )
 from .world_3d import TerrainMesh, TerrainSpec, build_obstacles, build_terrain_mesh, xy_to_latlon
+from .external_scenes.uuvsim_herkules import ensure_uuvsim_herkules_shipwreck
 
 
 _GLOBAL_ENGINE: Optional[sapien.Engine] = None
@@ -66,6 +68,7 @@ class S3WorldConfig3D:
 @dataclass
 class WorldArtifacts:
     terrain_obj: Optional[str]
+    external_scene: Optional[dict[str, object]] = None
 
 
 class OceanWorldS3_3D:
@@ -81,6 +84,8 @@ class OceanWorldS3_3D:
         agents: int,
         config: S3WorldConfig3D,
         output_dir: Path,
+        external_scene: Optional[str] = None,
+        external_scene_max_faces: int = 4000,
     ) -> None:
         if agents < 1:
             raise ValueError("agents must be >= 1")
@@ -131,12 +136,46 @@ class OceanWorldS3_3D:
         )
         self.terrain_face_normals = _compute_face_normals(self.terrain.vertices_m, self.terrain.faces)
 
-        self.artifacts = WorldArtifacts(terrain_obj=str(terrain_obj_path))
+        self.artifacts = WorldArtifacts(terrain_obj=str(terrain_obj_path), external_scene=None)
 
         # physics collision terrain
         builder = self.scene.create_actor_builder()
         builder.add_nonconvex_collision_from_file(str(terrain_obj_path))
         self.terrain_actor = builder.build_static(name="seafloor")
+
+        # --- optional external scene mesh (shipwreck/structure) ---
+        self.external_meshes: list[RenderMesh] = []
+        self.external_actors: list[sapien.Actor] = []
+        self._external_scene_id = str(external_scene) if external_scene else None
+        self._external_scene_asset_obj: Optional[str] = None
+        if external_scene:
+            if external_scene != "uuvsim_herkules_shipwreck":
+                raise ValueError(f"Unsupported external_scene: {external_scene}")
+            assets = ensure_uuvsim_herkules_shipwreck(
+                cache_root=Path("runs") / "_cache",
+                max_faces=int(external_scene_max_faces),
+            )
+            self._external_scene_asset_obj = str(assets.shipwreck_obj)
+            self.artifacts.external_scene = {
+                "scene_id": str(assets.scene_id),
+                "shipwreck_obj": str(assets.shipwreck_obj),
+                "sources_md": str(assets.sources_md),
+                "max_faces": int(external_scene_max_faces),
+            }
+            self.external_meshes = [
+                RenderMesh(
+                    mesh_path=str(assets.shipwreck_obj),
+                    position_m=(0.0, 0.0, 0.0),
+                    yaw_rad=0.0,
+                    scale_m=1.0,
+                    color_bgr=(65, 90, 115),
+                )
+            ]
+            b = self.scene.create_actor_builder()
+            b.add_nonconvex_collision_from_file(str(assets.shipwreck_obj))
+            actor = b.build_static(name="shipwreck")
+            actor.set_pose(sapien.Pose([0.0, 0.0, float(self.config.terrain_z_min_m + 4.0)]))
+            self.external_actors = [actor]
 
         # --- task-specific fields ---
         self.goal_xy_m: tuple[float, float] = (30.0, 0.0)
@@ -274,6 +313,23 @@ class OceanWorldS3_3D:
 
         self._time_sec = 0.0
         self._reset_particles()
+
+        # Reposition the external scene mesh relative to the goal so it appears in the rollout.
+        if self.external_meshes and self.external_actors:
+            gx, gy = float(self.goal_xy_m[0]), float(self.goal_xy_m[1])
+            px = 0.55 * gx
+            py = 0.55 * gy
+            floor_z = float(self.terrain.height_at_xy(px, py))
+            pz = float(floor_z + 0.4)
+            yaw = float(self.rng.uniform(-0.75, 0.75))
+            self.external_meshes[0] = RenderMesh(
+                mesh_path=self.external_meshes[0].mesh_path,
+                position_m=(float(px), float(py), float(pz)),
+                yaw_rad=yaw,
+                scale_m=float(self.external_meshes[0].scale_m),
+                color_bgr=self.external_meshes[0].color_bgr,
+            )
+            self.external_actors[0].set_pose(sapien.Pose([float(px), float(py), float(pz)], _yaw_to_quat(yaw)))
 
     def _sample_current_xy(self, x_m: float, y_m: float) -> tuple[float, float]:
         lat, lon = xy_to_latlon(
@@ -448,6 +504,7 @@ class OceanWorldS3_3D:
             terrain_vertices_m=self.terrain.vertices_m,
             terrain_faces=self.terrain.faces,
             terrain_face_normals=self.terrain_face_normals,
+            meshes=self.external_meshes,
             obstacles=self.obstacles,
             vehicles=vehicles,
             camera=camera,
@@ -479,6 +536,7 @@ class OceanWorldS3_3D:
                 "elevation_max": float(self.terrain.elevation_max),
                 "obj_path": self.artifacts.terrain_obj,
             },
+            "external_scene": self.artifacts.external_scene,
             "current_scale": float(self.config.current_scale),
             "config": asdict(self.config),
         }

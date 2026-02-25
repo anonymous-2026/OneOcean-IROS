@@ -26,6 +26,7 @@ Single-agent task (reef navigation with terrain-following + obstacles):
   -m oneocean_sim_s3.cli.run_navigation_task_s3 \
   --task reef_navigation \
   --variant scene \
+  --external-scene uuvsim_herkules_shipwreck \
   --episodes 2 \
   --seed 120
 ```
@@ -37,6 +38,7 @@ Multi-agent task (formation navigation; 2 vehicles):
   -m oneocean_sim_s3.cli.run_navigation_task_s3 \
   --task formation_navigation \
   --variant scene \
+  --external-scene uuvsim_herkules_shipwreck \
   --episodes 2 \
   --seed 220
 ```
@@ -57,8 +59,13 @@ This runs both tasks with tide on/off and generates compact media:
   --variants scene \
   --tasks reef_navigation,formation_navigation \
   --tide-modes on,off \
+  --external-scene uuvsim_herkules_shipwreck \
   --episodes 2
 ```
+
+Notes:
+- External scene assets are downloaded and converted into a local cache under `runs/_cache/external_scenes/`.
+- Cache contents are **not** committed to Git (see repo `.gitignore`).
 
 Suite outputs:
 - `runs/s3_3d_underwater_hero_v1/suite_manifest.json`
