@@ -33,7 +33,20 @@ Runs 2 tasks and writes per-task MP4 + metrics + `media_manifest.json`:
 - plume localization (multi-agent)
 - plume containment+cleanup (multi-agent; supports N=2–10; demo uses N=10)
 
+Pollution field options:
+- `--pollution-model ocpnet_3d` (default): **OCPNet PollutionModel3D** advection-diffusion field driven by `combined_environment.nc` currents.
+- `--pollution-model gaussian`: lightweight fallback (for debugging only; not valid for “official” must-use-data pollution runs).
+
 ```bash
 cd oneocean(iros-2026-code)
 .venv_h2_holoocean_mrgh/bin/python tracks/h2_holoocean/run_plume_tasks.py --scenario PierHarbor-HoveringCamera --num-agents 10 --seed 0
+```
+
+Optional tuning knobs:
+```bash
+cd oneocean(iros-2026-code)
+.venv_h2_holoocean_mrgh/bin/python tracks/h2_holoocean/run_plume_tasks.py \\
+  --scenario PierHarbor-HoveringCamera --num-agents 10 --seed 0 \\
+  --pollution-model ocpnet_3d --pollution-domain-xy-m 160 \\
+  --pollution-warmup-s 20 --pollution-update-period-s 2
 ```

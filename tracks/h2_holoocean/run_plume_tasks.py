@@ -9,6 +9,11 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    # HoloOcean may change CWD at runtime; make sure local packages remain importable.
+    sys.path.insert(0, str(_REPO_ROOT))
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -37,30 +42,41 @@ class RunnerCfg:
     current_scale: float = 1.0  # multiply dataset uo/vo [m/s]
     current_force_scale: float = 8.0  # convert m/s current -> planar force bias
 
+    # pollution field (must use our diffusion model for official runs)
+    pollution_model: str = "ocpnet_3d"  # "gaussian" | "ocpnet_3d"
+    pollution_domain_xy_m: float = 160.0
+    pollution_depth_range_m: tuple[float, float] = (3.0, 15.0)  # depth (positive down)
+    pollution_warmup_s: float = 40.0
+    pollution_update_period_s: float = 2.0
+    pollution_min_source_dist_m: float = 10.0
+    pollution_emission_rate: float = 0.08
+    pollution_sink_radius_m: float = 10.0
+    pollution_sink_strength_per_s: float = 0.35
+
     # task 1: plume localization (multi-agent)
-    localize_seconds: float = 12.0
+    localize_seconds: float = 25.0
     plume_sigma_m: float = 5.0
-    success_radius_m: float = 5.0
-    grad_eps_m: float = 1.25
-    grad_gain: float = 4.0
-    explore_speed_mps: float = 1.0
+    success_radius_m: float = 15.0
+    grad_eps_m: float = 6.0
+    grad_gain: float = 10.0
+    explore_speed_mps: float = 2.0
 
     # task 2: plume containment+cleanup (multi-agent)
-    contain_seconds: float = 10.0
+    contain_seconds: float = 20.0
     contain_radius_m: float = 10.0
-    contain_tolerance_m: float = 2.0
+    contain_tolerance_m: float = 5.0
     cleanup_fraction: float = 0.35  # fraction of agents assigned to cleanup role
     cleanup_radius_m: float = 4.0
     cleanup_mass_decay_per_s: float = 1.15
-    cleanup_success_mass_frac: float = 0.35
+    cleanup_success_mass_frac: float = 0.97
     leakage_success_threshold: float = 0.15
 
     # controller gains (rough, but stable)
-    kp_xy: float = 10.0
-    kd_xy: float = 4.0
+    kp_xy: float = 6.0
+    kd_xy: float = 3.0
     kp_z: float = 10.0
     kd_z: float = 4.0
-    max_planar_force: float = 30.0
+    max_planar_force: float = 18.0
     max_vertical_force: float = 25.0
 
     # camera follow
@@ -112,6 +128,21 @@ class _Mp4Writer:
     def __exit__(self, exc_type, exc, tb):
         self.close()
 
+
+def _safe_tick(env, *, publish: bool, retries: int = 6, base_sleep_s: float = 0.15):
+    import time
+
+    last_exc: Exception | None = None
+    for i in range(int(retries)):
+        try:
+            return env.tick(publish=bool(publish))
+        except Exception as e:
+            last_exc = e
+            if e.__class__.__name__ != "BusyError":
+                raise
+            # HoloOcean can occasionally stall on semaphore acquire; retry a few times.
+            time.sleep(float(base_sleep_s) * float(i + 1))
+    raise RuntimeError(f"HoloOcean tick failed after {retries} retries (BusyError).") from last_exc
 
 def _pose_to_position(pose) -> list[float] | None:
     import numpy as np
@@ -190,6 +221,17 @@ class DatasetCurrent:
             "lon0": self.lon0,
             "u_median_mps": self.u_med,
             "v_median_mps": self.v_med,
+        }
+
+    def drift_payload(self, *, current_scale: float = 1.0, domain_size_m: tuple[float, float, float]) -> dict:
+        import numpy as np
+
+        return {
+            "latitude": np.asarray(self.latitude, dtype=np.float64),
+            "longitude": np.asarray(self.longitude, dtype=np.float64),
+            "u": np.asarray(self.u, dtype=np.float64) * float(current_scale),
+            "v": np.asarray(self.v, dtype=np.float64) * float(current_scale),
+            "domain_size_m": [float(domain_size_m[0]), float(domain_size_m[1]), float(domain_size_m[2])],
         }
 
     def velocity_xy_mps(self, x_m: float, y_m: float) -> tuple[float, float]:
@@ -280,7 +322,7 @@ def _apply_viewport_underwater_hack(env, cfg: RunnerCfg, first_agent_z: float) -
     z = float(first_agent_z)
     for _ in range(6):
         env.move_viewport([0.0, 0.0, z + 8.0], [0.0, -25.0, 45.0])
-        env.tick(publish=False)
+        _safe_tick(env, publish=False)
     try:
         env.set_render_quality(int(cfg.render_quality))
     except Exception:
@@ -299,6 +341,272 @@ def _gaussian_conc_xy(x: float, y: float, cx: float, cy: float, sigma: float) ->
     r2 = dx * dx + dy * dy
     s2 = max(1e-6, float(sigma) ** 2)
     return float(math.exp(-0.5 * r2 / s2))
+
+class PollutionRuntime:
+    def __init__(
+        self,
+        *,
+        field,
+        meta: dict,
+        origin_world_xy: tuple[float, float],
+        domain_xy_m: float,
+        depth_range_m: tuple[float, float],
+        update_period_s: float,
+    ) -> None:
+        self.field = field
+        self.meta = dict(meta)
+        self.origin_world_xy = (float(origin_world_xy[0]), float(origin_world_xy[1]))
+        self.domain_xy_m = float(domain_xy_m)
+        self.depth_range_m = (float(depth_range_m[0]), float(depth_range_m[1]))
+        self.update_period_s = float(update_period_s)
+        self._accum_s = 0.0
+        self._mass0: float | None = None
+
+    def world_to_local_xyz(self, world_xyz: list[float]) -> "np.ndarray":
+        import numpy as np
+
+        # HoloOcean: x/y are horizontal, z is vertical (negative down in our scenarios).
+        wx, wy, wz = (float(world_xyz[0]), float(world_xyz[1]), float(world_xyz[2]))
+        ox, oy = self.origin_world_xy
+        half = 0.5 * self.domain_xy_m
+        x = wx - ox + half
+        z = wy - oy + half
+        depth_abs = float(np.clip(-wz, self.depth_range_m[0], self.depth_range_m[1]))
+        # PollutionModel3D expects depth coordinate in [0, depth_range], so we store depth relative to depth_min.
+        depth = float(depth_abs - float(self.depth_range_m[0]))
+        x = float(np.clip(x, 0.0, self.domain_xy_m))
+        z = float(np.clip(z, 0.0, self.domain_xy_m))
+        return np.array([x, depth, z], dtype=np.float64)
+
+    def local_to_world_xyz(self, local_xyz: "np.ndarray") -> list[float]:
+        x, depth, z = [float(v) for v in list(local_xyz)]
+        ox, oy = self.origin_world_xy
+        half = 0.5 * self.domain_xy_m
+        wx = ox + (x - half)
+        wy = oy + (z - half)
+        depth_abs = float(self.depth_range_m[0]) + float(depth)
+        wz = -float(depth_abs)
+        return [wx, wy, wz]
+
+    def set_source_local_xyz(self, local_xyz: "np.ndarray") -> None:
+        import numpy as np
+
+        p = np.asarray(local_xyz, dtype=np.float64).reshape(3)
+        if hasattr(self.field, "source_xyz"):
+            self.field.source_xyz = p.copy()
+        if hasattr(self.field, "center_xyz"):
+            self.field.center_xyz = p.copy()
+
+        # OCPNet field requires updating the model's source list too.
+        if hasattr(self.field, "model") and hasattr(self.field, "pollutant"):
+            model = self.field.model
+            pollutant = self.field.pollutant
+            try:
+                model.source_sink.point_sources.clear()
+                model.source_sink.area_sources.clear()
+                model.source_sink.line_sources.clear()
+                model.add_source(
+                    type="point",
+                    pollutant=pollutant,
+                    position=(float(p[0]), float(p[2]), float(p[1])),  # (x, y:=sim z, z:=depth)
+                    emission_rate=float(getattr(self.field.cfg, "emission_rate", 0.02)),
+                    time_function=None,
+                )
+                model.current_time = 0.0
+            except Exception:
+                pass
+
+    def step(self, dt_s: float) -> None:
+        self.field.step(float(dt_s))
+
+    def step_if_due(self, dt_s: float) -> int:
+        self._accum_s += float(dt_s)
+        if self._accum_s + 1e-9 < float(self.update_period_s):
+            return 0
+        n = int(self._accum_s / max(1e-9, float(self.update_period_s)))
+        n = max(1, n)
+        for _ in range(n):
+            self.step(self.update_period_s)
+        self._accum_s -= float(n) * float(self.update_period_s)
+        return int(n)
+
+    def sample(self, world_xyz: list[float]) -> float:
+        return float(self.field.sample(self.world_to_local_xyz(world_xyz)))
+
+    def apply_sink(self, agent_world_xyz: list[list[float]]) -> None:
+        import numpy as np
+
+        if not agent_world_xyz:
+            return
+        local = np.stack([self.world_to_local_xyz(p) for p in agent_world_xyz], axis=0)
+        try:
+            self.field.apply_agent_sink(local)
+        except TypeError:
+            # Some fields take keyword args.
+            self.field.apply_agent_sink(local, dt_s=float(self.update_period_s))
+
+    def _ocpnet_concentration(self):
+        if not (hasattr(self.field, "model") and hasattr(self.field, "pollutant")):
+            return None
+        try:
+            return self.field.model.pollutant_fields[self.field.pollutant].get_concentration(self.field.pollutant)
+        except Exception:
+            return None
+
+    def mass_proxy(self) -> float | None:
+        import numpy as np
+
+        conc = self._ocpnet_concentration()
+        if conc is None:
+            if hasattr(self.field, "mass"):
+                return float(getattr(self.field, "mass"))
+            return None
+        return float(np.sum(conc))
+
+    def mass_fraction(self) -> float | None:
+        m = self.mass_proxy()
+        if m is None:
+            return None
+        if self._mass0 is None:
+            self._mass0 = float(max(1e-12, m))
+        return float(m / max(1e-12, float(self._mass0)))
+
+
+def _build_pollution_runtime(
+    *,
+    cfg: RunnerCfg,
+    current: DatasetCurrent,
+    out_dir: Path,
+    origin_world_xy: tuple[float, float],
+    spawn_world_z: float,
+    freeze_source_after_warmup: bool = False,
+) -> tuple[PollutionRuntime, dict]:
+    import numpy as np
+
+    from oneocean_sim_headless.pollution import build_pollution_field
+
+    domain = float(cfg.pollution_domain_xy_m)
+    depth_min, depth_max = cfg.pollution_depth_range_m
+    depth_range = float(depth_max) - float(depth_min)
+    if depth_range <= 0.0:
+        raise ValueError("pollution_depth_range_m must have depth_max > depth_min")
+    bounds_xyz = (
+        np.array([0.0, 0.0, 0.0], dtype=np.float64),
+        np.array([float(domain), float(depth_range), float(domain)], dtype=np.float64),
+    )
+    drift_payload = current.drift_payload(
+        current_scale=float(cfg.current_scale),
+        domain_size_m=(float(domain), float(domain), float(depth_max - depth_min)),
+    )
+    rng = np.random.default_rng(int(cfg.seed))
+    field, meta = build_pollution_field(
+        str(cfg.pollution_model),
+        rng=rng,
+        bounds_xyz=bounds_xyz,
+        output_dir=out_dir,
+        drift_payload=drift_payload,
+    )
+
+    # Optional: strengthen sink (used by containment/cleanup task).
+    if hasattr(field, "cfg"):
+        try:
+            from dataclasses import replace
+
+            if hasattr(field.cfg, "sink_radius_m") and hasattr(field.cfg, "sink_strength_per_s"):
+                updates = {
+                    "sink_radius_m": float(cfg.pollution_sink_radius_m),
+                    "sink_strength_per_s": float(cfg.pollution_sink_strength_per_s),
+                }
+                if hasattr(field.cfg, "emission_rate"):
+                    updates["emission_rate"] = float(cfg.pollution_emission_rate)
+                field.cfg = replace(field.cfg, **updates)
+        except Exception:
+            pass
+
+    runtime = PollutionRuntime(
+        field=field,
+        meta=meta,
+        origin_world_xy=origin_world_xy,
+        domain_xy_m=domain,
+        depth_range_m=(float(depth_min), float(depth_max)),
+        update_period_s=float(cfg.pollution_update_period_s),
+    )
+
+    # Choose a source away from the initial centroid (local center is (domain/2, *, domain/2)).
+    center_depth_abs = float(np.clip(-spawn_world_z, float(depth_min), float(depth_max)))
+    center_depth_rel = float(center_depth_abs - float(depth_min))
+    center = np.array([0.5 * domain, float(center_depth_rel), 0.5 * domain], dtype=np.float64)
+    min_d = float(cfg.pollution_min_source_dist_m)
+    for _ in range(200):
+        ang = float(rng.uniform(0.0, 2.0 * math.pi))
+        r_hi = min(0.45 * float(domain), float(min_d) + 15.0)
+        r = float(rng.uniform(float(min_d), float(max(min_d + 1e-6, r_hi))))
+        cand = center.copy()
+        cand[0] = float(np.clip(center[0] + r * math.cos(ang), 0.0, float(domain)))
+        cand[2] = float(np.clip(center[2] + r * math.sin(ang), 0.0, float(domain)))
+        runtime.set_source_local_xyz(cand)
+        break
+
+    # Warm up the diffusion field so the plume is visible and probe signals are non-degenerate.
+    warm = float(max(0.0, float(cfg.pollution_warmup_s)))
+    if warm > 0.0:
+        runtime.step(warm)
+
+    emission_after = None
+    if bool(freeze_source_after_warmup) and hasattr(runtime.field, "cfg"):
+        try:
+            from dataclasses import replace
+
+            if hasattr(runtime.field.cfg, "emission_rate"):
+                runtime.field.cfg = replace(runtime.field.cfg, emission_rate=0.0)
+                src_local = getattr(runtime.field, "source_xyz", None)
+                if src_local is not None:
+                    runtime.set_source_local_xyz(src_local)
+                emission_after = 0.0
+        except Exception:
+            emission_after = None
+
+    src_local = getattr(runtime.field, "source_xyz", None)
+    src_world = runtime.local_to_world_xyz(src_local) if src_local is not None else None
+
+    hotspot_local = None
+    hotspot_world = None
+    conc_stats = None
+    conc = runtime._ocpnet_concentration()
+    if conc is not None and hasattr(runtime.field, "model"):
+        try:
+            conc_stats = {
+                "min": float(np.nanmin(conc)),
+                "max": float(np.nanmax(conc)),
+                "mean": float(np.nanmean(conc)),
+            }
+            idx = np.unravel_index(int(np.nanargmax(conc)), conc.shape)  # (ix, iy, iz)
+            grid = runtime.field.model.grid
+            dx, dy, dz = grid.get_grid_spacing()
+            hotspot_local = np.array([float(idx[0]) * float(dx), float(idx[2]) * float(dz), float(idx[1]) * float(dy)], dtype=np.float64)
+            hotspot_world = runtime.local_to_world_xyz(hotspot_local)
+        except Exception:
+            hotspot_local = None
+            hotspot_world = None
+            conc_stats = None
+    meta2 = {
+        "pollution_model": str(cfg.pollution_model),
+        "pollution_domain_xy_m": float(domain),
+        "pollution_depth_range_m": [float(depth_min), float(depth_max)],
+        "pollution_update_period_s": float(cfg.pollution_update_period_s),
+        "pollution_warmup_s": float(cfg.pollution_warmup_s),
+        "origin_world_xy": [float(origin_world_xy[0]), float(origin_world_xy[1])],
+        "source_local_xyz": src_local.tolist() if src_local is not None else None,
+        "source_world_xyz": src_world,
+        "hotspot_local_xyz": None if hotspot_local is None else hotspot_local.tolist(),
+        "hotspot_world_xyz": hotspot_world,
+        "concentration_stats_post_warmup": conc_stats,
+        "emission_rate_after_warmup": emission_after,
+        "emission_rate_maybe": float(getattr(getattr(runtime.field, "cfg", object()), "emission_rate", float("nan"))),
+        "sink_radius_m": float(cfg.pollution_sink_radius_m),
+        "sink_strength_per_s": float(cfg.pollution_sink_strength_per_s),
+    }
+    return runtime, meta2
 
 
 def _centroid_xy(positions: list[list[float]]) -> tuple[float, float]:
@@ -342,7 +650,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     # Warm up until Pose+Viewport exist.
     st = None
     for _ in range(200):
-        st = env.tick(publish=False)
+        st = _safe_tick(env, publish=False)
         a0 = _state_agent(st, "auv0")
         if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None:
             break
@@ -355,8 +663,23 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     _apply_viewport_underwater_hack(env, cfg, first_agent_z=float(p0[2]))
 
     rng = np.random.default_rng(int(cfg.seed))
-    source = np.array([p0[0] + float(rng.uniform(-10.0, 10.0)), p0[1] + float(rng.uniform(-10.0, 10.0)), p0[2]], dtype=np.float32)
-    sigma = float(cfg.plume_sigma_m)
+    init_positions = []
+    for i in range(cfg.num_agents):
+        pos = _pose_to_position(_state_agent(st, f"auv{i}").get("PoseSensor"))
+        if pos is not None:
+            init_positions.append(pos)
+    origin_xy = _centroid_xy(init_positions or [p0])
+    pollution, pollution_meta = _build_pollution_runtime(
+        cfg=cfg,
+        current=current,
+        out_dir=task_dir,
+        origin_world_xy=origin_xy,
+        spawn_world_z=float(p0[2]),
+        freeze_source_after_warmup=False,
+    )
+    src_world = pollution_meta.get("source_world_xyz") or [p0[0], p0[1], p0[2]]
+    gt_world = pollution_meta.get("hotspot_world_xyz") or src_world
+    gt_kind = "hotspot" if pollution_meta.get("hotspot_world_xyz") is not None else "source"
 
     steps = int(round(cfg.localize_seconds * cfg.fps))
     dt = 1.0 / float(cfg.fps)
@@ -372,19 +695,29 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     energy = 0.0
     collisions = 0
 
-    headings = {f"auv{i}": float(rng.uniform(-math.pi, math.pi)) for i in range(cfg.num_agents)}
-    eps = float(cfg.grad_eps_m)
+    explore_steps = max(1, int(round(0.55 * float(steps))))
+    search_r = float(min(float(cfg.pollution_min_source_dist_m) + 8.0, 0.40 * float(cfg.pollution_domain_xy_m)))
+    origin_x, origin_y = float(origin_xy[0]), float(origin_xy[1])
+    waypoints = {
+        f"auv{i}": [origin_x + search_r * math.cos(2.0 * math.pi * (i / float(cfg.num_agents))), origin_y + search_r * math.sin(2.0 * math.pi * (i / float(cfg.num_agents))), float(src_world[2])]
+        for i in range(cfg.num_agents)
+    }
 
     with _Mp4Writer(mp4_path, fps=cfg.fps) as vw:
         for t in range(steps):
+            pollution.step_if_due(dt)
+
             # Camera follows auv0 to keep at least one vehicle visible.
-            p_cam = _pose_to_position(_state_agent(st, "auv0").get("PoseSensor")) or [p0[0], p0[1], p0[2]]
-            cam_target = [p_cam[0], p_cam[1], float(source[2])]
-            cam_pos = [p_cam[0] - cfg.cam_back_m, p_cam[1] - cfg.cam_back_m, float(source[2]) + cfg.cam_height_m]
-            env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
+            if t % 2 == 0:
+                p_cam = _pose_to_position(_state_agent(st, "auv0").get("PoseSensor")) or [p0[0], p0[1], p0[2]]
+                cam_target = [p_cam[0], p_cam[1], float(src_world[2])]
+                cam_pos = [p_cam[0] - cfg.cam_back_m, p_cam[1] - cfg.cam_back_m, float(src_world[2]) + cfg.cam_height_m]
+                env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
 
             if t % 5 == 0:
-                _debug_draw_point(env, cfg, xyz=[float(source[0]), float(source[1]), float(source[2])], color=(240, 60, 60))
+                _debug_draw_point(env, cfg, xyz=[float(src_world[0]), float(src_world[1]), float(src_world[2])], color=(240, 60, 60))
+                if gt_kind == "hotspot":
+                    _debug_draw_point(env, cfg, xyz=[float(gt_world[0]), float(gt_world[1]), float(gt_world[2])], color=(80, 240, 120))
 
             for i in range(cfg.num_agents):
                 name = f"auv{i}"
@@ -396,27 +729,21 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                     continue
 
                 x, y, _z = pos
-                conc = _gaussian_conc_xy(x, y, float(source[0]), float(source[1]), sigma)
+                conc = pollution.sample(pos)
                 if conc > best_conc:
                     best_conc = conc
                     best_xy = (x, y)
 
-                cxp = _gaussian_conc_xy(x + eps, y, float(source[0]), float(source[1]), sigma)
-                cyp = _gaussian_conc_xy(x, y + eps, float(source[0]), float(source[1]), sigma)
-                gx = (cxp - conc) / eps
-                gy = (cyp - conc) / eps
+                if t < explore_steps:
+                    target = waypoints[name]
+                else:
+                    target = [float(best_xy[0]), float(best_xy[1]), float(src_world[2])]
 
-                hd = headings[name]
-                if (abs(gx) + abs(gy)) < 1e-3 and (t % 10 == 0):
-                    headings[name] = float(rng.uniform(-math.pi, math.pi))
-                    hd = headings[name]
-
-                vx = cfg.grad_gain * gx + cfg.explore_speed_mps * math.cos(hd)
-                vy = cfg.grad_gain * gy + cfg.explore_speed_mps * math.sin(hd)
-
-                fx = cfg.kp_xy * (vx - float(vxyz[0])) - cfg.kd_xy * float(vxyz[0])
-                fy = cfg.kp_xy * (vy - float(vxyz[1])) - cfg.kd_xy * float(vxyz[1])
-                fz = cfg.kp_z * (0.0 - float(vxyz[2])) - cfg.kd_z * float(vxyz[2])
+                ex = float(target[0]) - float(x)
+                ey = float(target[1]) - float(y)
+                fx = cfg.kp_xy * ex - cfg.kd_xy * float(vxyz[0])
+                fy = cfg.kp_xy * ey - cfg.kd_xy * float(vxyz[1])
+                fz = cfg.kp_z * (float(target[2]) - float(pos[2])) - cfg.kd_z * float(vxyz[2])
 
                 u, v = current.velocity_xy_mps(x, y)
                 fx += cfg.current_force_scale * cfg.current_scale * u
@@ -426,7 +753,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                 energy += float(np.sum(act * act)) * dt
                 env.act(name, act)
 
-            st = env.tick(publish=False)
+            st = _safe_tick(env, publish=False)
 
             # Collision metric: count per-tick "any collision" to avoid inflated counts.
             any_collision = False
@@ -451,7 +778,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                     pos = _pose_to_position(ai.get("PoseSensor"))
                     if pos is None:
                         continue
-                    if math.hypot(pos[0] - float(source[0]), pos[1] - float(source[1])) <= cfg.success_radius_m:
+                    if math.hypot(pos[0] - float(gt_world[0]), pos[1] - float(gt_world[1])) <= cfg.success_radius_m:
                         success_step = t
                         break
 
@@ -459,7 +786,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
 
     est = np.array([best_xy[0], best_xy[1]], dtype=np.float32)
-    gt = np.array([float(source[0]), float(source[1])], dtype=np.float32)
+    gt = np.array([float(gt_world[0]), float(gt_world[1])], dtype=np.float32)
     err = float(np.linalg.norm(est - gt))
     metrics = {
         "task": "plume_localize",
@@ -472,7 +799,9 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         "localization_error_m": err,
         "collisions": int(collisions),
         "energy_proxy": float(energy),
-        "gt_source_xy": [float(source[0]), float(source[1])],
+        "pollution_meta": pollution_meta,
+        "gt_kind": gt_kind,
+        "gt_xy": [float(gt_world[0]), float(gt_world[1])],
         "est_source_xy": [float(best_xy[0]), float(best_xy[1])],
     }
     _write_json(metrics_path, metrics)
@@ -488,7 +817,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
 
     st = None
     for _ in range(200):
-        st = env.tick(publish=False)
+        st = _safe_tick(env, publish=False)
         a0 = _state_agent(st, "auv0")
         if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None:
             break
@@ -500,8 +829,27 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         raise RuntimeError("PoseSensor missing for auv0.")
     _apply_viewport_underwater_hack(env, cfg, first_agent_z=float(p0[2]))
 
-    center = [float(p0[0] + 6.0), float(p0[1] - 4.0), float(p0[2])]
-    mass = 1.0
+    init_positions = []
+    for i in range(cfg.num_agents):
+        pos = _pose_to_position(_state_agent(st, f"auv{i}").get("PoseSensor"))
+        if pos is not None:
+            init_positions.append(pos)
+    origin_xy = _centroid_xy(init_positions or [p0])
+    pollution, pollution_meta = _build_pollution_runtime(
+        cfg=cfg,
+        current=current,
+        out_dir=task_dir,
+        origin_world_xy=origin_xy,
+        spawn_world_z=float(p0[2]),
+        freeze_source_after_warmup=True,
+    )
+    src_world = pollution_meta.get("source_world_xyz") or [p0[0], p0[1], p0[2]]
+    center_world = pollution_meta.get("hotspot_world_xyz") or src_world
+    center_kind = "hotspot" if pollution_meta.get("hotspot_world_xyz") is not None else "source"
+    center = [float(center_world[0]), float(center_world[1]), float(center_world[2])]
+
+    # Initialize mass proxy baseline after warmup (and after optionally freezing the source).
+    _ = pollution.mass_fraction()
 
     steps = int(round(cfg.contain_seconds * cfg.fps))
     dt = 1.0 / float(cfg.fps)
@@ -514,26 +862,30 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     energy = 0.0
     collisions = 0
     success_step = None
+    coverage_sum = 0.0
+    leakage_sum = 0.0
+    leakage_max = 0.0
+    mass_min: float | None = None
 
     n_clean = max(2, int(round(cfg.cleanup_fraction * cfg.num_agents)))
     clean_agents = {f"auv{i}" for i in range(n_clean)}
+    sink_every = max(1, int(round(float(cfg.pollution_update_period_s) / max(1e-9, float(dt)))))
 
     with _Mp4Writer(mp4_path, fps=cfg.fps) as vw:
         for t in range(steps):
-            # Advect plume by dataset current.
-            u, v = current.velocity_xy_mps(center[0], center[1])
-            center[0] += cfg.current_scale * u * dt
-            center[1] += cfg.current_scale * v * dt
+            pollution.step_if_due(dt)
 
             # Camera follows plume center to show the task region.
-            cam_target = [float(center[0]), float(center[1]), float(center[2])]
-            cam_pos = [float(center[0]) - cfg.cam_back_m, float(center[1]) - cfg.cam_back_m, float(center[2]) + cfg.cam_height_m]
-            env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
+            if t % 2 == 0:
+                cam_target = [float(center[0]), float(center[1]), float(center[2])]
+                cam_pos = [float(center[0]) - cfg.cam_back_m, float(center[1]) - cfg.cam_back_m, float(center[2]) + cfg.cam_height_m]
+                env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
 
             if t % 5 == 0:
                 _debug_draw_point(env, cfg, xyz=[float(center[0]), float(center[1]), float(center[2])], color=(80, 200, 255))
 
             in_ring = 0
+            sink_world_positions: list[list[float]] = []
             for i in range(cfg.num_agents):
                 name = f"auv{i}"
                 ai = _state_agent(st, name)
@@ -569,13 +921,28 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 energy += float(np.sum(act * act)) * dt
                 env.act(name, act)
 
-                if name in clean_agents and math.hypot(x - center[0], y - center[1]) <= cfg.cleanup_radius_m:
-                    mass *= math.exp(-cfg.cleanup_mass_decay_per_s * dt)
+                # Approximate "contain+cleanup" by applying a sink near all agents (skimmer swarm).
+                # (Cleanup-role agents are tasked to stay near the source; ring-role agents spread sink along the perimeter.)
+                sink_world_positions.append([float(x), float(y), float(z)])
 
             coverage = float(in_ring) / float(max(1, cfg.num_agents - len(clean_agents)))
-            leakage = math.exp(-(cfg.contain_radius_m**2) / (2.0 * (cfg.plume_sigma_m**2))) * (1.0 - coverage)
+            # Leakage proxy: mean concentration at an "outer ring" probe, scaled by missing coverage.
+            leakage_r = float(cfg.contain_radius_m) + 14.0
+            probe_angles = [2.0 * math.pi * (k / 16.0) for k in range(16)]
+            probe = []
+            for ang in probe_angles:
+                px = float(center[0] + leakage_r * math.cos(ang))
+                py = float(center[1] + leakage_r * math.sin(ang))
+                probe.append(pollution.sample([px, py, float(center[2])]))
+            leakage = float((sum(probe) / float(len(probe))) * (1.0 - coverage))
+            coverage_sum += float(coverage)
+            leakage_sum += float(leakage)
+            leakage_max = float(max(float(leakage_max), float(leakage)))
 
-            st = env.tick(publish=False)
+            if sink_world_positions and (t % sink_every == 0):
+                pollution.apply_sink(sink_world_positions)
+
+            st = _safe_tick(env, publish=False)
             any_collision = False
             for i in range(cfg.num_agents):
                 ai = _state_agent(st, f"auv{i}")
@@ -592,12 +959,18 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 if t == 10:
                     imageio.imwrite(start_png, rgb)
 
-            if success_step is None and (mass <= cfg.cleanup_success_mass_frac) and (leakage <= cfg.leakage_success_threshold):
+            mass_frac = pollution.mass_fraction()
+            if mass_frac is not None:
+                mass_min = float(mass_frac) if mass_min is None else float(min(float(mass_min), float(mass_frac)))
+            if success_step is None and (mass_frac is not None) and (mass_frac <= cfg.cleanup_success_mass_frac) and (leakage <= cfg.leakage_success_threshold):
                 success_step = t
 
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
 
+    mass_frac_final = pollution.mass_fraction()
+    mean_coverage = float(coverage_sum / float(max(1, steps)))
+    mean_leakage = float(leakage_sum / float(max(1, steps)))
     metrics = {
         "task": "plume_contain_cleanup",
         "seed": int(cfg.seed),
@@ -606,7 +979,13 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         "dt_s": float(dt),
         "success": success_step is not None,
         "time_to_success_s": (float(success_step) * dt) if success_step is not None else None,
-        "remaining_mass_frac": float(mass),
+        "pollution_meta": pollution_meta,
+        "center_kind": center_kind,
+        "remaining_mass_frac": None if mass_frac_final is None else float(mass_frac_final),
+        "min_mass_frac": None if mass_min is None else float(mass_min),
+        "mean_contain_coverage_frac": float(mean_coverage),
+        "mean_leakage_proxy": float(mean_leakage),
+        "max_leakage_proxy": float(leakage_max),
         "collisions": int(collisions),
         "energy_proxy": float(energy),
         "cleanup_agents": sorted(clean_agents),
@@ -625,6 +1004,21 @@ def main() -> int:
     ap.add_argument("--combined-nc", type=str, default=os.environ.get("COMBINED_NC", RunnerCfg.combined_nc))
     ap.add_argument("--time-index", type=int, default=int(os.environ.get("TIME_INDEX", "0")))
     ap.add_argument("--depth-index", type=int, default=int(os.environ.get("DEPTH_INDEX", "0")))
+    ap.add_argument(
+        "--pollution-model",
+        type=str,
+        default=os.environ.get("POLLUTION_MODEL", RunnerCfg.pollution_model),
+        choices=["gaussian", "ocpnet_3d"],
+    )
+    ap.add_argument("--pollution-domain-xy-m", type=float, default=float(os.environ.get("POLLUTION_DOMAIN_XY_M", str(RunnerCfg.pollution_domain_xy_m))))
+    ap.add_argument("--pollution-depth-min-m", type=float, default=float(os.environ.get("POLLUTION_DEPTH_MIN_M", str(RunnerCfg.pollution_depth_range_m[0]))))
+    ap.add_argument("--pollution-depth-max-m", type=float, default=float(os.environ.get("POLLUTION_DEPTH_MAX_M", str(RunnerCfg.pollution_depth_range_m[1]))))
+    ap.add_argument("--pollution-warmup-s", type=float, default=float(os.environ.get("POLLUTION_WARMUP_S", str(RunnerCfg.pollution_warmup_s))))
+    ap.add_argument("--pollution-update-period-s", type=float, default=float(os.environ.get("POLLUTION_UPDATE_PERIOD_S", str(RunnerCfg.pollution_update_period_s))))
+    ap.add_argument("--pollution-min-source-dist-m", type=float, default=float(os.environ.get("POLLUTION_MIN_SOURCE_DIST_M", str(RunnerCfg.pollution_min_source_dist_m))))
+    ap.add_argument("--pollution-emission-rate", type=float, default=float(os.environ.get("POLLUTION_EMISSION_RATE", str(RunnerCfg.pollution_emission_rate))))
+    ap.add_argument("--pollution-sink-radius-m", type=float, default=float(os.environ.get("POLLUTION_SINK_RADIUS_M", str(RunnerCfg.pollution_sink_radius_m))))
+    ap.add_argument("--pollution-sink-strength-per-s", type=float, default=float(os.environ.get("POLLUTION_SINK_STRENGTH_PER_S", str(RunnerCfg.pollution_sink_strength_per_s))))
     args = ap.parse_args()
 
     cfg = RunnerCfg(
@@ -634,6 +1028,15 @@ def main() -> int:
         combined_nc=str(args.combined_nc),
         time_index=int(args.time_index),
         depth_index=int(args.depth_index),
+        pollution_model=str(args.pollution_model),
+        pollution_domain_xy_m=float(args.pollution_domain_xy_m),
+        pollution_depth_range_m=(float(args.pollution_depth_min_m), float(args.pollution_depth_max_m)),
+        pollution_warmup_s=float(args.pollution_warmup_s),
+        pollution_update_period_s=float(args.pollution_update_period_s),
+        pollution_min_source_dist_m=float(args.pollution_min_source_dist_m),
+        pollution_emission_rate=float(args.pollution_emission_rate),
+        pollution_sink_radius_m=float(args.pollution_sink_radius_m),
+        pollution_sink_strength_per_s=float(args.pollution_sink_strength_per_s),
     )
 
     out_dir = Path(args.out_dir).resolve()
@@ -660,8 +1063,13 @@ def main() -> int:
         "scenario_name": cfg.scenario_name,
         "scenario_cfg_note": "scenario loaded from installed package then patched in-memory (package_name + multi-agent + ViewportCapture + sensor Hz caps).",
         "outputs": {},
-        "command_hint": f"cd oneocean(iros-2026-code) && {sys.executable} tracks/h2_holoocean/run_plume_tasks.py --scenario {cfg.scenario_name} --num-agents {cfg.num_agents} --seed {cfg.seed}",
-        "note_on_gt": "For visualization/debug-draw in videos we mark the synthetic plume center; tasks/metrics are still computed from the field generator used in this runner.",
+        "command_hint": (
+            "cd oneocean(iros-2026-code) && "
+            f"{sys.executable} tracks/h2_holoocean/run_plume_tasks.py "
+            f"--scenario {cfg.scenario_name} --num-agents {cfg.num_agents} --seed {cfg.seed} "
+            f"--pollution-model {cfg.pollution_model}"
+        ),
+        "note_on_gt": "For visualization/debug-draw in videos we mark the diffusion-model plume source; tasks/metrics are computed from the same pollution field.",
     }
 
     with holoocean.make(
@@ -674,7 +1082,7 @@ def main() -> int:
     ) as env:
         env.set_render_quality(int(cfg.render_quality))
         env.should_render_viewport(True)
-        env.tick(publish=False)
+        _safe_tick(env, publish=False)
 
         localize_res = run_localize_task(env, cfg, current, out_dir)
         env.reset()
