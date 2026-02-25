@@ -9,6 +9,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.venv/
+.venv*/
+venv/
 
 # Notebooks (project policy: no .ipynb in repo)
 *.ipynb
