@@ -47,7 +47,7 @@ class GaussianPlumeField:
         self.center_xyz[0] += float(d[0]) * float(dt_s)
         self.center_xyz[2] += float(d[1]) * float(dt_s)
 
-    def apply_agent_sink(self, agent_xyz: np.ndarray, *, radius_m: float = 10.0, strength_per_s: float = 0.10, dt_s: float = 1.0) -> None:
+    def apply_agent_sink(self, agent_xyz: np.ndarray, *, radius_m: float = 35.0, strength_per_s: float = 0.12, dt_s: float = 1.0) -> None:
         # If any agent is close to the center, reduce mass (proxy for cleanup).
         if self.mass <= 0.0:
             return

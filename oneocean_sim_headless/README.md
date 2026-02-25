@@ -72,3 +72,17 @@ Replay + summarize:
 ```bash
 python3 -m oneocean_sim_headless.cli.replay --run-dir runs/headless/<run_id>
 ```
+
+## 2) Run an experiment matrix (and aggregate CSV)
+
+```bash
+python3 -m oneocean_sim_headless.cli.run_matrix \
+  --drift-npz runs/headless/_cache/drift_scene_t0_d0.npz \
+  --seeds 0-9 \
+  --pollution-models gaussian \
+  --validate
+```
+
+Outputs:
+- `runs/headless/matrix_<timestamp>/matrix_results.csv`
+- `runs/headless/matrix_<timestamp>/matrix_summary.json`

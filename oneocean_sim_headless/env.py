@@ -224,6 +224,13 @@ class HeadlessOceanEnv:
 
         # Observations for controller.
         probe = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
+        if self.task_cfg.kind == "pollution_containment_multiagent":
+            # Estimate plume center from probes (weighted centroid). If probes are near-flat, keep last goal.
+            w = np.maximum(probe, 0.0)
+            s = float(np.sum(w))
+            if s > 1e-12:
+                est = np.sum(self._positions * (w[:, None] / s), axis=0)
+                self.task_state.goal_xyz = est.astype(np.float64)
         goal = self.task_state.goal_xyz
 
         act = compute_actions(

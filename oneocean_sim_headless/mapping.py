@@ -6,7 +6,13 @@ from typing import Any
 
 import numpy as np
 
-from oneocean_sim_habitat.drift import METERS_PER_DEG_LAT, meters_per_deg_lon
+# Keep this module lightweight: avoid importing `oneocean_sim_habitat`, which pulls in
+# optional heavyweight rendering deps (e.g., `cv2`). We only need basic geo conversion.
+METERS_PER_DEG_LAT = 111_132.0
+
+
+def meters_per_deg_lon(latitude_deg: float) -> float:
+    return METERS_PER_DEG_LAT * max(0.1, float(np.cos(np.radians(latitude_deg))))
 
 
 @dataclass(frozen=True)
@@ -69,4 +75,3 @@ def try_load_adjacent_json(npz_path: str | Path) -> dict[str, Any] | None:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception:
         return None
-

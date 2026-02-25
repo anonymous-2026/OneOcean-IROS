@@ -62,13 +62,33 @@ def compute_actions(
         return actions
 
     if cfg.kind == "plume_gradient":
-        # Pick a leader with highest probe; others form a small ring around it.
+        # Estimate local gradient of log(concentration) from multi-agent probes, then ascend.
         leader = int(np.argmax(probe))
         p0 = pos[leader].copy()
-        # Random-walk biased by probe value (no true gradient without extra sensing).
-        ang = float(rng.uniform(0, 2 * math.pi))
-        dir_xz = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
-        actions[leader] = _clip_speed(float(cfg.max_speed_mps) * dir_xz, cfg.max_speed_mps)
+
+        eps = 1e-12
+        y = np.log(np.maximum(probe, eps))
+        X = np.stack([pos[:, 0], pos[:, 2], np.ones((n,), dtype=np.float64)], axis=1)
+        # Weight higher-probe agents more (better SNR).
+        w = np.clip(probe / (float(np.max(probe)) + 1e-12), 0.05, 1.0)
+        W = np.diag(w)
+        try:
+            beta, *_ = np.linalg.lstsq(W @ X, W @ y, rcond=None)
+            grad_x = float(beta[0])
+            grad_z = float(beta[1])
+            g = np.array([grad_x, 0.0, grad_z], dtype=np.float64)
+        except Exception:
+            g = np.zeros((3,), dtype=np.float64)
+
+        gn = float(np.linalg.norm(g))
+        if not np.isfinite(gn) or gn < 1e-10:
+            # Fallback exploration when probes are flat.
+            ang = float(rng.uniform(0, 2 * math.pi))
+            g = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
+            gn = float(np.linalg.norm(g))
+
+        g = g / max(1e-12, gn)
+        actions[leader] = _clip_speed(float(cfg.max_speed_mps) * g, cfg.max_speed_mps)
         ring_r = 0.6 * float(cfg.ring_radius_m) / max(1.0, float(n))
         for i in range(n):
             if i == leader:

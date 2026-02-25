@@ -6,8 +6,6 @@ from typing import Any
 
 import numpy as np
 
-from oneocean_sim_habitat.drift import CachedDriftField
-
 from .mapping import GridMapping, try_load_adjacent_json
 
 
@@ -24,6 +22,10 @@ class DriftCacheInfo:
 
 
 def load_drift_cache(npz_path: str | Path) -> tuple[CachedDriftField, DriftCacheInfo]:
+    # Import lazily to avoid pulling heavy simulator dependencies (e.g., Habitat-Sim / cv2)
+    # when users only need lightweight utilities like `resample_uv_to_model_grid`.
+    from oneocean_sim_habitat.drift import CachedDriftField
+
     cache_path = Path(npz_path).expanduser().resolve()
     try:
         field = CachedDriftField(cache_path)
