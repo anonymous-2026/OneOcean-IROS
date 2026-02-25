@@ -36,9 +36,11 @@ python -m OCPNet.pollution.cli run-dataset-driven \
 
 - `.../synthetic_run/run_summary.json`: simulation summary stats.
 - `.../synthetic_run/run_report.json`: run + media manifest.
-- `.../synthetic_run/media/microplastic_diffusion_panel.png`: snapshot panel.
+- `.../synthetic_run/media/microplastic_diffusion_panel.png`: snapshot panel (PNG).
+- `.../synthetic_run/media/microplastic_diffusion_panel.eps`: snapshot panel (EPS).
 - `.../synthetic_run/media/microplastic_diffusion.gif`: diffusion animation.
-- `.../current_viz/base_current_3d.png`: base current field over bathymetry.
-- `.../current_viz/total_current_3d.png`: total current field over bathymetry.
+- `.../current_viz_v2/*_el*_az*.png`: multi-view current-over-bathymetry renders (PNG).
+- `.../current_viz_v2/*_el*_az*.eps`: multi-view current-over-bathymetry renders (EPS).
 - `.../dataset_diffusion/dataset_diffusion_panel.png`: dataset-driven diffusion panel.
+- `.../dataset_diffusion/dataset_diffusion_panel.eps`: dataset-driven diffusion panel (EPS).
 - `.../dataset_diffusion/dataset_diffusion.gif`: dataset-driven diffusion animation.

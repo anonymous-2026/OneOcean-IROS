@@ -17,6 +17,9 @@ from .viz import (
 def _default_combined_nc() -> str:
     return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc"
 
+def _default_public_nc() -> str:
+    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public/combined/combined_environment.nc"
+
 
 def _cmd_run_synthetic(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir).resolve()
@@ -132,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
         "run-dataset-driven",
         help="Simulate and render dataset-driven diffusion proxy from combined current fields.",
     )
-    dataset_run.add_argument("--nc-path", default=_default_combined_nc())
+    dataset_run.add_argument("--nc-path", default=_default_public_nc())
     dataset_run.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_diffusion")
     dataset_run.add_argument("--depth-index", type=int, default=0)
     dataset_run.add_argument("--time-start", type=int, default=0)
