@@ -23,7 +23,10 @@ class UnderwaterPostprocess:
 
 
 def _apply_underwater(rgb_u8: np.ndarray, depth_m: np.ndarray, cfg: UnderwaterPostprocess, rng: np.random.Generator) -> np.ndarray:
-    rgb = rgb_u8.astype(np.float32)
+    rgb = rgb_u8
+    if rgb.ndim == 3 and rgb.shape[2] == 4:
+        rgb = rgb[:, :, :3]
+    rgb = rgb.astype(np.float32)
     depth = depth_m.astype(np.float32)
     depth = np.nan_to_num(depth, nan=50.0, posinf=50.0, neginf=50.0)
     depth = np.clip(depth, 0.0, 80.0)
@@ -185,4 +188,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
