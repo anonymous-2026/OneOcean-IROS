@@ -48,6 +48,15 @@ class RenderSphere:
     color_bgr: tuple[int, int, int]
 
 
+@dataclass(frozen=True)
+class RenderMesh:
+    mesh_path: str
+    position_m: tuple[float, float, float]
+    yaw_rad: float = 0.0
+    scale_m: float = 1.0
+    color_bgr: tuple[int, int, int] = (70, 90, 105)
+
+
 _OBJ_CACHE: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
 
 
@@ -183,6 +192,7 @@ def render_scene(
     terrain_vertices_m: np.ndarray,
     terrain_faces: np.ndarray,
     terrain_face_normals: np.ndarray,
+    meshes: Iterable[RenderMesh] = (),
     obstacles: Iterable[RenderSphere],
     vehicles: Iterable[RenderVehicle],
     camera: CameraConfig,
@@ -262,6 +272,45 @@ def render_scene(
         color = base_color * shade
         color = _apply_fog(color, fog_color, fog_t)
         cv2.fillConvexPoly(img, poly, color=tuple(int(c) for c in np.clip(color, 0.0, 255.0)))
+
+    # External scene meshes (e.g., shipwrecks, pipelines, markers).
+    for mesh in meshes:
+        v_local, v_faces, v_normals_local = load_obj_mesh(mesh.mesh_path)
+        yaw = float(mesh.yaw_rad)
+        rot = np.array(
+            [
+                [cos(yaw), -sin(yaw), 0.0],
+                [sin(yaw), cos(yaw), 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+        pos = np.asarray(mesh.position_m, dtype=np.float64)
+        verts = (v_local * float(mesh.scale_m)) @ rot.T + pos[None, :]
+
+        vu, vz = _project_points(
+            verts,
+            cam_eye=cam_eye,
+            cam_right=cam_right,
+            cam_up=cam_up,
+            cam_forward=cam_forward,
+            cam=camera,
+        )
+        face_uv = vu[v_faces]
+        face_z = vz[v_faces]
+        face_depth = face_z.mean(axis=1)
+        midx = np.nonzero(np.all(face_z > float(camera.near), axis=1))[0]
+        if midx.size:
+            midx = midx[np.argsort(face_depth[midx])[::-1]]
+        for fi in midx.tolist():
+            poly = np.round(face_uv[fi]).astype(np.int32)
+            depth = float(face_depth[fi])
+            fog_t = _underwater_fog_t(depth_m=depth, fog_start_m=6.0, fog_end_m=140.0)
+            normal = (rot @ v_normals_local[fi]).astype(np.float64)
+            shade = float(np.clip(0.25 + 0.7 * max(0.0, float(normal @ light_dir)), 0.0, 1.0))
+            base = np.asarray(mesh.color_bgr, dtype=np.float64)
+            color = _apply_fog(base * shade, fog_color, fog_t)
+            cv2.fillConvexPoly(img, poly, tuple(int(c) for c in np.clip(color, 0.0, 255.0)), lineType=cv2.LINE_AA)
 
     for sphere in obstacles:
         center = np.asarray(sphere.center_m, dtype=np.float64)[None, :]

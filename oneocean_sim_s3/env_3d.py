@@ -13,12 +13,14 @@ from oneocean_sim.data import CurrentSampler
 from .software_renderer import (
     CameraConfig,
     CameraPose,
+    RenderMesh,
     RenderSphere,
     RenderVehicle,
     render_scene,
     yaw_from_velocity,
 )
 from .world_3d import TerrainMesh, TerrainSpec, build_obstacles, build_terrain_mesh, xy_to_latlon
+from .external_scenes.polyhaven_models import ensure_polyhaven_model_obj
 
 
 _GLOBAL_ENGINE: Optional[sapien.Engine] = None
@@ -66,6 +68,7 @@ class S3WorldConfig3D:
 @dataclass
 class WorldArtifacts:
     terrain_obj: Optional[str]
+    external_scene: Optional[dict[str, object]] = None
 
 
 class OceanWorldS3_3D:
@@ -81,6 +84,9 @@ class OceanWorldS3_3D:
         agents: int,
         config: S3WorldConfig3D,
         output_dir: Path,
+        external_scene: Optional[str] = None,
+        external_scene_resolution: str = "1k",
+        external_scene_max_faces: int = 12000,
     ) -> None:
         if agents < 1:
             raise ValueError("agents must be >= 1")
@@ -131,12 +137,58 @@ class OceanWorldS3_3D:
         )
         self.terrain_face_normals = _compute_face_normals(self.terrain.vertices_m, self.terrain.faces)
 
-        self.artifacts = WorldArtifacts(terrain_obj=str(terrain_obj_path))
+        self.artifacts = WorldArtifacts(terrain_obj=str(terrain_obj_path), external_scene=None)
 
         # physics collision terrain
         builder = self.scene.create_actor_builder()
         builder.add_nonconvex_collision_from_file(str(terrain_obj_path))
         self.terrain_actor = builder.build_static(name="seafloor")
+
+        # --- optional external scene mesh (third-party assets, cached locally) ---
+        self.external_meshes: list[RenderMesh] = []
+        self.external_actors: list[sapien.Actor] = []
+        self._external_scene = str(external_scene) if external_scene else None
+        if external_scene and external_scene != "none":
+            # Currently supported: polyhaven:<asset_id>
+            if not external_scene.startswith("polyhaven:"):
+                raise ValueError(f"Unsupported external_scene: {external_scene}")
+            asset_id = external_scene.split(":", 1)[1].strip()
+            if not asset_id:
+                raise ValueError(f"Invalid external_scene: {external_scene}")
+
+            assets = ensure_polyhaven_model_obj(
+                asset_id=asset_id,
+                cache_root=Path("runs") / "_cache",
+                resolution=str(external_scene_resolution),
+                max_faces=int(external_scene_max_faces),
+                # PolyHaven models are often large; shrink a bit to fit our small terrain patch.
+                scale=0.12,
+                center=True,
+            )
+            self.artifacts.external_scene = {
+                "provider": "polyhaven",
+                "asset_id": str(asset_id),
+                "resolution": str(external_scene_resolution),
+                "max_faces": int(external_scene_max_faces),
+                "obj_path": str(assets.obj_path),
+                "sources_md": str(assets.sources_md),
+            }
+
+            self.external_meshes = [
+                RenderMesh(
+                    mesh_path=str(assets.obj_path),
+                    position_m=(0.0, 0.0, 0.0),
+                    yaw_rad=0.0,
+                    scale_m=1.0,
+                    color_bgr=(65, 90, 115),
+                )
+            ]
+            # Collision: optional and coarse; keep but ensure it is always underwater and visible.
+            b = self.scene.create_actor_builder()
+            b.add_nonconvex_collision_from_file(str(assets.obj_path))
+            actor = b.build_static(name="external_scene_asset")
+            actor.set_pose(sapien.Pose([0.0, 0.0, float(self.config.terrain_z_min_m + 4.0)]))
+            self.external_actors = [actor]
 
         # --- task-specific fields ---
         self.goal_xy_m: tuple[float, float] = (30.0, 0.0)
@@ -274,6 +326,24 @@ class OceanWorldS3_3D:
 
         self._time_sec = 0.0
         self._reset_particles()
+
+        # Reposition the external scene mesh relative to the goal so it appears in the rollout.
+        if self.external_meshes and self.external_actors:
+            gx, gy = float(self.goal_xy_m[0]), float(self.goal_xy_m[1])
+            # Keep the asset visible early in the rollout (near start but along the path to goal).
+            px = 0.35 * gx
+            py = 0.35 * gy
+            floor_z = float(self.terrain.height_at_xy(px, py))
+            pz = float(floor_z + 0.6)
+            yaw = float(self.rng.uniform(-1.0, 1.0))
+            self.external_meshes[0] = RenderMesh(
+                mesh_path=self.external_meshes[0].mesh_path,
+                position_m=(float(px), float(py), float(pz)),
+                yaw_rad=yaw,
+                scale_m=float(self.external_meshes[0].scale_m),
+                color_bgr=self.external_meshes[0].color_bgr,
+            )
+            self.external_actors[0].set_pose(sapien.Pose([float(px), float(py), float(pz)], _yaw_to_quat(yaw)))
 
     def _sample_current_xy(self, x_m: float, y_m: float) -> tuple[float, float]:
         lat, lon = xy_to_latlon(
@@ -448,6 +518,7 @@ class OceanWorldS3_3D:
             terrain_vertices_m=self.terrain.vertices_m,
             terrain_faces=self.terrain.faces,
             terrain_face_normals=self.terrain_face_normals,
+            meshes=self.external_meshes,
             obstacles=self.obstacles,
             vehicles=vehicles,
             camera=camera,
@@ -479,6 +550,7 @@ class OceanWorldS3_3D:
                 "elevation_max": float(self.terrain.elevation_max),
                 "obj_path": self.artifacts.terrain_obj,
             },
+            "external_scene": self.artifacts.external_scene,
             "current_scale": float(self.config.current_scale),
             "config": asdict(self.config),
         }

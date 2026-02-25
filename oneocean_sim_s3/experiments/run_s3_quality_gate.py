@@ -19,6 +19,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed-base", type=int, default=800)
     parser.add_argument("--time-index", type=int, default=0)
     parser.add_argument("--depth-index", type=int, default=0)
+    parser.add_argument(
+        "--external-scene",
+        type=str,
+        default="polyhaven:dutch_ship_large_01",
+        help="External scene base, e.g. 'polyhaven:dutch_ship_large_01' or 'none'.",
+    )
+    parser.add_argument("--external-scene-resolution", type=str, default="1k", choices=["1k", "2k", "4k"])
+    parser.add_argument("--external-scene-max-faces", type=int, default=12000)
 
     parser.add_argument("--no-render", action="store_true")
     parser.add_argument("--render-width", type=int, default=640)
@@ -55,6 +63,9 @@ def main() -> None:
                     seed=int(args.seed_base + case_id * 10),
                     time_index=int(args.time_index),
                     depth_index=int(args.depth_index),
+                    external_scene=None if str(args.external_scene).strip() == "none" else str(args.external_scene).strip(),
+                    external_scene_resolution=str(args.external_scene_resolution),
+                    external_scene_max_faces=int(args.external_scene_max_faces),
                     include_tides=bool(include_tides),
                     max_steps=int(args.max_steps),
                     render=not bool(args.no_render),
