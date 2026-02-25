@@ -23,21 +23,48 @@ class GaussianPlumeField:
     def __init__(self, config: GaussianPlumeConfig) -> None:
         self.cfg = config
         self.source_xyz = np.zeros((3,), dtype=np.float64)
+        self.center_xyz = np.zeros((3,), dtype=np.float64)
+        self.mass = 1.0
+        self._mass0 = 1.0
 
     def reset(self, rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarray]) -> dict[str, Any]:
         lo, hi = bounds_xyz
         self.source_xyz = rng.uniform(lo, hi).astype(np.float64)
-        return {"kind": "gaussian", "source_xyz": self.source_xyz.tolist(), "config": asdict(self.cfg)}
+        self.center_xyz = self.source_xyz.copy()
+        self.mass = 1.0
+        self._mass0 = 1.0
+        return {
+            "kind": "gaussian",
+            "source_xyz": self.source_xyz.tolist(),
+            "config": asdict(self.cfg),
+        }
 
     def step(self, dt_s: float) -> None:
-        # static gaussian source proxy
         _ = dt_s
+
+    def advect_center(self, drift_xz: np.ndarray, dt_s: float) -> None:
+        d = np.asarray(drift_xz, dtype=np.float64).reshape(2)
+        self.center_xyz[0] += float(d[0]) * float(dt_s)
+        self.center_xyz[2] += float(d[1]) * float(dt_s)
+
+    def apply_agent_sink(self, agent_xyz: np.ndarray, *, radius_m: float = 10.0, strength_per_s: float = 0.10, dt_s: float = 1.0) -> None:
+        # If any agent is close to the center, reduce mass (proxy for cleanup).
+        if self.mass <= 0.0:
+            return
+        pos = np.asarray(agent_xyz, dtype=np.float64).reshape(-1, 3)
+        d = np.linalg.norm(pos - self.center_xyz[None, :], axis=1)
+        if np.any(d <= float(radius_m)):
+            keep = float(np.clip(1.0 - float(strength_per_s) * float(dt_s), 0.0, 1.0))
+            self.mass *= keep
+
+    def mass_fraction(self) -> float:
+        return float(self.mass / max(1e-12, float(self._mass0)))
 
     def sample(self, xyz: np.ndarray) -> float:
         p = np.asarray(xyz, dtype=np.float64).reshape(3)
-        d2 = float(np.sum((p - self.source_xyz) ** 2))
+        d2 = float(np.sum((p - self.center_xyz) ** 2))
         s2 = float(self.cfg.sigma_m) ** 2
-        return float(self.cfg.peak * np.exp(-0.5 * d2 / max(1e-9, s2)))
+        return float(float(self.mass) * self.cfg.peak * np.exp(-0.5 * d2 / max(1e-9, s2)))
 
 
 @dataclass(frozen=True)

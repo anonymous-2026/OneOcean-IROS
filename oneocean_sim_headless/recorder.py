@@ -48,6 +48,8 @@ class HeadlessRecorder:
         self._actions: list[_CsvStream] = []
         self._current: list[_CsvStream] = []
         self._probe: list[_CsvStream] = []
+        self._latlon: list[_CsvStream] = []
+        self._bathy: list[_CsvStream] = []
         self._run_meta: dict[str, Any] = {}
 
         for i in range(self.n_agents):
@@ -61,6 +63,8 @@ class HeadlessRecorder:
             self._actions.append(_CsvStream(agent_dir / "actions" / "data.csv", header=["t", "ax", "ay", "az"]))
             self._current.append(_CsvStream(agent_dir / "obs" / "local_current" / "data.csv", header=["t", "cx", "cy", "cz"]))
             self._probe.append(_CsvStream(agent_dir / "obs" / "pollution_probe" / "data.csv", header=["t", "concentration"]))
+            self._latlon.append(_CsvStream(agent_dir / "obs" / "latlon" / "data.csv", header=["t", "lat", "lon"]))
+            self._bathy.append(_CsvStream(agent_dir / "obs" / "bathymetry" / "data.csv", header=["t", "elevation", "land_mask"]))
 
         (self.root / "environment_samples").mkdir(parents=True, exist_ok=True)
 
@@ -95,12 +99,20 @@ class HeadlessRecorder:
         actions_xyz: np.ndarray,
         currents_xyz: np.ndarray,
         pollution_probe: np.ndarray,
+        latitude: np.ndarray,
+        longitude: np.ndarray,
+        elevation: np.ndarray,
+        land_mask: np.ndarray,
     ) -> None:
         pos = np.asarray(positions_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         yaw = np.asarray(yaws_rad, dtype=np.float64).reshape(self.n_agents)
         act = np.asarray(actions_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         cur = np.asarray(currents_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         probe = np.asarray(pollution_probe, dtype=np.float64).reshape(self.n_agents)
+        lat = np.asarray(latitude, dtype=np.float64).reshape(self.n_agents)
+        lon = np.asarray(longitude, dtype=np.float64).reshape(self.n_agents)
+        elev = np.asarray(elevation, dtype=np.float64).reshape(self.n_agents)
+        mask = np.asarray(land_mask, dtype=np.float64).reshape(self.n_agents)
 
         for i in range(self.n_agents):
             qy = float(np.sin(0.5 * yaw[i]))
@@ -109,9 +121,11 @@ class HeadlessRecorder:
             self._actions[i].write_row([float(t), float(act[i, 0]), float(act[i, 1]), float(act[i, 2])])
             self._current[i].write_row([float(t), float(cur[i, 0]), float(cur[i, 1]), float(cur[i, 2])])
             self._probe[i].write_row([float(t), float(probe[i])])
+            self._latlon[i].write_row([float(t), float(lat[i]), float(lon[i])])
+            self._bathy[i].write_row([float(t), float(elev[i]), float(mask[i])])
 
     def close(self) -> None:
-        for streams in (self._pose, self._actions, self._current, self._probe):
+        for streams in (self._pose, self._actions, self._current, self._probe, self._latlon, self._bathy):
             for s in streams:
                 s.close()
 
@@ -125,6 +139,8 @@ def required_streams_exist(run_dir: str | Path, *, n_agents: int) -> bool:
             "actions/data.csv",
             "obs/local_current/data.csv",
             "obs/pollution_probe/data.csv",
+            "obs/latlon/data.csv",
+            "obs/bathymetry/data.csv",
         ):
             if not (agent_dir / rel).exists():
                 return False
@@ -132,4 +148,3 @@ def required_streams_exist(run_dir: str | Path, *, n_agents: int) -> bool:
         if not (root / rel).exists():
             return False
     return True
-

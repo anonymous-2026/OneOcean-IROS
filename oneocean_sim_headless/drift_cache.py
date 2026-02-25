@@ -25,7 +25,16 @@ class DriftCacheInfo:
 
 def load_drift_cache(npz_path: str | Path) -> tuple[CachedDriftField, DriftCacheInfo]:
     cache_path = Path(npz_path).expanduser().resolve()
-    field = CachedDriftField(cache_path)
+    try:
+        field = CachedDriftField(cache_path)
+    except KeyError as e:
+        raise KeyError(
+            f"Invalid drift cache (missing key {e!s}). Expected npz keys: "
+            "'latitude', 'longitude', 'u', 'v' (optional: 'elevation', 'land_mask'). "
+            f"Path: {cache_path}"
+        ) from e
+    except Exception as e:
+        raise RuntimeError(f"Failed to load drift cache: {cache_path}") from e
     mapping = GridMapping.from_latlon(field.latitude, field.longitude)
     info = DriftCacheInfo(
         npz_path=str(cache_path),
@@ -87,4 +96,3 @@ def resample_uv_to_model_grid(
     U = np.nan_to_num(U, nan=0.0, posinf=0.0, neginf=0.0)
     V = np.nan_to_num(V, nan=0.0, posinf=0.0, neginf=0.0)
     return U, V
-

@@ -58,7 +58,9 @@ def validate_run_dir(run_dir: str | Path) -> ValidationResult:
         act = agent_dir / "actions" / "data.csv"
         cur = agent_dir / "obs" / "local_current" / "data.csv"
         probe = agent_dir / "obs" / "pollution_probe" / "data.csv"
-        for p in (pose, act, cur, probe):
+        latlon = agent_dir / "obs" / "latlon" / "data.csv"
+        bathy = agent_dir / "obs" / "bathymetry" / "data.csv"
+        for p in (pose, act, cur, probe, latlon, bathy):
             if not p.exists():
                 return ValidationResult(False, f"missing stream: {p}")
             if not _check_monotonic_t(p, t_col=0):
@@ -69,6 +71,8 @@ def validate_run_dir(run_dir: str | Path) -> ValidationResult:
             "actions": _count_rows(act),
             "current": _count_rows(cur),
             "probe": _count_rows(probe),
+            "latlon": _count_rows(latlon),
+            "bathymetry": _count_rows(bathy),
         }
         if len(set(rows.values())) != 1:
             return ValidationResult(False, f"row count mismatch for agent_{i:03d}: {rows}")
@@ -82,4 +86,3 @@ def validate_run_dir(run_dir: str | Path) -> ValidationResult:
             return ValidationResult(False, f"missing {rel}")
 
     return ValidationResult(True, "ok")
-

@@ -53,6 +53,9 @@ class HeadlessOceanEnv:
         self._positions = np.zeros((self.n_agents, 3), dtype=np.float64)
         self._yaws = np.zeros((self.n_agents,), dtype=np.float64)
         self._t = 0.0
+        self._energy = 0.0
+        self._constraint_violations = 0
+        self._time_to_success_s: float | None = None
 
         # pollution model expects access to drift payload arrays for OCPNet velocity mapping.
         drift_payload = {
@@ -84,6 +87,18 @@ class HeadlessOceanEnv:
     @property
     def positions_xyz(self) -> np.ndarray:
         return self._positions.copy()
+
+    @property
+    def energy_proxy(self) -> float:
+        return float(self._energy)
+
+    @property
+    def constraint_violations(self) -> int:
+        return int(self._constraint_violations)
+
+    @property
+    def time_to_success_s(self) -> float | None:
+        return None if self._time_to_success_s is None else float(self._time_to_success_s)
 
     def _sample_current(self, x_m: float, z_m: float) -> tuple[float, float]:
         # Uses CachedDriftField tangent-plane mapping; we set origin at (lat_min, lon_min) via our mapping.
@@ -119,7 +134,16 @@ class HeadlessOceanEnv:
                     break
             self._yaws[i] = float(self.rng.uniform(-math.pi, math.pi))
 
+        # Task-specific goal/anchor choices.
+        if task.kind == "station_keeping":
+            self.task_state.goal_xyz = np.mean(self._positions, axis=0)
+        elif task.kind == "pollution_containment_multiagent":
+            self.task_state.goal_xyz = 0.5 * (lo + hi)
+
         self._t = 0.0
+        self._energy = 0.0
+        self._constraint_violations = 0
+        self._time_to_success_s = None
         self.pollution_meta = self.pollution.reset(self.rng, bounds_xyz=self.bounds_xyz)
 
         # Track an initial mass proxy (for containment task success definition).
@@ -167,6 +191,10 @@ class HeadlessOceanEnv:
 
         # Currents and state update.
         currents = np.zeros((self.n_agents, 3), dtype=np.float64)
+        lat_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        lon_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        elev_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        mask_arr = np.zeros((self.n_agents,), dtype=np.float64)
         lo, hi = self.bounds_xyz
         for i in range(self.n_agents):
             cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
@@ -176,14 +204,46 @@ class HeadlessOceanEnv:
             if self._is_blocked(float(new_p[0]), float(new_p[2])):
                 # simple rejection: stay put if blocked
                 new_p = self._positions[i]
+                self._constraint_violations += 1
             self._positions[i] = new_p
             if float(np.linalg.norm(act[i])) > 1e-6:
                 self._yaws[i] = float(math.atan2(act[i, 2], act[i, 0]))
 
+            # extra audit-friendly observables
+            lat, lon = self.mapping.xz_to_latlon(float(self._positions[i, 0]), float(self._positions[i, 2]))
+            lat_arr[i] = float(lat)
+            lon_arr[i] = float(lon)
+            elev = self.drift_field.sample_elevation_xz(
+                x_m=float(self._positions[i, 0]),
+                z_m=float(self._positions[i, 2]),
+                origin_lat=self.mapping.lat_min,
+                origin_lon=self.mapping.lon_min,
+            )
+            elev_arr[i] = float(0.0 if elev is None else elev)
+            m = self.drift_field.sample_land_mask_xz(
+                x_m=float(self._positions[i, 0]),
+                z_m=float(self._positions[i, 2]),
+                origin_lat=self.mapping.lat_min,
+                origin_lon=self.mapping.lon_min,
+            )
+            mask_arr[i] = float(0.0 if m is None else m)
+
+            self._energy += float(np.dot(act[i], act[i])) * float(self.cfg.dt_s)
+
         # Update pollution field.
+        if hasattr(self.pollution, "advect_center"):
+            # Advect the Gaussian plume center using the current at its center.
+            cpos = getattr(self.pollution, "center_xyz", None)
+            if cpos is not None:
+                cx, cz = self._sample_current(float(cpos[0]), float(cpos[2]))
+                self.pollution.advect_center(np.array([cx, cz], dtype=np.float64), float(self.cfg.dt_s))
         self.pollution.step(float(self.cfg.dt_s))
         if hasattr(self.pollution, "apply_agent_sink") and self.task_cfg.kind == "pollution_containment_multiagent":
-            self.pollution.apply_agent_sink(self._positions)
+            # both Gaussian and OCPNet expose this method (signature differs; use kwargs best-effort)
+            try:
+                self.pollution.apply_agent_sink(self._positions, dt_s=float(self.cfg.dt_s))
+            except TypeError:
+                self.pollution.apply_agent_sink(self._positions)
 
         # Recompute probes for logging/metrics.
         probe2 = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
@@ -194,17 +254,26 @@ class HeadlessOceanEnv:
             actions_xyz=act,
             currents_xyz=currents,
             pollution_probe=probe2,
+            latitude=lat_arr,
+            longitude=lon_arr,
+            elevation=elev_arr,
+            land_mask=mask_arr,
         )
         self.rec.write_environment_sample(self._t, dataset_time_index=self.dataset_time_index, dataset_depth_index=self.dataset_depth_index)
 
         # Success checks.
         pollution_src = np.array(self.pollution_meta.get("source_xyz"), dtype=np.float64) if "source_xyz" in self.pollution_meta else None
         mass_frac = None
-        if hasattr(self.pollution, "model") and self._initial_pollution_mass is not None and self._initial_pollution_mass > 1e-12:
+        if hasattr(self.pollution, "mass_fraction"):
+            try:
+                mass_frac = float(self.pollution.mass_fraction())
+            except Exception:
+                mass_frac = None
+        elif hasattr(self.pollution, "model") and self._initial_pollution_mass is not None and self._initial_pollution_mass > 1e-12:
             conc = self.pollution.model.pollutant_fields[self.pollution.pollutant].get_concentration(self.pollution.pollutant)
             mass_frac = float(np.sum(conc) / self._initial_pollution_mass)
 
-        done, extra = compute_success(
+        success, extra = compute_success(
             self.task_cfg,
             step_index=int(round(self._t / max(1e-9, float(self.cfg.dt_s)))),
             positions_xyz=self._positions,
@@ -216,13 +285,19 @@ class HeadlessOceanEnv:
             "t": float(self._t),
             "probe_max": float(np.max(probe2)),
             "probe_mean": float(np.mean(probe2)),
+            "energy_proxy": float(self._energy),
+            "constraint_violations": int(self._constraint_violations),
             **extra,
         }
         self._t += float(self.cfg.dt_s)
         # Termination by time horizon.
-        if int(round(self._t / max(1e-9, float(self.cfg.dt_s)))) >= int(self.task_cfg.max_steps):
+        done = bool(success)
+        if not done and int(round(self._t / max(1e-9, float(self.cfg.dt_s)))) >= int(self.task_cfg.max_steps):
             done = True
             info["time_limit"] = True
+        info["success"] = bool(success) and not bool(info.get("time_limit", False))
+        if info["success"] and self._time_to_success_s is None:
+            self._time_to_success_s = float(self._t)
         return bool(done), info
 
     def close(self) -> None:

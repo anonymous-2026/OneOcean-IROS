@@ -21,6 +21,18 @@ class ControllerConfig:
         return asdict(self)
 
 
+def preset_controller(kind: ControllerKind, *, max_speed_mps: float) -> ControllerConfig:
+    if kind == "go_to_goal":
+        return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.9)
+    if kind == "station_keep":
+        return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.8)
+    if kind == "plume_gradient":
+        return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.7, ring_radius_m=16.0)
+    if kind == "containment_ring":
+        return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.7, ring_radius_m=22.0)
+    raise ValueError(f"Unknown controller kind: {kind}")
+
+
 def _clip_speed(v: np.ndarray, max_speed: float) -> np.ndarray:
     sp = float(np.linalg.norm(v))
     if sp <= max(1e-9, float(max_speed)):
@@ -80,4 +92,3 @@ def compute_actions(
         return actions
 
     raise ValueError(f"Unknown controller kind: {cfg.kind}")
-

@@ -13,10 +13,13 @@ TaskKind = Literal[
     "pollution_containment_multiagent",
 ]
 
+DifficulyKind = Literal["easy", "medium", "hard"]
+
 
 @dataclass(frozen=True)
 class TaskConfig:
     kind: TaskKind
+    difficulty: DifficulyKind = "medium"
     success_radius_m: float = 6.0
     max_steps: int = 240
     hold_steps: int = 30  # for station-keeping
@@ -30,6 +33,41 @@ class TaskConfig:
 class TaskState:
     goal_xyz: np.ndarray
     hold_counter: int = 0
+
+
+def preset_task(kind: TaskKind, difficulty: DifficulyKind) -> TaskConfig:
+    d = str(difficulty)
+    if kind == "go_to_goal_current":
+        return TaskConfig(
+            kind=kind,
+            difficulty=difficulty,
+            success_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
+            max_steps=160 if d == "easy" else 240 if d == "medium" else 320,
+        )
+    if kind == "station_keeping":
+        return TaskConfig(
+            kind=kind,
+            difficulty=difficulty,
+            success_radius_m=8.0 if d == "easy" else 5.0 if d == "medium" else 3.0,
+            max_steps=200 if d == "easy" else 260 if d == "medium" else 340,
+            hold_steps=20 if d == "easy" else 40 if d == "medium" else 60,
+        )
+    if kind == "pollution_localization":
+        return TaskConfig(
+            kind=kind,
+            difficulty=difficulty,
+            success_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.0,
+            max_steps=240 if d == "easy" else 320 if d == "medium" else 420,
+        )
+    if kind == "pollution_containment_multiagent":
+        return TaskConfig(
+            kind=kind,
+            difficulty=difficulty,
+            success_radius_m=6.0,
+            max_steps=220 if d == "easy" else 280 if d == "medium" else 360,
+            leakage_radius_m=55.0 if d == "easy" else 40.0 if d == "medium" else 28.0,
+        )
+    raise ValueError(f"Unknown task kind: {kind}")
 
 
 def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarray], cfg: TaskConfig) -> TaskState:
@@ -82,4 +120,3 @@ def compute_success(
         return (float(pollution_total_mass) <= float(target)), {"mass_frac": float(pollution_total_mass), "target": float(target)}
 
     raise ValueError(f"Unknown task kind: {cfg.kind}")
-

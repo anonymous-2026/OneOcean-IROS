@@ -28,6 +28,7 @@ Example: go-to-goal under dataset current:
 python3 -m oneocean_sim_headless.cli.run \
   --drift-npz runs/headless/_cache/drift_scene_t0_d0.npz \
   --task go_to_goal_current \
+  --difficulty medium \
   --controller go_to_goal \
   --pollution-model gaussian \
   --n-agents 4 \
@@ -41,6 +42,7 @@ Example: multi-agent pollution containment (N=10):
 python3 -m oneocean_sim_headless.cli.run \
   --drift-npz runs/headless/_cache/drift_scene_t0_d0.npz \
   --task pollution_containment_multiagent \
+  --difficulty hard \
   --controller containment_ring \
   --pollution-model ocpnet_3d \
   --n-agents 10 \
@@ -59,6 +61,8 @@ Streams:
 - `agents/agent_000/actions/data.csv`
 - `agents/agent_000/obs/local_current/data.csv`
 - `agents/agent_000/obs/pollution_probe/data.csv`
+- `agents/agent_000/obs/latlon/data.csv`
+- `agents/agent_000/obs/bathymetry/data.csv` (elevation + land_mask-at-agent, if present in cache)
 - `environment_samples/global_time_index.csv`
 
 Validation:
