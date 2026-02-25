@@ -11,3 +11,4 @@ dask
 mujoco
 matplotlib
 imageio
+msgpack-rpc-python
