@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import habitat_sim
+import magnum as mn
 from habitat_sim.utils.common import (
     quat_from_angle_axis,
     quat_from_two_vectors,
@@ -198,6 +199,8 @@ def _setup_sim(scene_id: Path, camera: CameraConfig) -> tuple[habitat_sim.Simula
     sim_cfg.scene_dataset_config_file = "default"
     sim_cfg.scene_id = str(scene_id)
     sim_cfg.enable_physics = True
+    sim_cfg.override_scene_light_defaults = True
+    sim_cfg.scene_light_setup = "oneocean_underwater_lights"
 
     rgb_spec = habitat_sim.CameraSensorSpec()
     rgb_spec.uuid = "rgb"
@@ -217,6 +220,32 @@ def _setup_sim(scene_id: Path, camera: CameraConfig) -> tuple[habitat_sim.Simula
     agent_cfg.sensor_specifications = [rgb_spec, depth_spec]
 
     sim = habitat_sim.Simulator(habitat_sim.Configuration(sim_cfg, [agent_cfg]))
+    key = str(sim_cfg.scene_light_setup)
+    lights: list[habitat_sim.gfx.LightInfo] = []
+
+    # Soft bluish key light (directional).
+    key_light = habitat_sim.gfx.LightInfo()
+    key_light.vector = mn.Vector4(0.35, -1.0, 0.25, 0.0)
+    key_light.color = mn.Color3(0.78, 0.92, 1.00)
+    key_light.model = habitat_sim.gfx.LightPositionModel.Global
+    lights.append(key_light)
+
+    # Fill light (directional, dimmer).
+    fill = habitat_sim.gfx.LightInfo()
+    fill.vector = mn.Vector4(-0.55, -1.0, -0.10, 0.0)
+    fill.color = mn.Color3(0.40, 0.62, 0.78)
+    fill.model = habitat_sim.gfx.LightPositionModel.Global
+    lights.append(fill)
+
+    # Point light to lift shadows around the origin.
+    point = habitat_sim.gfx.LightInfo()
+    point.vector = mn.Vector4(0.0, 2.5, 0.0, 1.0)
+    point.color = mn.Color3(0.22, 0.40, 0.52)
+    point.model = habitat_sim.gfx.LightPositionModel.Global
+    lights.append(point)
+
+    # Register the setup under a custom key (avoid overriding 'no_lights').
+    sim.set_light_setup(lights, key=key)
     agent = sim.initialize_agent(0)
     return sim, agent
 
