@@ -22,6 +22,10 @@ MIMIR-UW Zenodo zips are **offline sensor datasets** (not packaged Unreal/AirSim
 - `depth*/sensor.yaml` (intrinsics + extrinsics `T_BS`)
 - `pose_groundtruth/data.csv` (timestamped poses)
 
+Implication (important):
+- For H1 we **do not have a directly reusable “underwater scene/world”** asset from MIMIR-UW (no UE project / packaged level distributed here).
+- The “scene” we run in simulation is therefore **our derived artifact** (a reconstructed mesh stage) rather than an upstream interactive environment.
+
 ## How the stage is built
 
 1) Choose one timestamp `t` and its aligned RGB + depth frame.
@@ -46,3 +50,11 @@ Then build the stage with `build_stage_from_mimir_frame.py`.
 - **Our tasks**: plume source localization + multi-agent plume cleanup/containment (N=2–10).
 - **Our eval**: metrics + manifests (`media_manifest.json`, `results_manifest.json`) for reproducible runs.
 
+## Why MIMIR-UW still helps even without a packaged world
+
+MIMIR-UW is still valuable for a “no-UI / headless” simulation workflow:
+- It provides **underwater RGB-D + segmentation + ground-truth pose** that supports offline evaluation and reproducible benchmarks.
+- We can turn frames into a **lightweight mesh stage** (`stage.obj`) for a headless simulator (e.g., Habitat-Sim), and run tasks without any interactive UI.
+
+Limitations to keep in mind:
+- MIMIR-UW itself does **not** provide an interactive dynamics world; we must inject **our** currents/bathymetry/pollution and define task logic.
