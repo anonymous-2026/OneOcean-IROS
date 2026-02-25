@@ -22,14 +22,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--time-index", type=int, default=0)
     parser.add_argument("--depth-index", type=int, default=0)
-    parser.add_argument(
-        "--external-scene",
-        type=str,
-        default="uuvsim_herkules_shipwreck",
-        choices=["uuvsim_herkules_shipwreck", "none"],
-        help="External scene base (preferred). Use 'none' to disable.",
-    )
-    parser.add_argument("--external-scene-max-faces", type=int, default=4000)
     parser.add_argument("--dt-sec", type=float, default=0.12)
     parser.add_argument("--max-steps", type=int, default=240)
     parser.add_argument("--max-rel-speed-mps", type=float, default=1.6)
@@ -68,8 +60,6 @@ def main() -> None:
         seed=args.seed,
         time_index=args.time_index,
         depth_index=args.depth_index,
-        external_scene=None if args.external_scene == "none" else args.external_scene,
-        external_scene_max_faces=int(args.external_scene_max_faces),
         dt_sec=args.dt_sec,
         max_steps=args.max_steps,
         max_rel_speed_mps=args.max_rel_speed_mps,

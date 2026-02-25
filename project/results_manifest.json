@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-02-25T05:53:01.846660+00:00",
+  "generated_at_utc": "2026-02-23T18:30:09.557067+00:00",
   "generated_by": "oneocean_sim_s3.experiments.build_s3_results_manifest",
   "suite_root": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1",
   "suite_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/suite_manifest.json",
@@ -17,9 +17,9 @@
       "variant": "scene",
       "tide_mode": "on",
       "episodes": 2,
-      "seed": 800,
-      "success_rate": 0.0,
-      "energy_proxy_mean": 73.99812422167366,
+      "seed": 1110,
+      "success_rate": 0.5,
+      "energy_proxy_mean": 109.86285209495276,
       "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on",
       "metrics_json": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/metrics.json",
       "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/00_reef_navigation_scene_tides_on/media/media_manifest.json",
@@ -34,9 +34,9 @@
       "variant": "scene",
       "tide_mode": "on",
       "episodes": 2,
-      "seed": 810,
-      "success_rate": 0.0,
-      "energy_proxy_mean": 146.88326259650603,
+      "seed": 1120,
+      "success_rate": 1.0,
+      "energy_proxy_mean": 206.76551091364988,
       "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on",
       "metrics_json": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/metrics.json",
       "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/01_formation_navigation_scene_tides_on/media/media_manifest.json",
@@ -51,9 +51,9 @@
       "variant": "scene",
       "tide_mode": "off",
       "episodes": 2,
-      "seed": 820,
-      "success_rate": 0.0,
-      "energy_proxy_mean": 73.76071983936572,
+      "seed": 1130,
+      "success_rate": 0.5,
+      "energy_proxy_mean": 103.20908250160218,
       "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off",
       "metrics_json": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/metrics.json",
       "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/02_reef_navigation_scene_tides_off/media/media_manifest.json",
@@ -68,9 +68,9 @@
       "variant": "scene",
       "tide_mode": "off",
       "episodes": 2,
-      "seed": 830,
-      "success_rate": 0.0,
-      "energy_proxy_mean": 148.78047910190344,
+      "seed": 1140,
+      "success_rate": 1.0,
+      "energy_proxy_mean": 203.40449075427532,
       "output_dir": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off",
       "metrics_json": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/metrics.json",
       "media_manifest": "/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/s3_3d_underwater_hero_v1/03_formation_navigation_scene_tides_off/media/media_manifest.json",
@@ -86,32 +86,32 @@
       "variant": "scene",
       "tide_mode": "off",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 148.78047910190344
+      "success_rate_mean": 1.0,
+      "energy_proxy_mean": 203.40449075427532
     },
     {
       "task": "formation_navigation",
       "variant": "scene",
       "tide_mode": "on",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 146.88326259650603
+      "success_rate_mean": 1.0,
+      "energy_proxy_mean": 206.76551091364988
     },
     {
       "task": "reef_navigation",
       "variant": "scene",
       "tide_mode": "off",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 73.76071983936572
+      "success_rate_mean": 0.5,
+      "energy_proxy_mean": 103.20908250160218
     },
     {
       "task": "reef_navigation",
       "variant": "scene",
       "tide_mode": "on",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 73.99812422167366
+      "success_rate_mean": 0.5,
+      "energy_proxy_mean": 109.86285209495276
     }
   ],
   "key_numbers": {
@@ -120,32 +120,32 @@
       "variant": "scene",
       "tide_mode": "off",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 148.78047910190344
+      "success_rate_mean": 1.0,
+      "energy_proxy_mean": 203.40449075427532
     },
     "formation_navigation:scene:on": {
       "task": "formation_navigation",
       "variant": "scene",
       "tide_mode": "on",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 146.88326259650603
+      "success_rate_mean": 1.0,
+      "energy_proxy_mean": 206.76551091364988
     },
     "reef_navigation:scene:off": {
       "task": "reef_navigation",
       "variant": "scene",
       "tide_mode": "off",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 73.76071983936572
+      "success_rate_mean": 0.5,
+      "energy_proxy_mean": 103.20908250160218
     },
     "reef_navigation:scene:on": {
       "task": "reef_navigation",
       "variant": "scene",
       "tide_mode": "on",
       "cases": 1,
-      "success_rate_mean": 0.0,
-      "energy_proxy_mean": 73.99812422167366
+      "success_rate_mean": 0.5,
+      "energy_proxy_mean": 109.86285209495276
     }
   }
 }
