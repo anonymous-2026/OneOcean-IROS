@@ -1,6 +1,0 @@
-{"run_id": "s1_matrix_v1", "name": "S1 compact matrix v1", "path": "runs/s1_matrix_v1", "meta": "runs/s1_matrix_v1/matrix_manifest.json", "created_utc": "2026-02-22 17:32:26 UTC"}
-{"run_id": "s1_matrix_v2", "name": "S1 compact matrix v2", "path": "runs/s1_matrix_v2", "meta": "runs/s1_matrix_v2/matrix_manifest.json", "created_utc": "2026-02-22 17:32:26 UTC"}
-{"run_id": "s1_matrix_v3", "name": "S1 controller+tide ablation matrix", "path": "runs/s1_matrix_v3", "meta": "runs/s1_matrix_v3/matrix_manifest.json", "created_utc": "2026-02-22 17:40:03 UTC"}
-{"run_id": "s1_report_v3", "name": "S1 report artifacts from matrix v3", "path": "runs/s1_reports/s1_matrix_v3", "meta": "runs/s1_reports/s1_matrix_v3/results_manifest.json", "created_utc": "2026-02-22 17:40:03 UTC"}
-{"run_id": "s1_robustness_v1", "name": "S1 robustness suite (official dataset)", "path": "runs/s1_robustness_v1", "meta": "runs/s1_robustness_v1/robustness_manifest.json", "created_utc": "2026-02-22 18:11:13 UTC"}
-{"run_id": "s1_media_v3", "name": "S1 media package from matrix v3", "path": "runs/s1_media/s1_matrix_v3", "meta": "runs/s1_media/s1_matrix_v3/media_manifest.json", "created_utc": "2026-02-22 18:11:13 UTC"}
