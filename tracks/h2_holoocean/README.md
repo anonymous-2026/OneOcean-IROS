@@ -33,6 +33,11 @@ Runs 2 tasks and writes per-task MP4 + metrics + `media_manifest.json`:
 - plume localization (multi-agent)
 - plume containment+cleanup (multi-agent; supports N=2–10; demo uses N=10)
 
+Note on ground truth:
+- Under advection, the maximum concentration is typically **downstream** of the physical “source position”.
+  For robustness, the runner defines the target as the post-warmup **concentration hotspot** (argmax on the diffusion grid),
+  and reports that target in `metrics.json` (`gt_kind=hotspot`).
+
 Pollution field options:
 - `--pollution-model ocpnet_3d` (default): **OCPNet PollutionModel3D** advection-diffusion field driven by `combined_environment.nc` currents.
 - `--pollution-model gaussian`: lightweight fallback (for debugging only; not valid for “official” must-use-data pollution runs).
