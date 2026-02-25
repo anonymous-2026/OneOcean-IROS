@@ -22,6 +22,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--time-index", type=int, default=0)
     parser.add_argument("--depth-index", type=int, default=0)
+    parser.add_argument(
+        "--external-scene",
+        type=str,
+        default="polyhaven:dutch_ship_large_01",
+        help="External scene base. Examples: 'polyhaven:dutch_ship_large_01', 'polyhaven:modular_industrial_pipes_01', or 'none'.",
+    )
+    parser.add_argument("--external-scene-resolution", type=str, default="1k", choices=["1k", "2k", "4k"])
+    parser.add_argument("--external-scene-max-faces", type=int, default=12000)
     parser.add_argument("--dt-sec", type=float, default=0.12)
     parser.add_argument("--max-steps", type=int, default=240)
     parser.add_argument("--max-rel-speed-mps", type=float, default=1.6)
@@ -60,6 +68,9 @@ def main() -> None:
         seed=args.seed,
         time_index=args.time_index,
         depth_index=args.depth_index,
+        external_scene=None if str(args.external_scene).strip() == "none" else str(args.external_scene).strip(),
+        external_scene_resolution=str(args.external_scene_resolution),
+        external_scene_max_faces=int(args.external_scene_max_faces),
         dt_sec=args.dt_sec,
         max_steps=args.max_steps,
         max_rel_speed_mps=args.max_rel_speed_mps,

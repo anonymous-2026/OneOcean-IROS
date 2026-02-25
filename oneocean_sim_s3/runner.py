@@ -35,6 +35,11 @@ class RunConfigS3:
     depth_index: int = 0
     include_tides: bool = True
 
+    # external scene (prefer third-party assets as the base)
+    external_scene: Optional[str] = "polyhaven:dutch_ship_large_01"
+    external_scene_resolution: str = "1k"
+    external_scene_max_faces: int = 12000
+
     # world config
     dt_sec: float = 0.12
     max_steps: int = 360
@@ -280,6 +285,9 @@ def run_task_s3(config: RunConfigS3, output_dir: Optional[str]) -> dict[str, str
             agents=agents,
             config=world_cfg,
             output_dir=out_dir,
+            external_scene=config.external_scene,
+            external_scene_resolution=str(config.external_scene_resolution),
+            external_scene_max_faces=int(config.external_scene_max_faces),
         )
 
         per_episode_metrics: list[dict[str, object]] = []
@@ -516,13 +524,22 @@ def run_task_s3(config: RunConfigS3, output_dir: Optional[str]) -> dict[str, str
             )
 
         if media_records:
+            command_args = [
+                f"--task {config.task}",
+                f"--variant {config.variant}",
+                f"--external-scene {config.external_scene or 'none'}",
+                f"--external-scene-resolution {str(config.external_scene_resolution)}",
+                f"--external-scene-max-faces {int(config.external_scene_max_faces)}",
+                f"--episodes {config.episodes}",
+                f"--seed {config.seed}",
+            ]
             media_manifest = {
                 "generated_at_utc": datetime.now(timezone.utc).isoformat(),
                 "task": str(config.task),
                 "output_dir": str(out_dir),
                 "media": media_records,
                 "command": "python -m oneocean_sim_s3.cli.run_navigation_task_s3 "
-                + " ".join([f"--task {config.task}", f"--variant {config.variant}", f"--episodes {config.episodes}", f"--seed {config.seed}"]),
+                + " ".join(command_args),
             }
             media_manifest_path = out_dir / "media" / "media_manifest.json"
             with media_manifest_path.open("w", encoding="utf-8") as file:
