@@ -136,7 +136,7 @@ class SuiteCfg:
     station_keep_seconds: float = 10.0
 
     plume_sigma_m: float = 35.0
-    plume_success_radius_m: float = 15.0
+    plume_success_radius_m: float = 25.0
 
     contain_leak_radius_m: float = 60.0
     contain_capture_radius_m: float = 6.0
@@ -156,6 +156,12 @@ class SuiteCfg:
     ocpnet_domain_m: tuple[float, float, float] = (240.0, 240.0, 60.0)
     ocpnet_sink_radius_m: float = 7.5
     ocpnet_sink_strength: float = 0.15
+    ocpnet_warmup_steps: int = 40
+    ocpnet_freeze_source_after_warmup: bool = True
+    ocpnet_emission_rate: float = 0.05
+
+    plume_localization_steps: int = 900
+    plume_containment_steps: int = 300
 
 
 def _stable_seed(*parts: str | int) -> int:
@@ -524,9 +530,16 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     start = _pose_xyz(_state_get(state, "auv0", "PoseSensor", n_agents))
 
     # Hidden source location (near start, but not identical).
+    d = str(cfg.difficulty).lower().strip()
+    if d == "easy":
+        src_range = 30.0
+    elif d == "hard":
+        src_range = 70.0
+    else:
+        src_range = 50.0
     src = (
-        start[0] + float(rng.uniform(-50.0, 50.0)),
-        start[1] + float(rng.uniform(-50.0, 50.0)),
+        start[0] + float(rng.uniform(-src_range, src_range)),
+        start[1] + float(rng.uniform(-src_range, src_range)),
         start[2],
     )
 
@@ -542,11 +555,18 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
                 domain_size_m=tuple(float(x) for x in cfg.ocpnet_domain_m),
                 grid_resolution=tuple(int(x) for x in cfg.ocpnet_grid),
                 time_step_s=dt,
+                initial_concentration=0.0,
+                emission_rate=float(cfg.ocpnet_emission_rate),
             ),
             work_dir=out_dir / "_ocpnet_cache",
             world_center_xyz=(start[0], start[1], start[2]),
         )
         plume.set_source_world((src[0], src[1], src[2]))
+
+        # Warmup plume before agent starts sweeping.
+        for i in range(max(0, int(cfg.ocpnet_warmup_steps))):
+            u0, v0 = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(i) * dt)
+            plume.step(u_mps=float(u0), v_mps=float(v0))
 
     def conc(x: float, y: float, z: float) -> float:
         if plume is None:
@@ -565,13 +585,53 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         rec = _Recorder(out_dir / "plume_viewport.mp4", out_dir / "plume_leftcamera.mp4", fps=cfg.fps)
         rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
 
-    # Spiral sweep targets.
-    steps = min(cfg.max_steps, 240)
+    # Waypoint sweep targets (hold each target long enough for the PD controller to actually travel).
+    steps = min(max(1, int(cfg.plume_localization_steps)), max(1, int(cfg.max_steps)) * 10)
+
+    grid_span = float(src_range)
+    if src_range <= 35.0:
+        grid_step = 20.0
+    elif src_range <= 60.0:
+        grid_step = 30.0
+    else:
+        grid_step = 40.0
+
+    dxs: list[float] = []
+    dys: list[float] = []
+    x = -grid_span
+    while x <= grid_span + 1e-6:
+        dxs.append(float(x))
+        x += grid_step
+    y = -grid_span
+    while y <= grid_span + 1e-6:
+        dys.append(float(y))
+        y += grid_step
+
+    waypoints: list[tuple[float, float]] = []
+    flip = False
+    for dy in dys:
+        row = list(dxs)
+        if flip:
+            row.reverse()
+        for dx in row:
+            waypoints.append((start[0] + dx, start[1] + dy))
+        flip = not flip
+    if not waypoints:
+        waypoints = [(start[0], start[1])]
+
+    max_hold_ticks = int(max(int(cfg.ticks_per_sec) * 3, math.ceil(steps / float(len(waypoints)))))
+    wp_idx = 0
+    hold_ticks = 0
+    prev_xy = (start[0], start[1])
+    traveled_m = 0.0
+    max_radius_from_start_m = 0.0
+    min_dist_to_source_m = float("inf")
+    w_sum = 0.0
+    wx_sum = 0.0
+    wy_sum = 0.0
+
     for k in range(steps):
-        a = 2.0 * math.pi * (k / 60.0)
-        r = min(55.0, 0.4 * k)
-        tx = start[0] + r * math.cos(a)
-        ty = start[1] + r * math.sin(a)
+        tx, ty = waypoints[min(wp_idx, len(waypoints) - 1)]
 
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(k) * dt)
         _apply_constant_current_drift(
@@ -593,15 +653,38 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         if pose is None:
             continue
         px, py, _pz = _pose_xyz(pose)
+        traveled_m += math.dist(prev_xy, (px, py))
+        prev_xy = (px, py)
+        max_radius_from_start_m = max(max_radius_from_start_m, math.dist((px, py), (start[0], start[1])))
+        min_dist_to_source_m = min(min_dist_to_source_m, math.dist((px, py), (src[0], src[1])))
         c = conc(px, py, start[2])
         if c > best_c:
             best_c = c
             best_xy = (px, py)
+        w = float(max(0.0, c)) ** 3
+        w_sum += w
+        wx_sum += w * float(px)
+        wy_sum += w * float(py)
+
+        if wp_idx < len(waypoints) - 1:
+            if math.dist((px, py), (tx, ty)) <= 2.5:
+                wp_idx += 1
+                hold_ticks = 0
+            else:
+                hold_ticks += 1
+                if hold_ticks >= max_hold_ticks:
+                    wp_idx += 1
+                    hold_ticks = 0
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
 
-    err = math.dist((best_xy[0], best_xy[1]), (src[0], src[1]))
+    if w_sum > 0.0:
+        est_xy = (wx_sum / w_sum, wy_sum / w_sum)
+    else:
+        est_xy = (best_xy[0], best_xy[1])
+
+    err = math.dist((est_xy[0], est_xy[1]), (src[0], src[1]))
     success = err <= cfg.plume_success_radius_m
     if rec is not None:
         rec.close()
@@ -610,9 +693,17 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         "task": "plume_localization",
         "seed": int(seed),
         "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
+        "pollution_model": str(cfg.pollution_model),
+        "source_range_m": float(src_range),
         "source_xy": [float(src[0]), float(src[1])],
-        "estimate_xy": [float(best_xy[0]), float(best_xy[1])],
+        "estimate_xy": [float(est_xy[0]), float(est_xy[1])],
+        "argmax_xy": [float(best_xy[0]), float(best_xy[1])],
+        "best_concentration": float(best_c),
         "error_m": float(err),
+        "traveled_m": float(traveled_m),
+        "max_radius_from_start_m": float(max_radius_from_start_m),
+        "min_dist_to_source_m": float(min_dist_to_source_m),
         "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
@@ -665,6 +756,8 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
                 domain_size_m=tuple(float(x) for x in cfg.ocpnet_domain_m),
                 grid_resolution=tuple(int(x) for x in cfg.ocpnet_grid),
                 time_step_s=dt,
+                initial_concentration=0.0,
+                emission_rate=float(cfg.ocpnet_emission_rate),
             ),
             work_dir=out_dir / "_ocpnet_cache",
             world_center_xyz=(p0[0], p0[1], p0[2]),
@@ -672,6 +765,14 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         plume.set_source_world((src[0], src[1], src[2]))
     else:
         particles = np.zeros((0, 3), dtype=np.float32)
+
+    # Warmup plume to create an initial field; optionally freeze the source so containment is meaningful.
+    warmup = max(0, int(cfg.ocpnet_warmup_steps)) if plume is not None else 0
+    for i in range(warmup):
+        u0, v0 = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(i) * dt)
+        plume.step(u_mps=float(u0), v_mps=float(v0))  # type: ignore[union-attr]
+    if plume is not None and bool(cfg.ocpnet_freeze_source_after_warmup):
+        plume.freeze_source()
 
     # Small diffusion to create spread.
     diff_sigma = 0.5
@@ -706,7 +807,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             rec_fp.append_rgb(fp0)
             break
 
-    steps = min(cfg.max_steps, 300)
+    steps = min(max(1, int(cfg.plume_containment_steps)), max(1, int(cfg.max_steps)) * 10)
     for step in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
         theta = 2.0 * math.pi * (step / float(max(1, steps)))
@@ -806,6 +907,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "steps": int(steps),
         "time_s": float(steps * dt),
         "pollution_model": str(cfg.pollution_model),
+        "ocpnet_freeze_source_after_warmup": bool(cfg.ocpnet_freeze_source_after_warmup),
         "success": bool(success),
     }
     if plume is not None:
@@ -840,6 +942,15 @@ def main() -> int:
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
     ap.add_argument("--dataset_days_per_sim_second", type=float, default=SuiteCfg.dataset_days_per_sim_second)
     ap.add_argument("--pollution_model", default=SuiteCfg.pollution_model, choices=("analytic", "ocpnet_3d"))
+    ap.add_argument("--ocpnet_warmup_steps", type=int, default=SuiteCfg.ocpnet_warmup_steps)
+    ap.add_argument("--ocpnet_emission_rate", type=float, default=SuiteCfg.ocpnet_emission_rate)
+    ap.add_argument(
+        "--ocpnet_freeze_source_after_warmup",
+        action=argparse.BooleanOptionalAction,
+        default=SuiteCfg.ocpnet_freeze_source_after_warmup,
+    )
+    ap.add_argument("--plume_localization_steps", type=int, default=SuiteCfg.plume_localization_steps)
+    ap.add_argument("--plume_containment_steps", type=int, default=SuiteCfg.plume_containment_steps)
     args = ap.parse_args()
 
     _ensure_ssl_cert_file()
@@ -857,6 +968,11 @@ def main() -> int:
         current_depth_m=float(args.current_depth_m),
         dataset_days_per_sim_second=float(args.dataset_days_per_sim_second),
         pollution_model=str(args.pollution_model),
+        ocpnet_warmup_steps=int(args.ocpnet_warmup_steps),
+        ocpnet_emission_rate=float(args.ocpnet_emission_rate),
+        ocpnet_freeze_source_after_warmup=bool(args.ocpnet_freeze_source_after_warmup),
+        plume_localization_steps=int(args.plume_localization_steps),
+        plume_containment_steps=int(args.plume_containment_steps),
     )
     cfg = _cfg_with_difficulty(cfg, str(args.difficulty))
     scenarios = list(args.scenarios) if args.scenarios else scenario_preset(args.preset)

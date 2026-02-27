@@ -9,6 +9,7 @@ class OCPNetCfg:
     domain_size_m: tuple[float, float, float] = (240.0, 240.0, 60.0)
     grid_resolution: tuple[int, int, int] = (24, 24, 12)
     time_step_s: float = 0.05
+    initial_concentration: float = 0.0
     diffusion_coefficient: float = 8e-8
     decay_rate: float = 8e-7
     emission_rate: float = 0.015
@@ -66,7 +67,7 @@ class OCPNetPlume:
         self.pollutant = "microplastic"
         self.model.add_pollutant(
             name=self.pollutant,
-            initial_concentration=0.005,
+            initial_concentration=float(cfg.initial_concentration),
             molecular_weight=1.0,
             decay_rate=float(cfg.decay_rate),
             diffusion_coefficient=float(cfg.diffusion_coefficient),
@@ -103,6 +104,12 @@ class OCPNetPlume:
             emission_rate=float(self.cfg.emission_rate),
             time_function=lambda t: 1.0,
         )
+
+    def freeze_source(self) -> None:
+        for s in getattr(self.model.source_sink, "point_sources", []):
+            if s.get("pollutant") == self.pollutant and s.get("type") == "point":
+                s["emission_rate"] = 0.0
+                s["time_function"] = (lambda _t: 0.0)
 
     def step(self, *, u_mps: float, v_mps: float) -> None:
         import numpy as np
@@ -176,4 +183,3 @@ class OCPNetPlume:
         far = (dx * dx + dy * dy) >= float(leak_radius_m) ** 2
         far3 = np.repeat(far[:, :, None], self.model.grid.nz, axis=2)
         return float(np.sum(c[far3] * self.model.grid.volumes[far3]))
-
