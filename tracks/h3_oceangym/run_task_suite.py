@@ -256,9 +256,11 @@ def _patch_for_suite(base: dict, *, cfg: SuiteCfg, add_viewport: bool, n_agents:
     scenario = patch_scenario_for_recording(base, holo_cfg, add_viewport_capture=add_viewport)
     scenario = add_hovering_auv_agents(scenario, n_agents=n_agents)
 
-    # Set PD control for all agents (HoveringAUV control_scheme=1 is PD controller).
+    # Keep the scenario's original HoveringAUV control scheme (OceanGym worlds ship with a working default).
+    # Overriding this can silently break motion control (e.g., go-to-goal never converges).
+    cs = int(scenario.get("agents", [{}])[0].get("control_scheme", 0))
     for a in scenario.get("agents", []):
-        a["control_scheme"] = 1
+        a["control_scheme"] = cs
 
     # Spread agents around the auv0 start pose.
     a0 = scenario["agents"][0]
