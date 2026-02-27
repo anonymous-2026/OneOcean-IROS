@@ -33,6 +33,23 @@ def _cmd_run_synthetic(args: argparse.Namespace) -> int:
     media_dir = output_dir / "media"
     media_dir.mkdir(parents=True, exist_ok=True)
 
+    def _ensure_eps_for_pngs(root: Path) -> None:
+        try:
+            from PIL import Image  # type: ignore
+        except Exception:
+            return
+        for png_path in sorted(root.glob("*.png")):
+            eps_path = png_path.with_suffix(".eps")
+            if eps_path.exists():
+                continue
+            try:
+                im = Image.open(png_path)
+                if im.mode not in {"RGB", "L"}:
+                    im = im.convert("RGB")
+                im.save(eps_path, format="EPS")
+            except Exception:
+                continue
+
     summary = run_synthetic_diffusion_case(
         output_dir=output_dir,
         nx=args.nx,
@@ -41,6 +58,7 @@ def _cmd_run_synthetic(args: argparse.Namespace) -> int:
         steps=args.steps,
         time_step=args.time_step,
     )
+    _ensure_eps_for_pngs(output_dir)
 
     lons = np.arange(args.lon_min, args.lon_max + args.resolution, args.resolution)
     lats = np.arange(args.lat_min, args.lat_max + args.resolution, args.resolution)
@@ -248,4 +266,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
