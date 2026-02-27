@@ -179,6 +179,69 @@ def _warmup_until(state_fn, required_keys: list[str], max_ticks: int = 240):
             return state
     raise RuntimeError(f"Sensors not available after warmup ticks: {required_keys}")
 
+def _agent_type(scenario: dict) -> str:
+    try:
+        agents = scenario.get("agents") or []
+        if agents:
+            return str(agents[0].get("agent_type") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def _action_candidates(agent_type: str):
+    import numpy as np
+
+    agent_type = str(agent_type or "")
+    if agent_type == "HoveringAUV":
+        a = np.zeros((8,), dtype=np.float32)
+        a[4:8] = 18.0
+        yield a
+        # alternative: slightly more forward + down for visible motion
+        b = np.zeros((8,), dtype=np.float32)
+        b[:4] = -2.0
+        b[4:8] = 18.0
+        yield b
+        return
+
+    if agent_type == "TorpedoAUV":
+        # Heuristic: many torpedo-style controllers accept a small action vector (e.g., throttle + control surfaces).
+        # We don't assume an exact schema; the caller will probe with env.step().
+        for throttle in (10.0, 18.0, 1.0):
+            yield np.array([throttle, 0.0, 0.0, 0.0], dtype=np.float32)
+            yield np.array([throttle, 0.2, 0.0, 0.0], dtype=np.float32)
+            yield np.array([throttle, -0.2, 0.0, 0.0], dtype=np.float32)
+        return
+
+    # Generic fallback: try a few common action sizes.
+    for n in (8, 6, 4, 3, 2, 1):
+        a = np.zeros((n,), dtype=np.float32)
+        if n >= 1:
+            a[0] = 10.0
+        if n >= 4:
+            a[-1] = 0.2
+        yield a
+
+
+def _probe_action(env, *, agent_type: str, ticks_per_frame: int, base_state: dict):
+    import numpy as np
+
+    pose0 = _pose_to_position(base_state.get("PoseSensor", None))
+    for act in _action_candidates(agent_type):
+        try:
+            st1 = env.step(np.asarray(act, dtype=np.float32), ticks=ticks_per_frame, publish=False)
+        except Exception:
+            continue
+        pose1 = _pose_to_position(st1.get("PoseSensor", None))
+        if pose0 is None or pose1 is None:
+            return act
+        dx = float(pose1[0] - pose0[0])
+        dy = float(pose1[1] - pose0[1])
+        dz = float(pose1[2] - pose0[2])
+        if (dx * dx + dy * dy + dz * dz) ** 0.5 > 0.05:
+            return act
+    return None
+
 
 def main() -> int:
     cfg = GateCfg(
@@ -256,12 +319,15 @@ def main() -> int:
             return env.tick(num_ticks=ticks_per_frame, publish=False)
 
         _tick_once()
-        state0 = _warmup_until(lambda: _tick_once(), ["ViewportCapture", "LeftCamera"], max_ticks=120)
+        # Some scenarios (or agent types) may not support an RGBCamera socket; make LeftCamera best-effort.
+        state0 = _warmup_until(lambda: _tick_once(), ["ViewportCapture"], max_ticks=120)
 
         import numpy as np
 
         viewport0 = _ensure_uint8_rgb(state0["ViewportCapture"])
         _write_png(orbit_png, viewport0)
+        fpv_source = "LeftCamera" if (state0.get("LeftCamera") is not None) else "ViewportCapture(fallback)"
+        manifest["outputs"]["fpv_source_note"] = fpv_source
 
         # Orbit / third-person clip.
         center = _pose_to_position(state0.get("PoseSensor", None))
@@ -289,9 +355,12 @@ def main() -> int:
                     orbit_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
         _write_gif(orbit_gif, orbit_gif_frames, fps=8)
 
-        # Vehicle motion clip (apply a simple constant thrust command).
-        action = np.zeros((8,), dtype=np.float32)
-        action[4:8] = 18.0
+        # Vehicle motion clip (probe an action vector that actually moves for this agent type).
+        agent_type = _agent_type(scenario)
+        action = _probe_action(env, agent_type=agent_type, ticks_per_frame=ticks_per_frame, base_state=state0)
+        if action is None:
+            manifest["outputs"]["move_note"] = f"No compatible action found for agent_type={agent_type!r}; wrote orbit clip only."
+            action = np.zeros((1,), dtype=np.float32)
 
         move_gif_frames = []
         fpv_gif_frames = []
@@ -312,16 +381,23 @@ def main() -> int:
                 last = env.step(action, ticks=ticks_per_frame, publish=False)
                 if i == 0 and "ViewportCapture" in last and last["ViewportCapture"] is not None:
                     _write_png(move_png, _ensure_uint8_rgb(last["ViewportCapture"]))
-                if i == 0 and "LeftCamera" in last and last["LeftCamera"] is not None:
-                    _write_png(move_fp_png, _ensure_uint8_rgb(last["LeftCamera"]))
+                if i == 0:
+                    fp = last.get("LeftCamera")
+                    if fp is None:
+                        fp = last.get("ViewportCapture")
+                    if fp is not None:
+                        _write_png(move_fp_png, _ensure_uint8_rgb(fp))
 
                 if "ViewportCapture" in last and last["ViewportCapture"] is not None:
                     rgb = _ensure_uint8_rgb(last["ViewportCapture"])
                     vw.append(rgb)
                     if (i % move_stride) == 0:
                         move_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
-                if "LeftCamera" in last and last["LeftCamera"] is not None:
-                    rgb = _ensure_uint8_rgb(last["LeftCamera"])
+                fp = last.get("LeftCamera")
+                if fp is None:
+                    fp = last.get("ViewportCapture")
+                if fp is not None:
+                    rgb = _ensure_uint8_rgb(fp)
                     fw.append(rgb)
                     if (i % move_stride) == 0:
                         fpv_gif_frames.append(_downscale_for_gif(rgb, target_width=480))

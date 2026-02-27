@@ -86,6 +86,7 @@ class RunnerCfg:
     # viewport visibility / lighting
     force_viewport_underwater: bool = True
     viewport_exposure: float = 1.35
+    fpv_exposure: float = 1.0
 
     # visualization helpers
     debug_draw: bool = True
@@ -377,6 +378,23 @@ def _state_agent(state: dict, agent_name: str) -> dict:
     if agent_name in state:
         return state[agent_name]
     return state
+
+
+def _count_collision_events(state: dict, *, num_agents: int, prev: dict[str, bool]) -> int:
+    events = 0
+    for i in range(int(num_agents)):
+        name = f"auv{i}"
+        ai = _state_agent(state, name)
+        coll = False
+        if ai.get("CollisionSensor") is not None:
+            try:
+                coll = bool(ai["CollisionSensor"][0])
+            except Exception:
+                coll = bool(ai["CollisionSensor"])
+        if coll and (not prev.get(name, False)):
+            events += 1
+        prev[name] = coll
+    return int(events)
 
 
 def _gaussian_conc_xy(x: float, y: float, cx: float, cy: float, sigma: float) -> float:
@@ -743,6 +761,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     success_step = None
     energy = 0.0
     collisions = 0
+    prev_colliding: dict[str, bool] = {}
 
     explore_steps = max(1, int(round(0.55 * float(steps))))
     search_r = float(min(float(cfg.pollution_min_source_dist_m) + 8.0, 0.40 * float(cfg.pollution_domain_xy_m)))
@@ -764,7 +783,9 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
             if t % 2 == 0:
                 p_cam = _pose_to_position(_state_agent(st, "auv0").get("PoseSensor")) or [p0[0], p0[1], p0[2]]
                 cam_target = [p_cam[0], p_cam[1], float(src_world[2])]
-                cam_pos = [p_cam[0] - cfg.cam_back_m, p_cam[1] - cfg.cam_back_m, float(src_world[2]) + cfg.cam_height_m]
+                a = 2.0 * math.pi * (t / float(max(1, steps)))
+                r = float(cfg.cam_back_m)
+                cam_pos = [p_cam[0] + r * math.cos(a), p_cam[1] + r * math.sin(a), float(src_world[2]) + cfg.cam_height_m]
                 env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
 
             if t % 5 == 0:
@@ -807,15 +828,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                 env.act(name, act)
 
             st = _safe_tick(env, publish=False)
-
-            # Collision metric: count per-tick "any collision" to avoid inflated counts.
-            any_collision = False
-            for i in range(cfg.num_agents):
-                ai = _state_agent(st, f"auv{i}")
-                if ai.get("CollisionSensor") is not None and bool(ai["CollisionSensor"][0]):
-                    any_collision = True
-            if any_collision:
-                collisions += 1
+            collisions += _count_collision_events(st, num_agents=cfg.num_agents, prev=prev_colliding)
 
             a0 = _state_agent(st, "auv0")
             frame = a0.get("ViewportCapture")
@@ -829,7 +842,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                     gif_frames.append(_downscale_for_gif(rgb, target_width=480))
 
             if last_fpv is not None:
-                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure)
+                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.fpv_exposure)
                 fw.append(rgb)
                 if t == 10:
                     imageio.imwrite(start_fpv_png, rgb)
@@ -849,7 +862,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
         if last_fpv is not None:
-            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure))
+            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.fpv_exposure))
 
     _write_gif(gif_path, gif_frames, fps=8)
     _write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
@@ -946,6 +959,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
 
     energy = 0.0
     collisions = 0
+    prev_colliding: dict[str, bool] = {}
     success_step = None
     coverage_sum = 0.0
     leakage_sum = 0.0
@@ -967,7 +981,9 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
             # Camera follows plume center to show the task region.
             if t % 2 == 0:
                 cam_target = [float(center[0]), float(center[1]), float(center[2])]
-                cam_pos = [float(center[0]) - cfg.cam_back_m, float(center[1]) - cfg.cam_back_m, float(center[2]) + cfg.cam_height_m]
+                a = 2.0 * math.pi * (t / float(max(1, steps)))
+                r = float(cfg.cam_back_m)
+                cam_pos = [float(center[0]) + r * math.cos(a), float(center[1]) + r * math.sin(a), float(center[2]) + cfg.cam_height_m]
                 env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
 
             if t % 5 == 0:
@@ -1032,13 +1048,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 pollution.apply_sink(sink_world_positions)
 
             st = _safe_tick(env, publish=False)
-            any_collision = False
-            for i in range(cfg.num_agents):
-                ai = _state_agent(st, f"auv{i}")
-                if ai.get("CollisionSensor") is not None and bool(ai["CollisionSensor"][0]):
-                    any_collision = True
-            if any_collision:
-                collisions += 1
+            collisions += _count_collision_events(st, num_agents=cfg.num_agents, prev=prev_colliding)
 
             a0 = _state_agent(st, "auv0")
             frame = a0.get("ViewportCapture")
@@ -1052,7 +1062,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                     gif_frames.append(_downscale_for_gif(rgb, target_width=480))
 
             if last_fpv is not None:
-                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure)
+                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.fpv_exposure)
                 fw.append(rgb)
                 if t == 10:
                     imageio.imwrite(start_fpv_png, rgb)
@@ -1068,7 +1078,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
         if last_fpv is not None:
-            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure))
+            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.fpv_exposure))
 
     _write_gif(gif_path, gif_frames, fps=8)
     _write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
