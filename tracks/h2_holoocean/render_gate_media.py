@@ -20,6 +20,8 @@ class GateCfg:
     orbit_radius_m: float = 18.0
     orbit_height_m: float = 6.0
     render_quality: int = 3  # 0..3
+    max_sensor_hz: int = 20
+    strip_nonvis_sensors: bool = False
     show_viewport: bool = False
     window_width: int = 1280
     window_height: int = 720
@@ -114,12 +116,13 @@ def _patch_scenario_for_gate(scenario: dict, cfg: GateCfg) -> dict:
 
     main_agent = scenario["agents"][0]
     sensors = list(main_agent.get("sensors", []))
-    if not sensors:
-        raise ValueError("Scenario agent has no sensors.")
+    if cfg.strip_nonvis_sensors:
+        keep = {"PoseSensor", "VelocitySensor", "DepthSensor", "CollisionSensor"}
+        sensors = [s for s in sensors if s.get("sensor_type") in keep]
 
     for sensor in sensors:
         hz = int(sensor.get("Hz", cfg.ticks_per_sec))
-        sensor["Hz"] = min(hz, cfg.ticks_per_sec)
+        sensor["Hz"] = min(hz, cfg.ticks_per_sec, int(cfg.max_sensor_hz))
 
         if sensor.get("sensor_type") in {"RGBCamera"}:
             sensor["Hz"] = cfg.fps
@@ -178,6 +181,57 @@ def _warmup_until(state_fn, required_keys: list[str], max_ticks: int = 240):
         if all((k in state and state[k] is not None) for k in required_keys):
             return state
     raise RuntimeError(f"Sensors not available after warmup ticks: {required_keys}")
+
+def _state_agent(state: dict, agent_name: str) -> dict:
+    if agent_name in state and isinstance(state[agent_name], dict):
+        return state[agent_name]
+    return state
+
+
+def _get_sensor(state: dict, *, agent_name: str, sensor_key: str):
+    agent_state = _state_agent(state, agent_name)
+    if sensor_key in agent_state and agent_state[sensor_key] is not None:
+        return agent_state[sensor_key]
+    if sensor_key in state and state[sensor_key] is not None:
+        return state[sensor_key]
+    return None
+
+
+def _warmup_until_agent(state_fn, *, agent_name: str, required_keys: list[str], max_ticks: int = 240):
+    for _ in range(max_ticks):
+        state = state_fn()
+        if all((_get_sensor(state, agent_name=agent_name, sensor_key=k) is not None) for k in required_keys):
+            return state
+    raise RuntimeError(f"Sensors not available after warmup ticks for agent={agent_name!r}: {required_keys}")
+
+def _safe_call(fn, *, retries: int = 6, base_sleep_s: float = 0.15):
+    import time
+
+    last_exc: Exception | None = None
+    for i in range(int(retries)):
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if e.__class__.__name__ != "BusyError":
+                raise
+            time.sleep(float(base_sleep_s) * float(i + 1))
+    raise RuntimeError(f"HoloOcean call failed after {retries} retries (BusyError).") from last_exc
+
+
+def _make_env_with_retries(*, make_fn, retries: int = 4, base_sleep_s: float = 0.8):
+    import time
+
+    last_exc: Exception | None = None
+    for i in range(int(retries)):
+        try:
+            return make_fn()
+        except Exception as e:
+            last_exc = e
+            if e.__class__.__name__ != "BusyError":
+                raise
+            time.sleep(float(base_sleep_s) * float(i + 1))
+    raise RuntimeError(f"HoloOcean make() failed after {retries} retries (BusyError).") from last_exc
 
 def _agent_type(scenario: dict) -> str:
     try:
@@ -247,6 +301,13 @@ def main() -> int:
     cfg = GateCfg(
         scenario_name=os.environ.get("SCENARIO_NAME", GateCfg.scenario_name),
         show_viewport=os.environ.get("SHOW_VIEWPORT", "0").strip() in {"1", "true", "True"},
+        ticks_per_sec=int(os.environ.get("TICKS_PER_SEC", str(GateCfg.ticks_per_sec))),
+        fps=int(os.environ.get("FPS", str(GateCfg.fps))),
+        orbit_seconds=float(os.environ.get("ORBIT_SECONDS", str(GateCfg.orbit_seconds))),
+        move_seconds=float(os.environ.get("MOVE_SECONDS", str(GateCfg.move_seconds))),
+        render_quality=int(os.environ.get("RENDER_QUALITY", str(GateCfg.render_quality))),
+        max_sensor_hz=int(os.environ.get("MAX_SENSOR_HZ", str(GateCfg.max_sensor_hz))),
+        strip_nonvis_sensors=os.environ.get("STRIP_NONVIS_SENSORS", "0").strip() in {"1", "true", "True"},
     )
 
     out_dir = Path(os.environ.get("OUT_DIR", f"runs/h2_holoocean/gate_media_{_tag_now_local()}")).resolve()
@@ -255,8 +316,6 @@ def main() -> int:
     ticks_per_frame = int(cfg.ticks_per_sec // cfg.fps)
     if ticks_per_frame * cfg.fps != cfg.ticks_per_sec:
         raise ValueError(f"ticks_per_sec must be divisible by fps; got {cfg.ticks_per_sec=} {cfg.fps=}")
-    if ticks_per_frame != 1:
-        raise ValueError("This script assumes ticks_per_sec == fps to avoid HoloOcean tick_every gating.")
 
     orbit_frames = max(1, int(round(cfg.orbit_seconds * cfg.fps)))
     move_frames = max(1, int(round(cfg.move_seconds * cfg.fps)))
@@ -267,6 +326,7 @@ def main() -> int:
 
     base_scenario = get_scenario(cfg.scenario_name)
     scenario = _patch_scenario_for_gate(base_scenario, cfg)
+    main_agent_name = str(scenario.get("main_agent") or (scenario.get("agents") or [{}])[0].get("agent_name") or "auv0")
 
     manifest = {
         "created_at_utc": _utc_now(),
@@ -277,6 +337,7 @@ def main() -> int:
         "cfg": asdict(cfg),
         "scenario_name": cfg.scenario_name,
         "scenario_cfg_note": "scenario loaded from installed package then patched in-memory (package_name + ViewportCapture + tick/fps settings).",
+        "main_agent_name": main_agent_name,
         "worlds_root": "/home/shuaijun/.local/share/holoocean/0.5.0/worlds/Ocean/",
         "world_zip_cache": "/data/private/user2/workspace/ocean/project_mgmt/sync/_external_scene_cache/holocean_worlds/Ocean_v0.5.0_Linux.zip",
         "world_zip_sha256": "1f7ad5f829ae6c9a82daa43b6d21fdfaca07711eb09c1d578f5249b13f040618",
@@ -304,33 +365,38 @@ def main() -> int:
     manifest["outputs"]["move_leftcamera_mp4"] = str(move_fp_mp4)
     manifest["outputs"]["move_leftcamera_gif"] = str(move_fp_gif)
 
-    with holoocean.make(
-        scenario_cfg=scenario,
-        show_viewport=cfg.show_viewport,
-        ticks_per_sec=cfg.ticks_per_sec,
-        frames_per_sec=cfg.fps,
-        verbose=False,
-    ) as env:
+    env_cm = _make_env_with_retries(
+        make_fn=lambda: holoocean.make(
+            scenario_cfg=scenario,
+            show_viewport=cfg.show_viewport,
+            ticks_per_sec=cfg.ticks_per_sec,
+            frames_per_sec=cfg.fps,
+            verbose=False,
+        )
+    )
+
+    with env_cm as env:
         env.set_render_quality(int(cfg.render_quality))
         env.should_render_viewport(True)
 
         # Wait for cameras to start producing frames.
         def _tick_once():
-            return env.tick(num_ticks=ticks_per_frame, publish=False)
+            return _safe_call(lambda: env.tick(num_ticks=ticks_per_frame, publish=False))
 
         _tick_once()
-        # Some scenarios (or agent types) may not support an RGBCamera socket; make LeftCamera best-effort.
-        state0 = _warmup_until(lambda: _tick_once(), ["ViewportCapture"], max_ticks=120)
+        # Some scenarios return state nested under agent_name; always warm up on the main agent.
+        state0 = _warmup_until_agent(lambda: _tick_once(), agent_name=main_agent_name, required_keys=["ViewportCapture"], max_ticks=200)
+        agent0 = _state_agent(state0, main_agent_name)
 
         import numpy as np
 
-        viewport0 = _ensure_uint8_rgb(state0["ViewportCapture"])
+        viewport0 = _ensure_uint8_rgb(_get_sensor(state0, agent_name=main_agent_name, sensor_key="ViewportCapture"))
         _write_png(orbit_png, viewport0)
-        fpv_source = "LeftCamera" if (state0.get("LeftCamera") is not None) else "ViewportCapture(fallback)"
+        fpv_source = "LeftCamera" if (_get_sensor(state0, agent_name=main_agent_name, sensor_key="LeftCamera") is not None) else "ViewportCapture(fallback)"
         manifest["outputs"]["fpv_source_note"] = fpv_source
 
         # Orbit / third-person clip.
-        center = _pose_to_position(state0.get("PoseSensor", None))
+        center = _pose_to_position(_get_sensor(state0, agent_name=main_agent_name, sensor_key="PoseSensor"))
         if center is None:
             # Scenario default start for Dam/PierHarbor hovering camera.
             agent0 = scenario["agents"][0]
@@ -347,9 +413,10 @@ def main() -> int:
                 rpy = _look_at_rpy([x, y, z], center)
                 env.move_viewport([x, y, z], rpy)
                 st = _tick_once()
-                if "ViewportCapture" not in st or st["ViewportCapture"] is None:
+                vp = _get_sensor(st, agent_name=main_agent_name, sensor_key="ViewportCapture")
+                if vp is None:
                     continue
-                rgb = _ensure_uint8_rgb(st["ViewportCapture"])
+                rgb = _ensure_uint8_rgb(vp)
                 vw.append(rgb)
                 if (i % orbit_stride) == 0:
                     orbit_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
@@ -357,7 +424,7 @@ def main() -> int:
 
         # Vehicle motion clip (probe an action vector that actually moves for this agent type).
         agent_type = _agent_type(scenario)
-        action = _probe_action(env, agent_type=agent_type, ticks_per_frame=ticks_per_frame, base_state=state0)
+        action = _probe_action(env, agent_type=agent_type, ticks_per_frame=ticks_per_frame, base_state=_state_agent(state0, main_agent_name))
         if action is None:
             manifest["outputs"]["move_note"] = f"No compatible action found for agent_type={agent_type!r}; wrote orbit clip only."
             action = np.zeros((1,), dtype=np.float32)
@@ -369,7 +436,8 @@ def main() -> int:
             last = None
             for i in range(move_frames):
                 # Keep viewport slightly above/behind the vehicle if PoseSensor is available.
-                pos = _pose_to_position(last.get("PoseSensor", None)) if last is not None else None
+                last_a = _state_agent(last, main_agent_name) if last is not None else None
+                pos = _pose_to_position(last_a.get("PoseSensor", None)) if last_a is not None else None
                 if pos is not None:
                     px, py, pz = pos
                     r = 10.0
@@ -378,24 +446,27 @@ def main() -> int:
                     cz = pz + 3.5
                     env.move_viewport([cx, cy, cz], _look_at_rpy([cx, cy, cz], [px, py, pz]))
 
-                last = env.step(action, ticks=ticks_per_frame, publish=False)
-                if i == 0 and "ViewportCapture" in last and last["ViewportCapture"] is not None:
-                    _write_png(move_png, _ensure_uint8_rgb(last["ViewportCapture"]))
+                last = _safe_call(lambda: env.step(action, ticks=ticks_per_frame, publish=False))
                 if i == 0:
-                    fp = last.get("LeftCamera")
+                    vp = _get_sensor(last, agent_name=main_agent_name, sensor_key="ViewportCapture")
+                    if vp is not None:
+                        _write_png(move_png, _ensure_uint8_rgb(vp))
+                if i == 0:
+                    fp = _get_sensor(last, agent_name=main_agent_name, sensor_key="LeftCamera")
                     if fp is None:
-                        fp = last.get("ViewportCapture")
+                        fp = _get_sensor(last, agent_name=main_agent_name, sensor_key="ViewportCapture")
                     if fp is not None:
                         _write_png(move_fp_png, _ensure_uint8_rgb(fp))
 
-                if "ViewportCapture" in last and last["ViewportCapture"] is not None:
-                    rgb = _ensure_uint8_rgb(last["ViewportCapture"])
+                vp = _get_sensor(last, agent_name=main_agent_name, sensor_key="ViewportCapture")
+                if vp is not None:
+                    rgb = _ensure_uint8_rgb(vp)
                     vw.append(rgb)
                     if (i % move_stride) == 0:
                         move_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
-                fp = last.get("LeftCamera")
+                fp = _get_sensor(last, agent_name=main_agent_name, sensor_key="LeftCamera")
                 if fp is None:
-                    fp = last.get("ViewportCapture")
+                    fp = _get_sensor(last, agent_name=main_agent_name, sensor_key="ViewportCapture")
                 if fp is not None:
                     rgb = _ensure_uint8_rgb(fp)
                     fw.append(rgb)
