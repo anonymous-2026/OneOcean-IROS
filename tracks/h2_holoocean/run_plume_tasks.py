@@ -129,6 +129,37 @@ class _Mp4Writer:
         self.close()
 
 
+def _downscale_for_gif(frame_rgb_u8, *, target_width: int = 480):
+    from PIL import Image
+    import numpy as np
+
+    arr = np.asarray(frame_rgb_u8, dtype=np.uint8)
+    h, w = int(arr.shape[0]), int(arr.shape[1])
+    tw = int(max(64, target_width))
+    if w <= tw:
+        return arr
+    th = int(round(h * (tw / float(w))))
+    img = Image.fromarray(arr, mode="RGB").resize((tw, max(1, th)), resample=Image.BILINEAR)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def _write_gif(path: Path, frames_rgb_u8: list, *, fps: int = 8) -> None:
+    import imageio.v2 as imageio
+
+    if not frames_rgb_u8:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    duration = 1.0 / float(max(1, int(fps)))
+    imageio.mimsave(path, frames_rgb_u8, duration=duration)
+
+
+def _get_fpv_frame(agent_state: dict):
+    for k in ("LeftCamera", "RightCamera", "FrontCamera", "FPVCamera"):
+        if k in agent_state and agent_state[k] is not None:
+            return agent_state[k]
+    return None
+
+
 def _safe_tick(env, *, publish: bool, retries: int = 6, base_sleep_s: float = 0.15):
     import time
 
@@ -652,7 +683,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     for _ in range(200):
         st = _safe_tick(env, publish=False)
         a0 = _state_agent(st, "auv0")
-        if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None:
+        if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None and (_get_fpv_frame(a0) is not None):
             break
     if st is None:
         raise RuntimeError("Failed to warm up environment.")
@@ -685,8 +716,13 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     dt = 1.0 / float(cfg.fps)
 
     mp4_path = task_dir / "rollout.mp4"
+    gif_path = task_dir / "rollout.gif"
+    fpv_mp4_path = task_dir / "rollout_fpv.mp4"
+    fpv_gif_path = task_dir / "rollout_fpv.gif"
     start_png = task_dir / "start.png"
     end_png = task_dir / "end.png"
+    start_fpv_png = task_dir / "start_fpv.png"
+    end_fpv_png = task_dir / "end_fpv.png"
     metrics_path = task_dir / "metrics.json"
 
     best_conc = -1.0
@@ -703,7 +739,11 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         for i in range(cfg.num_agents)
     }
 
-    with _Mp4Writer(mp4_path, fps=cfg.fps) as vw:
+    gif_frames = []
+    fpv_gif_frames = []
+    gif_stride = max(1, int(round(float(cfg.fps) / 8.0)))
+    last_fpv = None
+    with _Mp4Writer(mp4_path, fps=cfg.fps) as vw, _Mp4Writer(fpv_mp4_path, fps=cfg.fps) as fw:
         for t in range(steps):
             pollution.step_if_due(dt)
 
@@ -766,11 +806,22 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
 
             a0 = _state_agent(st, "auv0")
             frame = a0.get("ViewportCapture")
+            last_fpv = _get_fpv_frame(a0)
             if frame is not None:
                 rgb = _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure)
                 vw.append(rgb)
                 if t == 10:
                     imageio.imwrite(start_png, rgb)
+                if (t % gif_stride) == 0:
+                    gif_frames.append(_downscale_for_gif(rgb, target_width=480))
+
+            if last_fpv is not None:
+                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure)
+                fw.append(rgb)
+                if t == 10:
+                    imageio.imwrite(start_fpv_png, rgb)
+                if (t % gif_stride) == 0:
+                    fpv_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
 
             if success_step is None:
                 for i in range(cfg.num_agents):
@@ -784,6 +835,11 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
 
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
+        if last_fpv is not None:
+            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure))
+
+    _write_gif(gif_path, gif_frames, fps=8)
+    _write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
 
     est = np.array([best_xy[0], best_xy[1]], dtype=np.float32)
     gt = np.array([float(gt_world[0]), float(gt_world[1])], dtype=np.float32)
@@ -805,7 +861,18 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         "est_source_xy": [float(best_xy[0]), float(best_xy[1])],
     }
     _write_json(metrics_path, metrics)
-    return {"task_dir": str(task_dir), "metrics": metrics, "video": str(mp4_path), "start_png": str(start_png), "end_png": str(end_png)}
+    return {
+        "task_dir": str(task_dir),
+        "metrics": metrics,
+        "video": str(mp4_path),
+        "gif": str(gif_path),
+        "video_fpv": str(fpv_mp4_path),
+        "gif_fpv": str(fpv_gif_path),
+        "start_png": str(start_png),
+        "end_png": str(end_png),
+        "start_fpv_png": str(start_fpv_png),
+        "end_fpv_png": str(end_fpv_png),
+    }
 
 
 def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Path) -> dict:
@@ -819,7 +886,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     for _ in range(200):
         st = _safe_tick(env, publish=False)
         a0 = _state_agent(st, "auv0")
-        if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None:
+        if a0.get("PoseSensor") is not None and a0.get("ViewportCapture") is not None and (_get_fpv_frame(a0) is not None):
             break
     if st is None:
         raise RuntimeError("Failed to warm up environment.")
@@ -855,8 +922,13 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     dt = 1.0 / float(cfg.fps)
 
     mp4_path = task_dir / "rollout.mp4"
+    gif_path = task_dir / "rollout.gif"
+    fpv_mp4_path = task_dir / "rollout_fpv.mp4"
+    fpv_gif_path = task_dir / "rollout_fpv.gif"
     start_png = task_dir / "start.png"
     end_png = task_dir / "end.png"
+    start_fpv_png = task_dir / "start_fpv.png"
+    end_fpv_png = task_dir / "end_fpv.png"
     metrics_path = task_dir / "metrics.json"
 
     energy = 0.0
@@ -871,7 +943,11 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     clean_agents = {f"auv{i}" for i in range(n_clean)}
     sink_every = max(1, int(round(float(cfg.pollution_update_period_s) / max(1e-9, float(dt)))))
 
-    with _Mp4Writer(mp4_path, fps=cfg.fps) as vw:
+    gif_frames = []
+    fpv_gif_frames = []
+    gif_stride = max(1, int(round(float(cfg.fps) / 8.0)))
+    last_fpv = None
+    with _Mp4Writer(mp4_path, fps=cfg.fps) as vw, _Mp4Writer(fpv_mp4_path, fps=cfg.fps) as fw:
         for t in range(steps):
             pollution.step_if_due(dt)
 
@@ -953,11 +1029,22 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
 
             a0 = _state_agent(st, "auv0")
             frame = a0.get("ViewportCapture")
+            last_fpv = _get_fpv_frame(a0)
             if frame is not None:
                 rgb = _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure)
                 vw.append(rgb)
                 if t == 10:
                     imageio.imwrite(start_png, rgb)
+                if (t % gif_stride) == 0:
+                    gif_frames.append(_downscale_for_gif(rgb, target_width=480))
+
+            if last_fpv is not None:
+                rgb = _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure)
+                fw.append(rgb)
+                if t == 10:
+                    imageio.imwrite(start_fpv_png, rgb)
+                if (t % gif_stride) == 0:
+                    fpv_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
 
             mass_frac = pollution.mass_fraction()
             if mass_frac is not None:
@@ -967,6 +1054,11 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
 
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
+        if last_fpv is not None:
+            imageio.imwrite(end_fpv_png, _maybe_expose(_ensure_uint8_rgb(last_fpv), cfg.viewport_exposure))
+
+    _write_gif(gif_path, gif_frames, fps=8)
+    _write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
 
     mass_frac_final = pollution.mass_fraction()
     mean_coverage = float(coverage_sum / float(max(1, steps)))
@@ -992,7 +1084,18 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         "leakage_success_threshold": float(cfg.leakage_success_threshold),
     }
     _write_json(metrics_path, metrics)
-    return {"task_dir": str(task_dir), "metrics": metrics, "video": str(mp4_path), "start_png": str(start_png), "end_png": str(end_png)}
+    return {
+        "task_dir": str(task_dir),
+        "metrics": metrics,
+        "video": str(mp4_path),
+        "gif": str(gif_path),
+        "video_fpv": str(fpv_mp4_path),
+        "gif_fpv": str(fpv_gif_path),
+        "start_png": str(start_png),
+        "end_png": str(end_png),
+        "start_fpv_png": str(start_fpv_png),
+        "end_fpv_png": str(end_fpv_png),
+    }
 
 
 def main() -> int:

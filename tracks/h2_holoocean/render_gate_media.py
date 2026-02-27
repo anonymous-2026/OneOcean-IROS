@@ -76,6 +76,30 @@ class _Mp4Writer:
         self.close()
 
 
+def _downscale_for_gif(frame_rgb_u8, *, target_width: int = 480):
+    from PIL import Image
+    import numpy as np
+
+    arr = np.asarray(frame_rgb_u8, dtype=np.uint8)
+    h, w = int(arr.shape[0]), int(arr.shape[1])
+    tw = int(max(64, target_width))
+    if w <= tw:
+        return arr
+    th = int(round(h * (tw / float(w))))
+    img = Image.fromarray(arr, mode="RGB").resize((tw, max(1, th)), resample=Image.BILINEAR)
+    return np.asarray(img, dtype=np.uint8)
+
+
+def _write_gif(path: Path, frames_rgb_u8: list, *, fps: int = 8) -> None:
+    import imageio.v2 as imageio
+
+    if not frames_rgb_u8:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    duration = 1.0 / float(max(1, int(fps)))
+    imageio.mimsave(path, frames_rgb_u8, duration=duration)
+
+
 def _patch_scenario_for_gate(scenario: dict, cfg: GateCfg) -> dict:
     scenario = json.loads(json.dumps(scenario))
     scenario["package_name"] = cfg.package_name
@@ -187,15 +211,23 @@ def main() -> int:
 
     orbit_png = out_dir / "orbit_keyframe.png"
     orbit_mp4 = out_dir / "orbit_viewport.mp4"
+    orbit_gif = out_dir / "orbit_viewport.gif"
     move_png = out_dir / "move_keyframe.png"
     move_mp4 = out_dir / "move_viewport.mp4"
     move_fp_mp4 = out_dir / "move_leftcamera.mp4"
+    move_fp_png = out_dir / "move_leftcamera_keyframe.png"
+    move_gif = out_dir / "move_viewport.gif"
+    move_fp_gif = out_dir / "move_leftcamera.gif"
 
     manifest["outputs"]["orbit_keyframe_png"] = str(orbit_png)
     manifest["outputs"]["orbit_viewport_mp4"] = str(orbit_mp4)
+    manifest["outputs"]["orbit_viewport_gif"] = str(orbit_gif)
     manifest["outputs"]["move_keyframe_png"] = str(move_png)
     manifest["outputs"]["move_viewport_mp4"] = str(move_mp4)
+    manifest["outputs"]["move_viewport_gif"] = str(move_gif)
+    manifest["outputs"]["move_leftcamera_keyframe_png"] = str(move_fp_png)
     manifest["outputs"]["move_leftcamera_mp4"] = str(move_fp_mp4)
+    manifest["outputs"]["move_leftcamera_gif"] = str(move_fp_gif)
 
     with holoocean.make(
         scenario_cfg=scenario,
@@ -226,6 +258,8 @@ def main() -> int:
             agent0 = scenario["agents"][0]
             center = [float(x) for x in agent0.get("location", [0.0, 0.0, -5.0])]
 
+        orbit_gif_frames = []
+        orbit_stride = max(1, int(round(float(cfg.fps) / 8.0)))
         with _Mp4Writer(orbit_mp4, fps=cfg.fps) as vw:
             for i in range(orbit_frames):
                 a = 2.0 * math.pi * (i / float(orbit_frames))
@@ -237,12 +271,19 @@ def main() -> int:
                 st = _tick_once()
                 if "ViewportCapture" not in st or st["ViewportCapture"] is None:
                     continue
-                vw.append(_ensure_uint8_rgb(st["ViewportCapture"]))
+                rgb = _ensure_uint8_rgb(st["ViewportCapture"])
+                vw.append(rgb)
+                if (i % orbit_stride) == 0:
+                    orbit_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
+        _write_gif(orbit_gif, orbit_gif_frames, fps=8)
 
         # Vehicle motion clip (apply a simple constant thrust command).
         action = np.zeros((8,), dtype=np.float32)
         action[4:8] = 18.0
 
+        move_gif_frames = []
+        fpv_gif_frames = []
+        move_stride = max(1, int(round(float(cfg.fps) / 8.0)))
         with _Mp4Writer(move_mp4, fps=cfg.fps) as vw, _Mp4Writer(move_fp_mp4, fps=cfg.fps) as fw:
             last = None
             for i in range(move_frames):
@@ -259,11 +300,22 @@ def main() -> int:
                 last = env.step(action, ticks=ticks_per_frame, publish=False)
                 if i == 0 and "ViewportCapture" in last and last["ViewportCapture"] is not None:
                     _write_png(move_png, _ensure_uint8_rgb(last["ViewportCapture"]))
+                if i == 0 and "LeftCamera" in last and last["LeftCamera"] is not None:
+                    _write_png(move_fp_png, _ensure_uint8_rgb(last["LeftCamera"]))
 
                 if "ViewportCapture" in last and last["ViewportCapture"] is not None:
-                    vw.append(_ensure_uint8_rgb(last["ViewportCapture"]))
+                    rgb = _ensure_uint8_rgb(last["ViewportCapture"])
+                    vw.append(rgb)
+                    if (i % move_stride) == 0:
+                        move_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
                 if "LeftCamera" in last and last["LeftCamera"] is not None:
-                    fw.append(_ensure_uint8_rgb(last["LeftCamera"]))
+                    rgb = _ensure_uint8_rgb(last["LeftCamera"])
+                    fw.append(rgb)
+                    if (i % move_stride) == 0:
+                        fpv_gif_frames.append(_downscale_for_gif(rgb, target_width=480))
+
+        _write_gif(move_gif, move_gif_frames, fps=8)
+        _write_gif(move_fp_gif, fpv_gif_frames, fps=8)
 
     (out_dir / "media_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0
