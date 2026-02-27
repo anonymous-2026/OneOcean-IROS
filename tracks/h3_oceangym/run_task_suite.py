@@ -502,6 +502,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     cam_h = 18.0
 
     rec_vp: _Mp4Writer | None = None
+    rec_fp: _Mp4Writer | None = None
     if record:
         out_dir.mkdir(parents=True, exist_ok=True)
         # Wait for viewport capture to come online with non-black pixels.
@@ -512,13 +513,17 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             )
             state = env.tick(num_ticks=1, publish=False)
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
-            if vp is None:
+            fp = _state_get(state, "auv0", "LeftCamera", n_agents)
+            if vp is None or fp is None:
                 continue
             vp0 = _ensure_uint8_rgb(vp)
             if float(vp0.mean()) < 2.0:
                 continue
             rec_vp = _Mp4Writer(out_dir / "contain_viewport.mp4", fps=cfg.fps, size_hw=vp0.shape[:2])
             rec_vp.append_rgb(vp0)
+            fp0 = _ensure_uint8_rgb(fp)
+            rec_fp = _Mp4Writer(out_dir / "contain_leftcamera.mp4", fps=cfg.fps, size_hw=fp0.shape[:2])
+            rec_fp.append_rgb(fp0)
             break
 
     steps = min(cfg.max_steps, 300)
@@ -552,6 +557,10 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
             if vp is not None:
                 rec_vp.append_rgb(_ensure_uint8_rgb(vp))
+        if rec_fp is not None:
+            fp = _state_get(state, "auv0", "LeftCamera", n_agents)
+            if fp is not None:
+                rec_fp.append_rgb(_ensure_uint8_rgb(fp))
 
         # Remove captured particles.
         if particles.size:
@@ -582,6 +591,8 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     success = (leaked <= 0.25 * removed) if removed > 0 else (leaked == 0)
     if rec_vp is not None:
         rec_vp.close()
+    if rec_fp is not None:
+        rec_fp.close()
 
     res = {
         "task": "plume_containment_multiagent",
@@ -595,7 +606,10 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "success": bool(success),
     }
     if record:
-        res["media"] = {"viewport_mp4": str(out_dir / "contain_viewport.mp4")}
+        res["media"] = {
+            "viewport_mp4": str(out_dir / "contain_viewport.mp4"),
+            "leftcamera_mp4": str(out_dir / "contain_leftcamera.mp4"),
+        }
     return res
 
 

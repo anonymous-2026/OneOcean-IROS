@@ -28,3 +28,18 @@ SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.w
 
 This produces a top-level `results_manifest.json`, plus per-task `results_manifest.json` files.
 
+## 3) Postprocess: generate GIFs + per-video screenshots
+
+The suite/render scripts export MP4s. For paper/demo convenience, we also generate:
+- `*.gif` next to each `*.mp4`
+- 3 keyframes per MP4: `*_keyframe_000.png`, `*_keyframe_<mid>.png`, `*_keyframe_<last>.png` (frame indices depend on video length)
+
+This requires `imageio+Pillow`. On this machine, use the conda Python:
+
+```bash
+cd "oneocean(iros-2026-code)"
+/home/shuaijun/miniconda3/bin/python tracks/h3_oceangym/postprocess_media.py \
+  --roots runs/oceangym_h3/scene_media_20260226_043035 runs/oceangym_h3/task_suite_20260226_043900
+```
+
+It writes `postprocess_media_manifest.json` into each root for traceability.

@@ -116,14 +116,16 @@ def _run_containment(env, *, seed: int, ticks_per_sec: int, fps: int, n_agents: 
     diff_sigma = 0.5
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    mp4_path = out_dir / "contain_viewport.mp4"
+    vp_mp4_path = out_dir / "contain_viewport.mp4"
+    fp_mp4_path = out_dir / "contain_leftcamera.mp4"
 
     # Viewport policy: orbit around the source so multi-agent structure stays visible.
     cam_r = max(55.0, ring_r * 2.2)
     cam_h = 18.0
 
     # Warm up viewport and start recording only when non-black.
-    writer = None
+    writer_vp = None
+    writer_fp = None
     for _ in range(300):
         env.move_viewport(
             [src[0] + cam_r, src[1], src[2] + cam_h],
@@ -131,15 +133,19 @@ def _run_containment(env, *, seed: int, ticks_per_sec: int, fps: int, n_agents: 
         )
         state = env.tick(num_ticks=1, publish=False)
         vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
-        if vp is None:
+        fp = _state_get(state, "auv0", "LeftCamera", n_agents)
+        if vp is None or fp is None:
             continue
         vp0 = _ensure_uint8_rgb(vp)
         if float(vp0.mean()) < 2.0:
             continue
         import cv2  # type: ignore
 
-        writer = _Mp4Writer(mp4_path, fps=fps, size_hw=vp0.shape[:2])
-        writer.append_bgr(cv2.cvtColor(vp0, cv2.COLOR_RGB2BGR))
+        writer_vp = _Mp4Writer(vp_mp4_path, fps=fps, size_hw=vp0.shape[:2])
+        writer_vp.append_bgr(cv2.cvtColor(vp0, cv2.COLOR_RGB2BGR))
+        fp0 = _ensure_uint8_rgb(fp)
+        writer_fp = _Mp4Writer(fp_mp4_path, fps=fps, size_hw=fp0.shape[:2])
+        writer_fp.append_bgr(cv2.cvtColor(fp0, cv2.COLOR_RGB2BGR))
         break
 
     steps = 300
@@ -166,12 +172,18 @@ def _run_containment(env, *, seed: int, ticks_per_sec: int, fps: int, n_agents: 
 
         state = env.tick(num_ticks=1, publish=False)
 
-        if writer is not None:
+        if writer_vp is not None:
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
             if vp is not None:
                 import cv2  # type: ignore
 
-                writer.append_bgr(cv2.cvtColor(_ensure_uint8_rgb(vp), cv2.COLOR_RGB2BGR))
+                writer_vp.append_bgr(cv2.cvtColor(_ensure_uint8_rgb(vp), cv2.COLOR_RGB2BGR))
+        if writer_fp is not None:
+            fp = _state_get(state, "auv0", "LeftCamera", n_agents)
+            if fp is not None:
+                import cv2  # type: ignore
+
+                writer_fp.append_bgr(cv2.cvtColor(_ensure_uint8_rgb(fp), cv2.COLOR_RGB2BGR))
 
         if particles.size:
             keep = np.ones((particles.shape[0],), dtype=bool)
@@ -196,8 +208,10 @@ def _run_containment(env, *, seed: int, ticks_per_sec: int, fps: int, n_agents: 
                 leaked += int(far.sum())
                 particles = particles[~far]
 
-    if writer is not None:
-        writer.close()
+    if writer_vp is not None:
+        writer_vp.close()
+    if writer_fp is not None:
+        writer_fp.close()
 
     success = (leaked <= 0.25 * removed) if removed > 0 else (leaked == 0)
     return {
@@ -210,7 +224,7 @@ def _run_containment(env, *, seed: int, ticks_per_sec: int, fps: int, n_agents: 
         "removed_particles": int(removed),
         "leaked_particles": int(leaked),
         "success": bool(success),
-        "media": {"viewport_mp4": str(mp4_path)},
+        "media": {"viewport_mp4": str(vp_mp4_path), "leftcamera_mp4": str(fp_mp4_path)},
     }
 
 
@@ -287,7 +301,15 @@ def main() -> int:
         }
         (task_dir / "results_manifest.json").write_text(json.dumps(per_task, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         (task_dir / "media_manifest.json").write_text(
-            json.dumps({"ep000_viewport_mp4": res["media"]["viewport_mp4"]}, indent=2, sort_keys=True) + "\n",
+            json.dumps(
+                {
+                    "ep000_viewport_mp4": res["media"]["viewport_mp4"],
+                    "ep000_leftcamera_mp4": res["media"]["leftcamera_mp4"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
 
