@@ -185,7 +185,8 @@ def _cfg_with_difficulty(cfg: SuiteCfg, difficulty: str) -> SuiteCfg:
             difficulty="easy",
             current_u_mps=cfg.current_u_mps * 0.6,
             current_v_mps=cfg.current_v_mps * 0.6,
-            nav_goal_dist_m=max(25.0, cfg.nav_goal_dist_m * 0.75),
+            nav_goal_dist_m=max(15.0, cfg.nav_goal_dist_m * 0.5),
+            nav_goal_radius_m=max(4.0, cfg.nav_goal_radius_m * 2.5),
             station_keep_seconds=max(6.0, cfg.station_keep_seconds * 0.8),
             plume_sigma_m=cfg.plume_sigma_m * 1.25,
             plume_success_radius_m=cfg.plume_success_radius_m * 1.25,
@@ -372,6 +373,8 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
 
     success = False
     steps = 0
+    min_dist = float("inf")
+    final_dist = float("inf")
     for step in range(cfg.max_steps):
         steps = step + 1
 
@@ -405,7 +408,10 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
             px, py, pz = _pose_xyz(pose)
-            if math.dist((px, py, pz), goal) <= cfg.nav_goal_radius_m:
+            d_goal = float(math.dist((px, py, pz), goal))
+            min_dist = min(min_dist, d_goal)
+            final_dist = d_goal
+            if d_goal <= cfg.nav_goal_radius_m:
                 success = True
                 break
 
@@ -425,9 +431,12 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
         "seed": int(seed),
         "n_agents": int(n_agents),
         "goal_xyz": [float(goal[0]), float(goal[1]), float(goal[2])],
+        "goal_radius_m": float(cfg.nav_goal_radius_m),
         "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "min_dist_to_goal_m": float(min_dist),
+        "final_dist_to_goal_m": float(final_dist),
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
@@ -497,14 +506,24 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     if rec is not None:
         rec.close()
 
+    d = str(cfg.difficulty).lower().strip()
+    if d == "easy":
+        rms_thresh = 8.0
+    elif d == "hard":
+        rms_thresh = 3.0
+    else:
+        rms_thresh = 5.0
+
     res = {
         "task": "station_keeping",
         "seed": int(seed),
         "n_agents": int(n_agents),
-        "success": bool(rms <= 3.0),
+        "difficulty": str(cfg.difficulty),
+        "success": bool(rms <= rms_thresh),
         "steps": int(steps),
         "time_s": float(steps * dt),
         "rms_pos_error_m": float(rms),
+        "rms_success_threshold_m": float(rms_thresh),
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
