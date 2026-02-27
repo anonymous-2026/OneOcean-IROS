@@ -7,7 +7,7 @@ import math
 import os
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 # Allow running as a script: `python tracks/h3_oceangym/run_task_suite.py`.
@@ -120,6 +120,7 @@ def _look_at_rpy(camera_xyz: tuple[float, float, float], target_xyz: tuple[float
 @dataclass(frozen=True)
 class SuiteCfg:
     preset: str = "ocean_worlds_camera"
+    difficulty: str = "medium"
     ticks_per_sec: int = 20
     fps: int = 20
     max_steps: int = 300
@@ -157,6 +158,62 @@ def _stable_seed(*parts: str | int) -> int:
         h.update(b"|")
     # Fit in 32-bit signed range.
     return int(h.hexdigest()[:8], 16)
+
+
+def _cfg_with_difficulty(cfg: SuiteCfg, difficulty: str) -> SuiteCfg:
+    d = str(difficulty).lower().strip()
+    if d not in {"easy", "medium", "hard"}:
+        raise ValueError(f"Unknown difficulty: {difficulty!r}")
+    if d == "medium":
+        return replace(cfg, difficulty="medium")
+    if d == "easy":
+        return replace(
+            cfg,
+            difficulty="easy",
+            current_u_mps=cfg.current_u_mps * 0.6,
+            current_v_mps=cfg.current_v_mps * 0.6,
+            nav_goal_dist_m=max(25.0, cfg.nav_goal_dist_m * 0.75),
+            station_keep_seconds=max(6.0, cfg.station_keep_seconds * 0.8),
+            plume_sigma_m=cfg.plume_sigma_m * 1.25,
+            plume_success_radius_m=cfg.plume_success_radius_m * 1.25,
+            contain_spawn_per_step=max(3, int(round(cfg.contain_spawn_per_step * 0.7))),
+        )
+    return replace(
+        cfg,
+        difficulty="hard",
+        current_u_mps=cfg.current_u_mps * 1.6,
+        current_v_mps=cfg.current_v_mps * 1.6,
+        nav_goal_dist_m=cfg.nav_goal_dist_m * 1.5,
+        station_keep_seconds=cfg.station_keep_seconds * 1.25,
+        plume_sigma_m=max(10.0, cfg.plume_sigma_m * 0.75),
+        plume_success_radius_m=max(5.0, cfg.plume_success_radius_m * 0.7),
+        contain_spawn_per_step=max(6, int(round(cfg.contain_spawn_per_step * 1.3))),
+    )
+
+
+def _mean(xs: list[float]) -> float | None:
+    if not xs:
+        return None
+    return float(sum(xs) / float(len(xs)))
+
+
+def _summarize_task(task_name: str, episodes: list[dict]) -> dict:
+    succ = [1.0 if bool(ep.get("success", False)) else 0.0 for ep in episodes]
+    out: dict[str, object] = {
+        "task": task_name,
+        "episodes": int(len(episodes)),
+        "success_rate": float(sum(succ) / float(len(succ))) if succ else 0.0,
+    }
+    for k in ("time_s", "steps", "collisions", "energy_proxy", "error_m", "leaked_particles", "removed_particles"):
+        vals = []
+        for ep in episodes:
+            v = ep.get(k)
+            if isinstance(v, (int, float)):
+                vals.append(float(v))
+        m = _mean(vals)
+        if m is not None:
+            out[f"mean_{k}"] = m
+    return out
 
 
 def _patch_for_suite(base: dict, *, cfg: SuiteCfg, add_viewport: bool, n_agents: int) -> dict:
@@ -685,6 +742,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default=SuiteCfg.preset)
+    ap.add_argument("--difficulty", default=SuiteCfg.difficulty, choices=("easy", "medium", "hard"))
     ap.add_argument(
         "--scenarios",
         nargs="*",
@@ -715,6 +773,7 @@ def main() -> int:
         current_depth_m=float(args.current_depth_m),
         dataset_days_per_sim_second=float(args.dataset_days_per_sim_second),
     )
+    cfg = _cfg_with_difficulty(cfg, str(args.difficulty))
     scenarios = list(args.scenarios) if args.scenarios else scenario_preset(args.preset)
 
     out_root = Path(args.out_dir) if args.out_dir else Path("runs") / "oceangym_h3" / f"task_suite_{_tag_now_local()}"
@@ -838,9 +897,12 @@ def main() -> int:
                     for k, v in dict(res["media"]).items():
                         media_manifest[f"ep{ep:03d}_{k}"] = str(v)
 
+            per_task["summary"] = _summarize_task(task_name, list(per_task["episodes"]))
+
             # Write per-task manifest.
             (task_dir / "media_manifest.json").write_text(json.dumps(media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             (task_dir / "results_manifest.json").write_text(json.dumps(per_task, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            (task_dir / "metrics.json").write_text(json.dumps(per_task["summary"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
             per["episodes"].append(per_task)
 
         suite_manifest["scenarios"][scenario_name] = per

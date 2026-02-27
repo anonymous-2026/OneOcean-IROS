@@ -26,7 +26,10 @@ SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.w
   .venv_h3_oceangym/bin/python tracks/h3_oceangym/run_task_suite.py --preset ocean_worlds_camera --episodes 3
 ```
 
-This produces a top-level `results_manifest.json`, plus per-task `results_manifest.json` files.
+This produces a top-level `results_manifest.json`, plus per-task `results_manifest.json` files and `metrics.json` summaries.
+
+Difficulty presets:
+- `--difficulty easy|medium|hard`
 
 ## 2.1) (Optional) Data-grounded currents from combined_environment.nc
 
