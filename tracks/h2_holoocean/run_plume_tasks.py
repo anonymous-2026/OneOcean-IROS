@@ -309,6 +309,19 @@ def _patch_scenario_for_runner(base_scenario: dict, cfg: RunnerCfg) -> dict:
             out.append(s)
 
         want = {x.get("sensor_type") for x in out}
+        if keep_cameras:
+            # Ensure an FPV camera exists even for scenarios that don't ship RGBCamera sensors by default.
+            has_rgb = any(x.get("sensor_type") == "RGBCamera" for x in out)
+            if not has_rgb:
+                out.append(
+                    {
+                        "sensor_type": "RGBCamera",
+                        "sensor_name": "LeftCamera",
+                        "socket": "CameraLeftSocket",
+                        "Hz": int(cfg.fps),
+                        "configuration": {"CaptureWidth": 512, "CaptureHeight": 512},
+                    }
+                )
         if "PoseSensor" not in want:
             out.append({"sensor_type": "PoseSensor", "socket": "IMUSocket", "Hz": int(cfg.fps)})
         if "VelocitySensor" not in want:

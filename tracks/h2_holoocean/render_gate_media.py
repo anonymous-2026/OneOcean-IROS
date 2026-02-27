@@ -124,6 +124,18 @@ def _patch_scenario_for_gate(scenario: dict, cfg: GateCfg) -> dict:
         if sensor.get("sensor_type") in {"RGBCamera"}:
             sensor["Hz"] = cfg.fps
 
+    # Ensure an FPV camera exists even for scenarios without RGBCamera by default.
+    if not any(s.get("sensor_type") == "RGBCamera" for s in sensors):
+        sensors.append(
+            {
+                "sensor_type": "RGBCamera",
+                "sensor_name": "LeftCamera",
+                "socket": "CameraLeftSocket",
+                "Hz": cfg.fps,
+                "configuration": {"CaptureWidth": 512, "CaptureHeight": 512},
+            }
+        )
+
     sensors.append(
         {
             "sensor_type": "ViewportCapture",
