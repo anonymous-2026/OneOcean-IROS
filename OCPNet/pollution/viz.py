@@ -308,7 +308,7 @@ def plot_pollutant_diffusion(
     smooth_passes: int = 2,
     upsample: int = 3,
     wspace: float = 0.18,
-    hspace: float = 0.16,
+    hspace: float = 0.12,
 ) -> Dict[str, str]:
     output_path = _as_path(output_dir)
     land_cmap = mcolors.LinearSegmentedColormap.from_list("legacy_land", _LEGACY_LAND_COLORS)
@@ -675,7 +675,7 @@ def plot_pollutant_diffusion(
 
         ani = animation.FuncAnimation(fig_anim, update, frames=len(pollutant_data_all_days), interval=140, blit=False)
         gif_file = output_path / f"{prefix}.gif"
-        ani.save(gif_file, writer=animation.PillowWriter(fps=8))
+        ani.save(gif_file, writer=animation.PillowWriter(fps=8), dpi=220)
         plt.close(fig_anim)
         outputs["gif"] = str(gif_file)
 
@@ -686,7 +686,7 @@ def plot_multi_pollutant_overlay(
     lon_grid: np.ndarray,
     lat_grid: np.ndarray,
     pollutants: Dict[str, Sequence[np.ndarray]],
-    reaction_frames: Optional[Sequence[np.ndarray]],
+    reaction_frames: Optional[Union[Sequence[np.ndarray], Dict[str, Sequence[np.ndarray]]]],
     days: Sequence[int],
     panel_labels: Sequence[str],
     frame_labels: Optional[Sequence[str]],
@@ -698,8 +698,9 @@ def plot_multi_pollutant_overlay(
     basemap_style: str = "stock",
     smooth_passes: int = 2,
     upsample: int = 3,
+    pollutants_all_days: Optional[Dict[str, Sequence[np.ndarray]]] = None,
+    reaction_frames_all_days: Optional[Union[Sequence[np.ndarray], Dict[str, Sequence[np.ndarray]]]] = None,
 ) -> Dict[str, str]:
-    # Use the same basemap/stamp + spacing conventions as plot_pollutant_diffusion.
     output_path = _as_path(output_dir)
 
     cartopy_ctx = None
@@ -850,12 +851,27 @@ def plot_multi_pollutant_overlay(
             )
 
     names = list(pollutants.keys())
-    cmap_map = {
-        names[0]: plt.cm.Reds,
-        names[1]: plt.cm.Blues if len(names) > 1 else plt.cm.Blues,
-        names[2]: plt.cm.Greens if len(names) > 2 else plt.cm.Greens,
-    }
-    alpha_map = {names[0]: 0.55, names[1]: 0.50 if len(names) > 1 else 0.5, names[2]: 0.45 if len(names) > 2 else 0.45}
+    # user requirement: pollutant/reaction overlays must NOT use blue tones.
+    safe_cmaps = [plt.cm.YlOrRd, plt.cm.Oranges, plt.cm.Greens, plt.cm.magma]
+    cmap_map = {name: safe_cmaps[i % len(safe_cmaps)] for i, name in enumerate(names)}
+    alpha_defaults = [0.58, 0.52, 0.46, 0.44]
+    alpha_map = {name: alpha_defaults[i % len(alpha_defaults)] for i, name in enumerate(names)}
+
+    reactions_panel: Dict[str, Sequence[np.ndarray]] = {}
+    if reaction_frames is not None:
+        if isinstance(reaction_frames, dict):
+            reactions_panel = {str(k): list(v) for k, v in reaction_frames.items()}
+        else:
+            reactions_panel = {"Reaction rate": list(reaction_frames)}
+
+    reactions_all: Dict[str, Sequence[np.ndarray]] = {}
+    if reaction_frames_all_days is not None:
+        if isinstance(reaction_frames_all_days, dict):
+            reactions_all = {str(k): list(v) for k, v in reaction_frames_all_days.items()}
+        else:
+            reactions_all = {"Reaction rate": list(reaction_frames_all_days)}
+    elif reactions_panel:
+        reactions_all = reactions_panel
 
     n = len(days)
     ncols = min(3, n)
@@ -878,8 +894,12 @@ def plot_multi_pollutant_overlay(
         ccrs, _cfeature = cartopy_ctx
         transform = ccrs.PlateCarree()
 
-    overlay_levels = np.linspace(0.25, 1.0, 6)
-    for idx, day in enumerate(days):
+    overlay_levels = np.array([0.08, 0.12, 0.16, 0.20, 0.28, 0.36, 0.44, 0.52, 0.60, 0.70, 0.80, 0.90, 0.97, 1.00], dtype=float)
+    reaction_levels = np.array([0.15, 0.25, 0.35, 0.50, 0.65, 0.80, 0.92, 1.00], dtype=float)
+    reaction_cmaps = [plt.cm.autumn, plt.cm.spring, plt.cm.copper, plt.cm.RdPu]
+    reaction_alphas = [0.22, 0.20, 0.18, 0.18]
+
+    for idx, _day in enumerate(days):
         axis = axes[idx]
         if cartopy_ctx is None:
             axis.set_facecolor("#000c3f")
@@ -909,28 +929,47 @@ def plot_multi_pollutant_overlay(
                     zorder=20,
                 )
 
-        if reaction_frames is not None:
-            rxn = np.array(reaction_frames[idx], dtype=float)
-            if basemap_land_mask is not None:
-                rxn[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
-            invalid = ~np.isfinite(rxn)
-            rxn = _smooth_nan_field(rxn, invalid=invalid, passes=max(0, int(smooth_passes)))
-            lon_plot, lat_plot, rxn_plot = _upsample_grid_and_field(rxn, int(upsample))
-            threshold = float(np.nanpercentile(rxn_plot, 92.0)) if np.any(np.isfinite(rxn_plot)) else 0.0
-            if threshold > 0:
+        if reactions_panel:
+            for ridx, (rname, rframes) in enumerate(reactions_panel.items()):
+                rxn = np.array(rframes[idx], dtype=float)
+                if basemap_land_mask is not None:
+                    rxn[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
+                invalid = ~np.isfinite(rxn)
+                rxn = _smooth_nan_field(rxn, invalid=invalid, passes=max(0, int(smooth_passes)))
+                lon_plot, lat_plot, rxn_plot = _upsample_grid_and_field(rxn, int(upsample))
+                finite = np.isfinite(rxn_plot)
+                mx = float(np.nanmax(rxn_plot)) if np.any(finite) else 0.0
+                if mx <= 0:
+                    continue
+                rxn_norm = rxn_plot / mx
+                rxn_norm[~finite] = np.nan
+                cmap = reaction_cmaps[ridx % len(reaction_cmaps)]
+                alpha = reaction_alphas[ridx % len(reaction_alphas)]
                 if cartopy_ctx is None:
-                    axis.contour(lon_plot, lat_plot, rxn_plot, levels=[threshold], colors="#aa66f5", linewidths=0.8, alpha=0.9)
+                    axis.contourf(lon_plot, lat_plot, rxn_norm, levels=reaction_levels, cmap=cmap, alpha=alpha, extend="max")
+                    axis.contour(lon_plot, lat_plot, rxn_norm, levels=[0.55], colors=[cmap(0.85)], linewidths=0.7, alpha=min(1.0, alpha + 0.25))
                 else:
+                    axis.contourf(
+                        lon_plot,
+                        lat_plot,
+                        rxn_norm,
+                        levels=reaction_levels,
+                        cmap=cmap,
+                        alpha=alpha,
+                        extend="max",
+                        transform=transform,
+                        zorder=23,
+                    )
                     axis.contour(
                         lon_plot,
                         lat_plot,
-                        rxn_plot,
-                        levels=[threshold],
-                        colors="#aa66f5",
-                        linewidths=0.8,
-                        alpha=0.9,
+                        rxn_norm,
+                        levels=[0.55],
+                        colors=[cmap(0.85)],
+                        linewidths=0.7,
+                        alpha=min(1.0, alpha + 0.25),
                         transform=transform,
-                        zorder=25,
+                        zorder=24,
                     )
 
         _land_mask_boundary(axis, zorder=29)
@@ -939,14 +978,25 @@ def plot_multi_pollutant_overlay(
     for idx in range(n, len(axes)):
         fig.delaxes(axes[idx])
 
-    fig.subplots_adjust(left=0.06, right=0.93, bottom=0.08, top=0.95, wspace=0.18, hspace=0.16)
+    fig.subplots_adjust(left=0.06, right=0.985, bottom=0.08, top=0.90, wspace=0.18, hspace=0.12)
 
     legend_handles: List = []
     for name in names:
         legend_handles.append(Patch(facecolor=cmap_map[name](0.75), edgecolor="none", label=name, alpha=alpha_map[name]))
-    if reaction_frames is not None:
-        legend_handles.append(Line2D([0], [0], color="#aa66f5", lw=1.6, label="Reaction (high-rate contour)"))
-    fig.legend(handles=legend_handles, loc="center right", bbox_to_anchor=(1.02, 0.5), frameon=False)
+    if reactions_panel:
+        for ridx, rname in enumerate(reactions_panel.keys()):
+            cmap = reaction_cmaps[ridx % len(reaction_cmaps)]
+            legend_handles.append(Patch(facecolor=cmap(0.80), edgecolor="none", label=rname, alpha=reaction_alphas[ridx % len(reaction_alphas)]))
+    # Legend: top of figure, single row (user requirement).
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.99),
+        ncol=max(1, len(legend_handles)),
+        frameon=False,
+        columnspacing=1.2,
+        handlelength=1.6,
+    )
 
     panel_file = output_path / f"{prefix}_panel.png"
     fig.savefig(panel_file, dpi=260, bbox_inches="tight")
@@ -955,6 +1005,139 @@ def plot_multi_pollutant_overlay(
     plt.close(fig)
 
     outputs: Dict[str, str] = {"panel_png": str(panel_file), "panel_eps": str(panel_eps)}
+
+    # Optional GIF (single-panel): higher DPI and same time stamp labels.
+    if pollutants_all_days:
+        if frame_labels is None:
+            frame_labels = [f"Step {i + 1}" for i in range(len(next(iter(pollutants_all_days.values()))))]
+        n_anim = min(len(frame_labels), *(len(seq) for seq in pollutants_all_days.values()))
+        if reactions_all:
+            n_anim = min(n_anim, *(len(seq) for seq in reactions_all.values()))
+        if n_anim > 0:
+            if cartopy_ctx is None:
+                fig_anim, ax_anim = plt.subplots(figsize=(8.6, 6.2))
+                ax_anim.set_facecolor("#000c3f")
+            else:
+                ccrs, _cfeature = cartopy_ctx
+                fig_anim = plt.figure(figsize=(8.9, 6.4))
+                ax_anim = fig_anim.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+                _draw_cartopy_basemap(ax_anim)
+
+            _land_mask_fill(ax_anim)
+            _land_mask_boundary(ax_anim, zorder=29)
+
+            first_name = next(iter(pollutants_all_days.keys()))
+            base0 = np.array(pollutants_all_days[first_name][0], dtype=float)
+            if basemap_land_mask is not None:
+                base0[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
+            invalid0 = ~np.isfinite(base0)
+            base0 = _smooth_nan_field(base0, invalid=invalid0, passes=max(1, int(smooth_passes)))
+            lon_hi, lat_hi, base_hi = _upsample_grid_and_field(base0, int(upsample))
+            extent = [float(np.min(lon_hi)), float(np.max(lon_hi)), float(np.min(lat_hi)), float(np.max(lat_hi))]
+
+            img_transform = None
+            zorder = None
+            if cartopy_ctx is not None:
+                ccrs, _cfeature = cartopy_ctx
+                img_transform = ccrs.PlateCarree()
+                zorder = 20
+
+            norm = mcolors.BoundaryNorm(overlay_levels, ncolors=256, clip=True)
+            pollutant_layers = []
+            for name in names:
+                img = ax_anim.imshow(
+                    np.ma.masked_invalid(base_hi) * 0.0,
+                    origin="lower",
+                    cmap=cmap_map[name],
+                    norm=norm,
+                    extent=extent,
+                    interpolation="bilinear",
+                    alpha=alpha_map[name],
+                    transform=img_transform,
+                    zorder=zorder,
+                )
+                pollutant_layers.append((name, img))
+
+            reaction_layers = []
+            if reactions_all:
+                rnorm = mcolors.BoundaryNorm(reaction_levels, ncolors=256, clip=True)
+                for ridx, (rname, _rframes) in enumerate(reactions_all.items()):
+                    cmap = reaction_cmaps[ridx % len(reaction_cmaps)]
+                    alpha = reaction_alphas[ridx % len(reaction_alphas)]
+                    img = ax_anim.imshow(
+                        np.ma.masked_invalid(base_hi) * 0.0,
+                        origin="lower",
+                        cmap=cmap,
+                        norm=rnorm,
+                        extent=extent,
+                        interpolation="bilinear",
+                        alpha=alpha,
+                        transform=img_transform,
+                        zorder=(zorder + 3) if zorder is not None else None,
+                    )
+                    reaction_layers.append((rname, img))
+
+            stamp = ax_anim.text(
+                0.02,
+                0.98,
+                frame_labels[0] if frame_labels else "Step 1",
+                transform=ax_anim.transAxes,
+                va="top",
+                ha="left",
+                fontsize=12,
+                color="white",
+                zorder=30,
+                bbox={"facecolor": "black", "alpha": 0.35, "pad": 2, "edgecolor": "none"},
+            )
+            if cartopy_ctx is None:
+                ax_anim.set_xlabel("Longitude")
+                ax_anim.set_ylabel("Latitude")
+                x_min, x_max = float(np.min(lon_grid)), float(np.max(lon_grid))
+                y_min, y_max = float(np.min(lat_grid)), float(np.max(lat_grid))
+                ax_anim.grid(alpha=0.35, linestyle="--", linewidth=0.6)
+                ax_anim.set_xlim(x_min, x_max)
+                ax_anim.set_ylim(y_min, y_max)
+
+            def update(frame: int):
+                artists = []
+                for name, img in pollutant_layers:
+                    field = np.array(pollutants_all_days[name][frame], dtype=float)
+                    if basemap_land_mask is not None:
+                        field[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
+                    invalid = ~np.isfinite(field)
+                    field = _smooth_nan_field(field, invalid=invalid, passes=max(1, int(smooth_passes)))
+                    _lon_plot, _lat_plot, field_plot = _upsample_grid_and_field(field, int(upsample))
+                    field_plot = np.where(field_plot >= overlay_levels[0], field_plot, np.nan)
+                    img.set_data(np.ma.masked_invalid(field_plot))
+                    artists.append(img)
+
+                for rname, img in reaction_layers:
+                    rxn = np.array(reactions_all[rname][frame], dtype=float)
+                    if basemap_land_mask is not None:
+                        rxn[np.asarray(basemap_land_mask, dtype=float) > 0.5] = np.nan
+                    invalid = ~np.isfinite(rxn)
+                    rxn = _smooth_nan_field(rxn, invalid=invalid, passes=max(1, int(smooth_passes)))
+                    _lon_plot, _lat_plot, rxn_plot = _upsample_grid_and_field(rxn, int(upsample))
+                    finite = np.isfinite(rxn_plot)
+                    mx = float(np.nanmax(rxn_plot)) if np.any(finite) else 0.0
+                    if mx > 0:
+                        rxn_norm = rxn_plot / mx
+                    else:
+                        rxn_norm = rxn_plot
+                    rxn_norm = np.where(rxn_norm >= reaction_levels[0], rxn_norm, np.nan)
+                    img.set_data(np.ma.masked_invalid(rxn_norm))
+                    artists.append(img)
+
+                if frame_labels and frame < len(frame_labels):
+                    stamp.set_text(frame_labels[frame])
+                artists.append(stamp)
+                return artists
+
+            ani = animation.FuncAnimation(fig_anim, update, frames=int(n_anim), interval=140, blit=False)
+            gif_file = output_path / f"{prefix}.gif"
+            ani.save(gif_file, writer=animation.PillowWriter(fps=8), dpi=220)
+            plt.close(fig_anim)
+            outputs["gif"] = str(gif_file)
 
     return outputs
 
@@ -1010,8 +1193,9 @@ def _select_coast_seeds(
             neighbors += int(land[ci, cj + 1])
         frac = _land_fraction_window(land, int(ci), int(cj), half_i, half_j)
         frac_penalty = 0.0
-        if frac < 0.03:
-            frac_penalty += (0.03 - frac) * 10.0
+        # Prefer windows with visible coastline + some land (for coastal spill scenarios).
+        if frac < 0.06:
+            frac_penalty += (0.06 - frac) * 10.0
         if frac > 0.6:
             frac_penalty += (frac - 0.6) * 3.0
         lon_bias = float(lon_vals[int(cj)])
@@ -1266,7 +1450,7 @@ def simulate_diffusion_from_dataset(
 def simulate_diffusion_suite_from_dataset(
     nc_path: Union[str, Path],
     output_dir: Union[str, Path],
-    seed_count: int = 4,
+    seed_count: int = 6,
     depth_index: int = 0,
     time_start: int = 0,
     time_count: int = 48,
@@ -1297,6 +1481,14 @@ def simulate_diffusion_suite_from_dataset(
             k=int(seed_count),
             halfspan_deg=float(coast_halfspan_deg),
         )
+
+    # Keep only the latest artifacts in this folder: remove prior prefix-matching outputs.
+    for path in output_path.glob(f"{prefix}*.*"):
+        try:
+            if path.is_file():
+                path.unlink()
+        except Exception:
+            pass
 
     runs = []
     for idx, (lon0, lat0, frac) in enumerate(seeds):
@@ -1343,9 +1535,13 @@ def simulate_multi_pollutant_from_dataset(
     frame_seconds: float = 86400.0,
     substeps: int = 4,
     prefix: str = "dataset_multispecies",
+    auto_coast: bool = True,
     coast_halfspan_deg: float = 3.0,
+    seed_override: Optional[Tuple[float, float]] = None,
+    force_crop: bool = True,
     basemap_style: str = "stock",
     reaction_rate: float = 0.18,
+    weathering_rate: float = 0.05,
 ) -> Dict[str, Union[str, float, int, list]]:
     output_path = _as_path(output_dir)
 
@@ -1360,13 +1556,21 @@ def simulate_multi_pollutant_from_dataset(
 
         coast_seed = None
         coast_window_land_frac = None
-        if "land_mask" in ds.variables:
+        if seed_override is not None:
+            coast_seed = (float(seed_override[0]), float(seed_override[1]))
+        elif auto_coast and "land_mask" in ds.variables:
             lm = ds["land_mask"]
             if "time" in lm.dims:
                 lm = lm.isel(time=0)
             if "depth" in lm.dims:
                 lm = lm.isel(depth=0)
-            seeds = _select_coast_seeds(lm.values, ds["longitude"].values, ds["latitude"].values, k=1, halfspan_deg=float(coast_halfspan_deg))
+            seeds = _select_coast_seeds(
+                lm.values,
+                ds["longitude"].values,
+                ds["latitude"].values,
+                k=1,
+                halfspan_deg=float(coast_halfspan_deg),
+            )
             if seeds:
                 coast_seed = (seeds[0][0], seeds[0][1])
                 coast_window_land_frac = float(seeds[0][2])
@@ -1382,7 +1586,8 @@ def simulate_multi_pollutant_from_dataset(
             lon_inc = bool(lons[0] < lons[-1])
             lat_slice = slice(lat_min, lat_max) if lat_inc else slice(lat_max, lat_min)
             lon_slice = slice(lon_min, lon_max) if lon_inc else slice(lon_max, lon_min)
-            ds_use = ds.sel(latitude=lat_slice, longitude=lon_slice)
+            if force_crop or (coast_window_land_frac is not None and coast_window_land_frac >= 0.005):
+                ds_use = ds.sel(latitude=lat_slice, longitude=lon_slice)
 
         u_da = ds_use[u_name]
         v_da = ds_use[v_name]
@@ -1451,10 +1656,11 @@ def simulate_multi_pollutant_from_dataset(
     dy_m = max(float(np.mean(np.diff(lats))) * meters_per_deg_lat, 1e-6)
     dt = frame_seconds / max(1, substeps)
 
-    frames_A = []
-    frames_B = []
-    frames_C = []
-    frames_R = []
+    frames_A: List[np.ndarray] = []
+    frames_B: List[np.ndarray] = []
+    frames_C: List[np.ndarray] = []
+    frames_R_agg: List[np.ndarray] = []
+    frames_R_weather: List[np.ndarray] = []
     for frame_idx in range(n_frames):
         u_frame = np.nan_to_num(u_series[frame_idx], nan=0.0)
         v_frame = np.nan_to_num(v_series[frame_idx], nan=0.0)
@@ -1471,10 +1677,11 @@ def simulate_multi_pollutant_from_dataset(
             B = step(B)
             C = step(C)
 
-            R = float(reaction_rate) * np.clip(A, 0.0, None) * np.clip(B, 0.0, None)
-            A = np.clip(A - dt * R, 0.0, None)
-            B = np.clip(B - dt * R, 0.0, None)
-            C = np.clip(C + dt * R, 0.0, None)
+            R_agg = float(reaction_rate) * np.clip(A, 0.0, None) * np.clip(B, 0.0, None)
+            R_weather = float(weathering_rate) * np.clip(B, 0.0, None)
+            A = np.clip(A - dt * R_agg, 0.0, None)
+            B = np.clip(B - dt * (R_agg + R_weather), 0.0, None)
+            C = np.clip(C + dt * R_agg, 0.0, None)
 
             A = A + 0.010 * src_a
             B = B + 0.008 * src_b
@@ -1493,7 +1700,8 @@ def simulate_multi_pollutant_from_dataset(
         frames_A.append(A.copy())
         frames_B.append(B.copy())
         frames_C.append(C.copy())
-        frames_R.append(R.copy() if isinstance(R, np.ndarray) else (A * B))
+        frames_R_agg.append(R_agg.copy())
+        frames_R_weather.append(R_weather.copy())
 
     # Sample 6 panels.
     sample_indices = np.linspace(0, n_frames - 1, num=min(6, n_frames), dtype=int)
@@ -1513,18 +1721,30 @@ def simulate_multi_pollutant_from_dataset(
         all_labels = [f"{label_prefix} {i + 1}" for i in range(n_frames)]
     panel_labels = [all_labels[index] for index in sample_indices]
 
-    pollutants = {
-        "Pollutant A": [frames_A[index] for index in sample_indices],
-        "Pollutant B": [frames_B[index] for index in sample_indices],
-        "Product C": [frames_C[index] for index in sample_indices],
+    pollutants_panel = {
+        "Microplastics": [frames_A[index] for index in sample_indices],
+        "Crude oil": [frames_B[index] for index in sample_indices],
+        "Aggregates (MP×Oil)": [frames_C[index] for index in sample_indices],
     }
-    rxn = [frames_R[index] for index in sample_indices]
+    pollutants_all = {
+        "Microplastics": frames_A,
+        "Crude oil": frames_B,
+        "Aggregates (MP×Oil)": frames_C,
+    }
+    reactions_panel = {
+        "Aggregation rate (MP×Oil)": [frames_R_agg[index] for index in sample_indices],
+        "Oil weathering rate": [frames_R_weather[index] for index in sample_indices],
+    }
+    reactions_all = {
+        "Aggregation rate (MP×Oil)": frames_R_agg,
+        "Oil weathering rate": frames_R_weather,
+    }
 
     media = plot_multi_pollutant_overlay(
         lon_grid=lon_grid,
         lat_grid=lat_grid,
-        pollutants=pollutants,
-        reaction_frames=rxn,
+        pollutants=pollutants_panel,
+        reaction_frames=reactions_panel,
         days=sampled_days,
         panel_labels=panel_labels,
         frame_labels=all_labels,
@@ -1536,11 +1756,95 @@ def simulate_multi_pollutant_from_dataset(
         basemap_style=basemap_style,
         smooth_passes=2,
         upsample=4,
+        pollutants_all_days=pollutants_all,
+        reaction_frames_all_days=reactions_all,
     )
 
     media["coast_seed"] = list(coast_seed) if coast_seed is not None else None
     media["coast_window_land_frac"] = float(coast_window_land_frac) if coast_window_land_frac is not None else None
     media["frame_count"] = int(n_frames)
     media["reaction_rate"] = float(reaction_rate)
+    media["weathering_rate"] = float(weathering_rate)
     (output_path / f"{prefix}_manifest.json").write_text(json.dumps(media, indent=2), encoding="utf-8")
     return media
+
+
+def simulate_multi_pollutant_suite_from_dataset(
+    nc_path: Union[str, Path],
+    output_dir: Union[str, Path],
+    seed_count: int = 6,
+    depth_index: int = 0,
+    time_start: int = 0,
+    time_count: int = 48,
+    spatial_stride: int = 1,
+    diffusion_coeff: float = 18.0,
+    frame_seconds: float = 86400.0,
+    substeps: int = 4,
+    prefix: str = "dataset_multispecies_suite",
+    coast_halfspan_deg: float = 3.0,
+    basemap_style: str = "stock",
+    reaction_rate: float = 0.18,
+    weathering_rate: float = 0.05,
+) -> Dict[str, Union[str, int, list, dict]]:
+    output_path = _as_path(output_dir)
+
+    import xarray as xr
+
+    with xr.open_dataset(nc_path) as ds:
+        if "land_mask" not in ds.variables:
+            raise ValueError("Suite mode requires `land_mask` to pick multiple coastal seeds.")
+        lm = ds["land_mask"]
+        if "time" in lm.dims:
+            lm = lm.isel(time=0)
+        if "depth" in lm.dims:
+            lm = lm.isel(depth=0)
+        seeds = _select_coast_seeds(
+            lm.values,
+            ds["longitude"].values,
+            ds["latitude"].values,
+            k=int(seed_count),
+            halfspan_deg=float(coast_halfspan_deg),
+        )
+
+    # Keep only the latest artifacts in this folder: remove prior prefix-matching outputs.
+    for path in output_path.glob(f"{prefix}*.*"):
+        try:
+            if path.is_file():
+                path.unlink()
+        except Exception:
+            pass
+
+    runs = []
+    for idx, (lon0, lat0, frac) in enumerate(seeds):
+        out = simulate_multi_pollutant_from_dataset(
+            nc_path=nc_path,
+            output_dir=output_path,
+            depth_index=depth_index,
+            time_start=time_start,
+            time_count=time_count,
+            spatial_stride=spatial_stride,
+            diffusion_coeff=diffusion_coeff,
+            frame_seconds=frame_seconds,
+            substeps=substeps,
+            prefix=f"{prefix}_seed{idx:02d}",
+            auto_coast=False,
+            coast_halfspan_deg=coast_halfspan_deg,
+            seed_override=(lon0, lat0),
+            force_crop=True,
+            basemap_style=basemap_style,
+            reaction_rate=reaction_rate,
+            weathering_rate=weathering_rate,
+        )
+        out["seed_index"] = idx
+        out["seed_lonlat"] = [float(lon0), float(lat0)]
+        out["seed_land_frac"] = float(frac)
+        runs.append(out)
+
+    manifest = {
+        "output_dir": str(output_path),
+        "seed_count": int(len(runs)),
+        "prefix": prefix,
+        "runs": runs,
+    }
+    (output_path / f"{prefix}_suite_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest

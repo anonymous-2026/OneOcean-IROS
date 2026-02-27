@@ -13,6 +13,7 @@ from .viz import (
     simulate_diffusion_from_dataset,
     simulate_diffusion_suite_from_dataset,
     simulate_multi_pollutant_from_dataset,
+    simulate_multi_pollutant_suite_from_dataset,
 )
 
 
@@ -25,7 +26,9 @@ def _default_scene_nc() -> str:
 
 
 def _default_public_nc() -> str:
-    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public/combined/combined_environment.nc"
+    # Latest public variant that includes 2025 monthly frames (surface-only).
+    # Coastal-heavy region so land + coastline are visible for spill/diffusion visuals.
+    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc"
 
 
 def _cmd_run_synthetic(args: argparse.Namespace) -> int:
@@ -167,6 +170,29 @@ def _cmd_run_dataset_multi(args: argparse.Namespace) -> int:
         coast_halfspan_deg=args.coast_halfspan_deg,
         basemap_style=args.basemap_style,
         reaction_rate=args.reaction_rate,
+        weathering_rate=args.weathering_rate,
+    )
+    print(json.dumps(outputs, indent=2, default=str))
+    return 0
+
+
+def _cmd_run_dataset_multi_suite(args: argparse.Namespace) -> int:
+    outputs = simulate_multi_pollutant_suite_from_dataset(
+        nc_path=args.nc_path,
+        output_dir=args.output_dir,
+        seed_count=args.seed_count,
+        depth_index=args.depth_index,
+        time_start=args.time_start,
+        time_count=args.time_count,
+        spatial_stride=args.spatial_stride,
+        diffusion_coeff=args.diffusion_coeff,
+        frame_seconds=args.frame_seconds,
+        substeps=args.substeps,
+        prefix=args.prefix,
+        coast_halfspan_deg=args.coast_halfspan_deg,
+        basemap_style=args.basemap_style,
+        reaction_rate=args.reaction_rate,
+        weathering_rate=args.weathering_rate,
     )
     print(json.dumps(outputs, indent=2, default=str))
     return 0
@@ -226,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     suite = subparsers.add_parser("run-dataset-suite", help="Dataset-driven diffusion proxy at multiple coastal seeds.")
     suite.add_argument("--nc-path", default=_default_public_nc())
     suite.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_latest_suite")
-    suite.add_argument("--seed-count", type=int, default=4)
+    suite.add_argument("--seed-count", type=int, default=6)
     suite.add_argument("--depth-index", type=int, default=0)
     suite.add_argument("--time-start", type=int, default=0)
     suite.add_argument("--time-count", type=int, default=48)
@@ -253,7 +279,26 @@ def build_parser() -> argparse.ArgumentParser:
     multi.add_argument("--coast-halfspan-deg", type=float, default=3.0)
     multi.add_argument("--basemap-style", default="stock", choices=["stock", "simple"])
     multi.add_argument("--reaction-rate", type=float, default=0.18)
+    multi.add_argument("--weathering-rate", type=float, default=0.05)
     multi.set_defaults(func=_cmd_run_dataset_multi)
+
+    multi_suite = subparsers.add_parser("run-dataset-multi-suite", help="Multi-pollutant dataset-driven proxy at multiple coastal seeds.")
+    multi_suite.add_argument("--nc-path", default=_default_public_nc())
+    multi_suite.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite")
+    multi_suite.add_argument("--seed-count", type=int, default=6)
+    multi_suite.add_argument("--depth-index", type=int, default=0)
+    multi_suite.add_argument("--time-start", type=int, default=0)
+    multi_suite.add_argument("--time-count", type=int, default=48)
+    multi_suite.add_argument("--spatial-stride", type=int, default=1)
+    multi_suite.add_argument("--diffusion-coeff", type=float, default=18.0)
+    multi_suite.add_argument("--frame-seconds", type=float, default=86400.0)
+    multi_suite.add_argument("--substeps", type=int, default=4)
+    multi_suite.add_argument("--prefix", default="dataset_latest_multispecies_suite")
+    multi_suite.add_argument("--coast-halfspan-deg", type=float, default=3.0)
+    multi_suite.add_argument("--basemap-style", default="stock", choices=["stock", "simple"])
+    multi_suite.add_argument("--reaction-rate", type=float, default=0.18)
+    multi_suite.add_argument("--weathering-rate", type=float, default=0.05)
+    multi_suite.set_defaults(func=_cmd_run_dataset_multi_suite)
 
     return parser
 
