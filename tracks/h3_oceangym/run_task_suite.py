@@ -144,6 +144,11 @@ class SuiteCfg:
     current_u_mps: float = 0.25
     current_v_mps: float = 0.10
 
+    # Optional data-grounded current series (exported from combined_environment.nc via export_current_series_npz.py).
+    current_npz: str | None = None
+    current_depth_m: float = 0.494025  # default: surface-ish depth from our combined_environment.nc
+    dataset_days_per_sim_second: float = 0.0  # 0 => constant sample; >0 => advance time index as sim runs
+
 
 def _stable_seed(*parts: str | int) -> int:
     h = hashlib.sha1()
@@ -206,7 +211,56 @@ def _apply_constant_current_drift(env, *, state: dict, agent_names: list[str], n
         env.agents[name].teleport(location=np.array([x, y, z], dtype=np.float32) + drift)
 
 
-def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int) -> dict:
+class _CurrentSeries:
+    def __init__(self, npz_path: str, *, depth_m: float):
+        import numpy as np
+
+        self.path = str(Path(npz_path).expanduser().resolve())
+        data = np.load(self.path, allow_pickle=True)
+        self.time_ns = data["time_ns"].astype("int64")
+        self.depth_m = data["depth_m"].astype("float32")
+        self.uo = data["uo"].astype("float32")
+        self.vo = data["vo"].astype("float32")
+
+        if self.uo.ndim != 2 or self.vo.ndim != 2:
+            raise ValueError(f"Expected uo/vo shape (T,D); got uo{self.uo.shape} vo{self.vo.shape}")
+
+        self.t_len = int(self.uo.shape[0])
+        self.d_len = int(self.uo.shape[1])
+        if self.d_len != int(self.depth_m.shape[0]):
+            raise ValueError("depth_m length mismatch with uo/vo depth dimension")
+
+        self.depth_idx = int(np.argmin(np.abs(self.depth_m - float(depth_m))))
+        self.depth_selected_m = float(self.depth_m[self.depth_idx])
+
+        self.lat = float(data.get("latitude", float("nan")))
+        self.lon = float(data.get("longitude", float("nan")))
+        self.source_dataset = str(data.get("source_dataset", ""))
+
+    def uv_at(self, *, time_idx: int) -> tuple[float, float]:
+        i = int(time_idx) % self.t_len
+        return float(self.uo[i, self.depth_idx]), float(self.vo[i, self.depth_idx])
+
+
+def _episode_current_uv(
+    series: _CurrentSeries | None,
+    *,
+    cfg: SuiteCfg,
+    seed: int,
+    sim_time_s: float,
+) -> tuple[float, float]:
+    if series is None:
+        return float(cfg.current_u_mps), float(cfg.current_v_mps)
+
+    t0 = seed % max(1, series.t_len)
+    if float(cfg.dataset_days_per_sim_second) <= 0.0:
+        return series.uv_at(time_idx=t0)
+
+    day_offset = int(math.floor(sim_time_s * float(cfg.dataset_days_per_sim_second)))
+    return series.uv_at(time_idx=t0 + day_offset)
+
+
+def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
     import numpy as np
 
     rng = np.random.default_rng(seed)
@@ -242,13 +296,14 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
         steps = step + 1
 
         # Drift hook (data-driven current integration comes later; constant current is the default).
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
         _apply_constant_current_drift(
             env,
             state=state,
             agent_names=agent_names,
             n_agents=n_agents,
-            u=cfg.current_u_mps,
-            v=cfg.current_v_mps,
+            u=u,
+            v=v,
             dt=dt,
         )
 
@@ -304,7 +359,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
     return res
 
 
-def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int) -> dict:
+def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
     import numpy as np
 
     dt = 1.0 / float(cfg.ticks_per_sec)
@@ -328,14 +383,16 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
         rec = _Recorder(out_dir / "station_viewport.mp4", out_dir / "station_leftcamera.mp4", fps=cfg.fps)
         rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
 
-    for _ in range(steps):
+    for step in range(steps):
+        sim_time_s = float(step) * dt
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=sim_time_s)
         _apply_constant_current_drift(
             env,
             state=state,
             agent_names=agent_names,
             n_agents=n_agents,
-            u=cfg.current_u_mps,
-            v=cfg.current_v_mps,
+            u=u,
+            v=v,
             dt=dt,
         )
         for name in agent_names:
@@ -379,7 +436,7 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     return res
 
 
-def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int) -> dict:
+def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
     """
     Simple plume localization in world XY using an analytic Gaussian concentration field.
     Baseline policy: short spiral sweep around start; estimate source as argmax concentration.
@@ -425,6 +482,17 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         tx = start[0] + r * math.cos(a)
         ty = start[1] + r * math.sin(a)
 
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(k) * dt)
+        _apply_constant_current_drift(
+            env,
+            state=state,
+            agent_names=["auv0"],
+            n_agents=n_agents,
+            u=u,
+            v=v,
+            dt=dt,
+        )
+
         env.act("auv0", np.array([tx, ty, start[2], 0.0, 0.0, 0.0], dtype=np.float32))
         state = env.tick(num_ticks=1, publish=False)
 
@@ -464,7 +532,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     return res
 
 
-def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int) -> dict:
+def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
     """
     Multi-agent containment/cleanup using a lightweight particle advection model:
     - particles spawn near the source
@@ -528,6 +596,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 
     steps = min(cfg.max_steps, 300)
     for step in range(steps):
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
         theta = 2.0 * math.pi * (step / float(max(1, steps)))
         cx = src[0] + cam_r * math.cos(theta)
         cy = src[1] + cam_r * math.sin(theta)
@@ -542,8 +611,8 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 
         # Advect + diffuse
         if particles.size:
-            particles[:, 0] += cfg.current_u_mps * dt
-            particles[:, 1] += cfg.current_v_mps * dt
+            particles[:, 0] += float(u) * dt
+            particles[:, 1] += float(v) * dt
             particles += rng.normal(0.0, diff_sigma * math.sqrt(dt), size=particles.shape).astype(np.float32)
 
         # Agents act: stay on ring points.
@@ -616,10 +685,19 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default=SuiteCfg.preset)
+    ap.add_argument(
+        "--scenarios",
+        nargs="*",
+        default=None,
+        help="Optional explicit scenario names (overrides --preset).",
+    )
     ap.add_argument("--episodes", type=int, default=SuiteCfg.episodes)
     ap.add_argument("--n_multiagent", type=int, default=SuiteCfg.n_multiagent)
     ap.add_argument("--out_dir", default=None)
     ap.add_argument("--show_viewport", action="store_true")
+    ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
+    ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
+    ap.add_argument("--dataset_days_per_sim_second", type=float, default=SuiteCfg.dataset_days_per_sim_second)
     args = ap.parse_args()
 
     _ensure_ssl_cert_file()
@@ -633,8 +711,11 @@ def main() -> int:
         episodes=int(args.episodes),
         n_multiagent=int(args.n_multiagent),
         show_viewport=bool(args.show_viewport),
+        current_npz=str(args.current_npz) if args.current_npz else None,
+        current_depth_m=float(args.current_depth_m),
+        dataset_days_per_sim_second=float(args.dataset_days_per_sim_second),
     )
-    scenarios = scenario_preset(args.preset)
+    scenarios = list(args.scenarios) if args.scenarios else scenario_preset(args.preset)
 
     out_root = Path(args.out_dir) if args.out_dir else Path("runs") / "oceangym_h3" / f"task_suite_{_tag_now_local()}"
     out_root = out_root.resolve()
@@ -648,6 +729,16 @@ def main() -> int:
         "cfg": asdict(cfg),
         "scenarios": {},
     }
+    current_series = _CurrentSeries(cfg.current_npz, depth_m=cfg.current_depth_m) if cfg.current_npz else None
+    if current_series is not None:
+        suite_manifest["data_grounding"] = {
+            "current_npz": current_series.path,
+            "source_dataset": current_series.source_dataset,
+            "lat": current_series.lat,
+            "lon": current_series.lon,
+            "depth_selected_m": current_series.depth_selected_m,
+            "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
+        }
 
     tasks = [
         ("go_to_goal_current", 1),
@@ -700,13 +791,45 @@ def main() -> int:
                         state = env.tick(num_ticks=1, publish=False)
 
                     if task_name == "go_to_goal_current":
-                        res = _run_nav_go_to_goal(env, cfg=cfg, seed=seed, record=record, out_dir=task_dir / f"ep{ep:03d}", n_agents=n_agents)
+                        res = _run_nav_go_to_goal(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
                     elif task_name == "station_keeping":
-                        res = _run_station_keeping(env, cfg=cfg, seed=seed, record=record, out_dir=task_dir / f"ep{ep:03d}", n_agents=n_agents)
+                        res = _run_station_keeping(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
                     elif task_name == "plume_localization":
-                        res = _run_plume_localization(env, cfg=cfg, seed=seed, record=record, out_dir=task_dir / f"ep{ep:03d}", n_agents=n_agents)
+                        res = _run_plume_localization(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
                     elif task_name == "plume_containment_multiagent":
-                        res = _run_plume_containment_multiagent(env, cfg=cfg, seed=seed, record=record, out_dir=task_dir / f"ep{ep:03d}", n_agents=n_agents)
+                        res = _run_plume_containment_multiagent(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
                     else:
                         raise ValueError(task_name)
 

@@ -28,6 +28,31 @@ SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.w
 
 This produces a top-level `results_manifest.json`, plus per-task `results_manifest.json` files.
 
+## 2.1) (Optional) Data-grounded currents from combined_environment.nc
+
+H3’s runtime venv (`.venv_h3_oceangym`) does not include xarray/netCDF, so we export a small current series to NPZ
+using a Python that has `xarray` (on this machine: the conda Python).
+
+Export a `(time, depth)` current series at a chosen lat/lon (nearest):
+
+```bash
+cd "oneocean(iros-2026-code)"
+/home/shuaijun/miniconda3/bin/python tracks/h3_oceangym/export_current_series_npz.py \
+  --dataset /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc \
+  --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
+```
+
+Then run the suite with dataset-grounded forcing (uniform current sampled from NPZ):
+
+```bash
+cd "oneocean(iros-2026-code)"
+SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.where())") \
+  .venv_h3_oceangym/bin/python tracks/h3_oceangym/run_task_suite.py \
+    --scenarios PierHarbor-HoveringCamera \
+    --episodes 1 \
+    --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
+```
+
 ## 3) Postprocess: generate GIFs + per-video screenshots
 
 The suite/render scripts export MP4s. For paper/demo convenience, we also generate:
