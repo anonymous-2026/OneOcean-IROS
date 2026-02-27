@@ -131,6 +131,8 @@ def _scan_outputs(out_dir: Path) -> dict[str, dict]:
         scenarios[name] = {
             "orbit_keyframe_png": str(child / "orbit_keyframe.png"),
             "orbit_viewport_mp4": str(child / "orbit_viewport.mp4"),
+            "orbit_leftcamera_keyframe_png": str(child / "orbit_leftcamera_keyframe.png"),
+            "orbit_leftcamera_mp4": str(child / "orbit_leftcamera.mp4"),
             "move_keyframe_png": str(child / "move_keyframe.png"),
             "move_viewport_mp4": str(child / "move_viewport.mp4"),
             "move_leftcamera_mp4": str(child / "move_leftcamera.mp4"),
@@ -203,6 +205,8 @@ def main() -> int:
 
         orbit_png = scenario_dir / "orbit_keyframe.png"
         orbit_mp4 = scenario_dir / "orbit_viewport.mp4"
+        orbit_fp_png = scenario_dir / "orbit_leftcamera_keyframe.png"
+        orbit_fp_mp4 = scenario_dir / "orbit_leftcamera.mp4"
         move_png = scenario_dir / "move_keyframe.png"
         move_mp4 = scenario_dir / "move_viewport.mp4"
         move_fp_mp4 = scenario_dir / "move_leftcamera.mp4"
@@ -210,6 +214,8 @@ def main() -> int:
         manifest["scenarios"][scenario_name] = {
             "orbit_keyframe_png": str(orbit_png),
             "orbit_viewport_mp4": str(orbit_mp4),
+            "orbit_leftcamera_keyframe_png": str(orbit_fp_png),
+            "orbit_leftcamera_mp4": str(orbit_fp_mp4),
             "move_keyframe_png": str(move_png),
             "move_viewport_mp4": str(move_mp4),
             "move_leftcamera_mp4": str(move_fp_mp4),
@@ -234,7 +240,12 @@ def main() -> int:
             viewport0 = _ensure_uint8_rgb(st0["ViewportCapture"])
             _write_png(orbit_png, viewport0)
 
-            with _Mp4Writer(orbit_mp4, fps=cfg.fps, size_hw=viewport0.shape[:2]) as vw:
+            fp0 = _ensure_uint8_rgb(st0["LeftCamera"])
+            _write_png(orbit_fp_png, fp0)
+
+            with _Mp4Writer(orbit_mp4, fps=cfg.fps, size_hw=viewport0.shape[:2]) as vw, _Mp4Writer(
+                orbit_fp_mp4, fps=cfg.fps, size_hw=fp0.shape[:2]
+            ) as fw:
                 for i in range(orbit_frames):
                     a = 2.0 * math.pi * (i / float(orbit_frames))
                     x = center[0] + cfg.orbit_radius_m * math.cos(a)
@@ -242,16 +253,16 @@ def main() -> int:
                     z = center[2] + cfg.orbit_height_m
                     env.move_viewport([x, y, z], _look_at_rpy([x, y, z], center))
                     st = env.tick(num_ticks=1, publish=False)
-                    if st.get("ViewportCapture") is None:
-                        continue
-                    vw.append_rgb(_ensure_uint8_rgb(st["ViewportCapture"]))
+                    if st.get("ViewportCapture") is not None:
+                        vw.append_rgb(_ensure_uint8_rgb(st["ViewportCapture"]))
+                    if st.get("LeftCamera") is not None:
+                        fw.append_rgb(_ensure_uint8_rgb(st["LeftCamera"]))
 
             import numpy as np
 
             action = np.zeros((8,), dtype=np.float32)
             action[4:8] = 18.0
 
-            fp0 = _ensure_uint8_rgb(st0["LeftCamera"])
             with _Mp4Writer(move_mp4, fps=cfg.fps, size_hw=viewport0.shape[:2]) as vw, _Mp4Writer(
                 move_fp_mp4, fps=cfg.fps, size_hw=fp0.shape[:2]
             ) as fw:
