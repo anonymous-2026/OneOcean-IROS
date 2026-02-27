@@ -11,11 +11,18 @@ from .viz import (
     plot_3d_currents,
     plot_pollutant_diffusion,
     simulate_diffusion_from_dataset,
+    simulate_diffusion_suite_from_dataset,
+    simulate_multi_pollutant_from_dataset,
 )
 
 
 def _default_combined_nc() -> str:
     return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc"
+
+
+def _default_scene_nc() -> str:
+    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc"
+
 
 def _default_public_nc() -> str:
     return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public/combined/combined_environment.nc"
@@ -49,6 +56,10 @@ def _cmd_run_synthetic(args: argparse.Namespace) -> int:
         pollutant_data_all_days=all_days,
         output_dir=media_dir,
         prefix="microplastic_diffusion",
+        use_cartopy=True,
+        basemap_style="stock",
+        smooth_passes=2,
+        upsample=3,
     )
 
     report = {
@@ -69,6 +80,8 @@ def _cmd_render_currents(args: argparse.Namespace) -> int:
         skip=args.skip,
         time_index=args.time_index,
         depth_index=args.depth_index,
+        styles=args.styles,
+        arrow_color_mode=args.arrow_color_mode,
     )
     print(json.dumps(outputs, indent=2))
     return 0
@@ -93,6 +106,49 @@ def _cmd_run_dataset_driven(args: argparse.Namespace) -> int:
         frame_seconds=args.frame_seconds,
         substeps=args.substeps,
         prefix=args.prefix,
+        auto_coast=args.auto_coast,
+        coast_halfspan_deg=args.coast_halfspan_deg,
+        basemap_style=args.basemap_style,
+    )
+    print(json.dumps(outputs, indent=2, default=str))
+    return 0
+
+
+def _cmd_run_dataset_suite(args: argparse.Namespace) -> int:
+    outputs = simulate_diffusion_suite_from_dataset(
+        nc_path=args.nc_path,
+        output_dir=args.output_dir,
+        seed_count=args.seed_count,
+        depth_index=args.depth_index,
+        time_start=args.time_start,
+        time_count=args.time_count,
+        spatial_stride=args.spatial_stride,
+        diffusion_coeff=args.diffusion_coeff,
+        frame_seconds=args.frame_seconds,
+        substeps=args.substeps,
+        prefix=args.prefix,
+        coast_halfspan_deg=args.coast_halfspan_deg,
+        basemap_style=args.basemap_style,
+    )
+    print(json.dumps(outputs, indent=2, default=str))
+    return 0
+
+
+def _cmd_run_dataset_multi(args: argparse.Namespace) -> int:
+    outputs = simulate_multi_pollutant_from_dataset(
+        nc_path=args.nc_path,
+        output_dir=args.output_dir,
+        depth_index=args.depth_index,
+        time_start=args.time_start,
+        time_count=args.time_count,
+        spatial_stride=args.spatial_stride,
+        diffusion_coeff=args.diffusion_coeff,
+        frame_seconds=args.frame_seconds,
+        substeps=args.substeps,
+        prefix=args.prefix,
+        coast_halfspan_deg=args.coast_halfspan_deg,
+        basemap_style=args.basemap_style,
+        reaction_rate=args.reaction_rate,
     )
     print(json.dumps(outputs, indent=2, default=str))
     return 0
@@ -102,8 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Pollution simulation and visualization utilities.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_synth = subparsers.add_parser("run-synthetic", help="Run a quick synthetic 3D diffusion simulation and media export.")
-    run_synth.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/synthetic_run")
+    run_synth = subparsers.add_parser("run-synthetic", help="Run a synthetic diffusion run and export media.")
+    run_synth.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/synthetic_latest")
     run_synth.add_argument("--nx", type=int, default=24)
     run_synth.add_argument("--ny", type=int, default=24)
     run_synth.add_argument("--nz", type=int, default=12)
@@ -113,39 +169,73 @@ def build_parser() -> argparse.ArgumentParser:
     run_synth.add_argument("--lon-max", type=float, default=145.0)
     run_synth.add_argument("--lat-min", type=float, default=30.0)
     run_synth.add_argument("--lat-max", type=float, default=45.0)
-    run_synth.add_argument("--resolution", type=float, default=0.2)
+    run_synth.add_argument("--resolution", type=float, default=0.05)
     run_synth.add_argument("--diffusion-days", type=int, default=80)
-    run_synth.add_argument("--sample-days", type=int, nargs="+", default=[5, 20, 35, 55, 75])
+    run_synth.add_argument("--sample-days", type=int, nargs="+", default=[1, 15, 30, 45, 60, 75])
     run_synth.add_argument("--seed", type=int, default=7)
     run_synth.set_defaults(func=_cmd_run_synthetic)
 
     currents = subparsers.add_parser("render-currents", help="Render 3D current-over-bathymetry figures from combined_environment.nc.")
-    currents.add_argument("--nc-path", default=_default_combined_nc())
-    currents.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/current_viz")
+    currents.add_argument("--nc-path", default=_default_scene_nc())
+    currents.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/current_viz_final")
     currents.add_argument("--skip", type=int, default=15)
     currents.add_argument("--time-index", type=int, default=0)
     currents.add_argument("--depth-index", type=int, default=0)
+    currents.add_argument("--styles", nargs="+", default=["diffusion"], choices=["diffusion", "plume", "viridis"])
+    currents.add_argument("--arrow-color-mode", default="direction", choices=["direction", "mono"])
     currents.set_defaults(func=_cmd_render_currents)
 
     analyze = subparsers.add_parser("analyze-nc", help="Print variable statistics for a NetCDF dataset.")
-    analyze.add_argument("--nc-path", default=_default_combined_nc())
+    analyze.add_argument("--nc-path", default=_default_scene_nc())
     analyze.set_defaults(func=_cmd_analyze_nc)
 
-    dataset_run = subparsers.add_parser(
-        "run-dataset-driven",
-        help="Simulate and render dataset-driven diffusion proxy from combined current fields.",
-    )
+    dataset_run = subparsers.add_parser("run-dataset-driven", help="Dataset-driven diffusion proxy (single coastal seed).")
     dataset_run.add_argument("--nc-path", default=_default_public_nc())
-    dataset_run.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_diffusion")
+    dataset_run.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_latest_single")
     dataset_run.add_argument("--depth-index", type=int, default=0)
     dataset_run.add_argument("--time-start", type=int, default=0)
-    dataset_run.add_argument("--time-count", type=int, default=24)
-    dataset_run.add_argument("--spatial-stride", type=int, default=2)
+    dataset_run.add_argument("--time-count", type=int, default=48)
+    dataset_run.add_argument("--spatial-stride", type=int, default=1)
     dataset_run.add_argument("--diffusion-coeff", type=float, default=18.0)
-    dataset_run.add_argument("--frame-seconds", type=float, default=1800.0)
-    dataset_run.add_argument("--substeps", type=int, default=3)
-    dataset_run.add_argument("--prefix", default="dataset_diffusion")
+    dataset_run.add_argument("--frame-seconds", type=float, default=86400.0)
+    dataset_run.add_argument("--substeps", type=int, default=4)
+    dataset_run.add_argument("--prefix", default="dataset_latest_single")
+    dataset_run.add_argument("--auto-coast", action=argparse.BooleanOptionalAction, default=True)
+    dataset_run.add_argument("--coast-halfspan-deg", type=float, default=3.0)
+    dataset_run.add_argument("--basemap-style", default="stock", choices=["stock", "simple"])
     dataset_run.set_defaults(func=_cmd_run_dataset_driven)
+
+    suite = subparsers.add_parser("run-dataset-suite", help="Dataset-driven diffusion proxy at multiple coastal seeds.")
+    suite.add_argument("--nc-path", default=_default_public_nc())
+    suite.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_latest_suite")
+    suite.add_argument("--seed-count", type=int, default=4)
+    suite.add_argument("--depth-index", type=int, default=0)
+    suite.add_argument("--time-start", type=int, default=0)
+    suite.add_argument("--time-count", type=int, default=48)
+    suite.add_argument("--spatial-stride", type=int, default=1)
+    suite.add_argument("--diffusion-coeff", type=float, default=18.0)
+    suite.add_argument("--frame-seconds", type=float, default=86400.0)
+    suite.add_argument("--substeps", type=int, default=4)
+    suite.add_argument("--prefix", default="dataset_latest_suite")
+    suite.add_argument("--coast-halfspan-deg", type=float, default=3.0)
+    suite.add_argument("--basemap-style", default="stock", choices=["stock", "simple"])
+    suite.set_defaults(func=_cmd_run_dataset_suite)
+
+    multi = subparsers.add_parser("run-dataset-multi", help="Multi-pollutant dataset-driven proxy with reactions (single coastal seed).")
+    multi.add_argument("--nc-path", default=_default_public_nc())
+    multi.add_argument("--output-dir", default="OCPNet/output/pollution_refactor/dataset_latest_multispecies")
+    multi.add_argument("--depth-index", type=int, default=0)
+    multi.add_argument("--time-start", type=int, default=0)
+    multi.add_argument("--time-count", type=int, default=48)
+    multi.add_argument("--spatial-stride", type=int, default=1)
+    multi.add_argument("--diffusion-coeff", type=float, default=18.0)
+    multi.add_argument("--frame-seconds", type=float, default=86400.0)
+    multi.add_argument("--substeps", type=int, default=4)
+    multi.add_argument("--prefix", default="dataset_latest_multispecies")
+    multi.add_argument("--coast-halfspan-deg", type=float, default=3.0)
+    multi.add_argument("--basemap-style", default="stock", choices=["stock", "simple"])
+    multi.add_argument("--reaction-rate", type=float, default=0.18)
+    multi.set_defaults(func=_cmd_run_dataset_multi)
 
     return parser
 
@@ -158,3 +248,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
