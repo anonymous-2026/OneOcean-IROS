@@ -150,6 +150,13 @@ class SuiteCfg:
     current_depth_m: float = 0.494025  # default: surface-ish depth from our combined_environment.nc
     dataset_days_per_sim_second: float = 0.0  # 0 => constant sample; >0 => advance time index as sim runs
 
+    # Pollution model for plume-themed tasks.
+    pollution_model: str = "analytic"  # analytic | ocpnet_3d
+    ocpnet_grid: tuple[int, int, int] = (24, 24, 12)
+    ocpnet_domain_m: tuple[float, float, float] = (240.0, 240.0, 60.0)
+    ocpnet_sink_radius_m: float = 7.5
+    ocpnet_sink_strength: float = 0.15
+
 
 def _stable_seed(*parts: str | int) -> int:
     h = hashlib.sha1()
@@ -204,7 +211,17 @@ def _summarize_task(task_name: str, episodes: list[dict]) -> dict:
         "episodes": int(len(episodes)),
         "success_rate": float(sum(succ) / float(len(succ))) if succ else 0.0,
     }
-    for k in ("time_s", "steps", "collisions", "energy_proxy", "error_m", "leaked_particles", "removed_particles"):
+    for k in (
+        "time_s",
+        "steps",
+        "collisions",
+        "energy_proxy",
+        "error_m",
+        "leaked_particles",
+        "removed_particles",
+        "leaked_mass_kg",
+        "removed_mass_kg",
+    ):
         vals = []
         for ep in episodes:
             v = ep.get(k)
@@ -516,10 +533,27 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     best_c = -1.0
     best_xy = (start[0], start[1])
 
-    def conc(x: float, y: float) -> float:
-        dx = x - src[0]
-        dy = y - src[1]
-        return math.exp(-0.5 * (dx * dx + dy * dy) / (cfg.plume_sigma_m * cfg.plume_sigma_m))
+    plume = None
+    if str(cfg.pollution_model).lower().strip() == "ocpnet_3d":
+        from tracks.h3_oceangym.ocpnet_plume import OCPNetCfg, OCPNetPlume
+
+        plume = OCPNetPlume(
+            cfg=OCPNetCfg(
+                domain_size_m=tuple(float(x) for x in cfg.ocpnet_domain_m),
+                grid_resolution=tuple(int(x) for x in cfg.ocpnet_grid),
+                time_step_s=dt,
+            ),
+            work_dir=out_dir / "_ocpnet_cache",
+            world_center_xyz=(start[0], start[1], start[2]),
+        )
+        plume.set_source_world((src[0], src[1], src[2]))
+
+    def conc(x: float, y: float, z: float) -> float:
+        if plume is None:
+            dx = x - src[0]
+            dy = y - src[1]
+            return math.exp(-0.5 * (dx * dx + dy * dy) / (cfg.plume_sigma_m * cfg.plume_sigma_m))
+        return plume.concentration_at_world((x, y, z))
 
     rec: _Recorder | None = None
     if record:
@@ -549,6 +583,8 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
             v=v,
             dt=dt,
         )
+        if plume is not None:
+            plume.step(u_mps=float(u), v_mps=float(v))
 
         env.act("auv0", np.array([tx, ty, start[2], 0.0, 0.0, 0.0], dtype=np.float32))
         state = env.tick(num_ticks=1, publish=False)
@@ -557,7 +593,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         if pose is None:
             continue
         px, py, _pz = _pose_xyz(pose)
-        c = conc(px, py)
+        c = conc(px, py, start[2])
         if c > best_c:
             best_c = c
             best_xy = (px, py)
@@ -614,9 +650,28 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         a = 2.0 * math.pi * (i / float(n_agents))
         ring.append((src[0] + ring_r * math.cos(a), src[1] + ring_r * math.sin(a), src[2]))
 
-    particles = np.zeros((0, 3), dtype=np.float32)
+    use_ocpnet = str(cfg.pollution_model).lower().strip() == "ocpnet_3d"
     removed = 0
     leaked = 0
+    removed_mass = 0.0
+    leaked_mass = 0.0
+
+    plume = None
+    if use_ocpnet:
+        from tracks.h3_oceangym.ocpnet_plume import OCPNetCfg, OCPNetPlume
+
+        plume = OCPNetPlume(
+            cfg=OCPNetCfg(
+                domain_size_m=tuple(float(x) for x in cfg.ocpnet_domain_m),
+                grid_resolution=tuple(int(x) for x in cfg.ocpnet_grid),
+                time_step_s=dt,
+            ),
+            work_dir=out_dir / "_ocpnet_cache",
+            world_center_xyz=(p0[0], p0[1], p0[2]),
+        )
+        plume.set_source_world((src[0], src[1], src[2]))
+    else:
+        particles = np.zeros((0, 3), dtype=np.float32)
 
     # Small diffusion to create spread.
     diff_sigma = 0.5
@@ -660,17 +715,20 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         cz = src[2] + cam_h
         env.move_viewport([cx, cy, cz], _look_at_rpy((cx, cy, cz), src))
 
-        # Spawn
-        spawn = rng.normal(0.0, 2.0, size=(cfg.contain_spawn_per_step, 3)).astype(np.float32)
-        spawn[:, 2] = 0.0
-        src_xyz = np.array([src[0], src[1], src[2]], dtype=np.float32)
-        particles = np.concatenate([particles, src_xyz + spawn], axis=0)
+        if plume is not None:
+            plume.step(u_mps=float(u), v_mps=float(v))
+        else:
+            # Spawn
+            spawn = rng.normal(0.0, 2.0, size=(cfg.contain_spawn_per_step, 3)).astype(np.float32)
+            spawn[:, 2] = 0.0
+            src_xyz = np.array([src[0], src[1], src[2]], dtype=np.float32)
+            particles = np.concatenate([particles, src_xyz + spawn], axis=0)
 
-        # Advect + diffuse
-        if particles.size:
-            particles[:, 0] += float(u) * dt
-            particles[:, 1] += float(v) * dt
-            particles += rng.normal(0.0, diff_sigma * math.sqrt(dt), size=particles.shape).astype(np.float32)
+            # Advect + diffuse
+            if particles.size:
+                particles[:, 0] += float(u) * dt
+                particles[:, 1] += float(v) * dt
+                particles += rng.normal(0.0, diff_sigma * math.sqrt(dt), size=particles.shape).astype(np.float32)
 
         # Agents act: stay on ring points.
         for i, name in enumerate(agent_names):
@@ -688,33 +746,53 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             if fp is not None:
                 rec_fp.append_rgb(_ensure_uint8_rgb(fp))
 
-        # Remove captured particles.
-        if particles.size:
-            keep = np.ones((particles.shape[0],), dtype=bool)
+        if plume is not None:
             for name in agent_names:
                 pose = _state_get(state, name, "PoseSensor", n_agents)
                 if pose is None:
                     continue
                 ax, ay, az = _pose_xyz(pose)
-                d2 = (particles[:, 0] - ax) ** 2 + (particles[:, 1] - ay) ** 2 + (particles[:, 2] - az) ** 2
-                hit = d2 <= (cfg.contain_capture_radius_m ** 2)
-                if hit.any():
-                    keep &= ~hit
-            n_before = particles.shape[0]
-            particles = particles[keep]
-            removed += int(n_before - particles.shape[0])
+                removed_mass += float(
+                    plume.apply_sink_at_world(
+                        (ax, ay, az),
+                        sink_radius_m=float(cfg.ocpnet_sink_radius_m),
+                        sink_strength=float(cfg.ocpnet_sink_strength),
+                    )
+                )
+            leaked_mass = float(plume.mass_leaked_world_xy(source_world_xy=(src[0], src[1]), leak_radius_m=float(cfg.contain_leak_radius_m)))
+        else:
+            # Remove captured particles.
+            if particles.size:
+                keep = np.ones((particles.shape[0],), dtype=bool)
+                for name in agent_names:
+                    pose = _state_get(state, name, "PoseSensor", n_agents)
+                    if pose is None:
+                        continue
+                    ax, ay, az = _pose_xyz(pose)
+                    d2 = (particles[:, 0] - ax) ** 2 + (particles[:, 1] - ay) ** 2 + (particles[:, 2] - az) ** 2
+                    hit = d2 <= (cfg.contain_capture_radius_m ** 2)
+                    if hit.any():
+                        keep &= ~hit
+                n_before = particles.shape[0]
+                particles = particles[keep]
+                removed += int(n_before - particles.shape[0])
 
-        # Count leakage beyond radius.
-        if particles.size:
-            dx = particles[:, 0] - src[0]
-            dy = particles[:, 1] - src[1]
-            far = (dx * dx + dy * dy) >= (cfg.contain_leak_radius_m ** 2)
-            if far.any():
-                leaked += int(far.sum())
-                particles = particles[~far]
+            # Count leakage beyond radius.
+            if particles.size:
+                dx = particles[:, 0] - src[0]
+                dy = particles[:, 1] - src[1]
+                far = (dx * dx + dy * dy) >= (cfg.contain_leak_radius_m ** 2)
+                if far.any():
+                    leaked += int(far.sum())
+                    particles = particles[~far]
 
-    # Success: remove a meaningful amount while limiting leakage.
-    success = (leaked <= 0.25 * removed) if removed > 0 else (leaked == 0)
+    if plume is not None:
+        removed_mass = max(0.0, float(removed_mass))
+        leaked_mass = max(0.0, float(leaked_mass))
+        success = (leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)
+    else:
+        # Success: remove a meaningful amount while limiting leakage.
+        success = (leaked <= 0.25 * removed) if removed > 0 else (leaked == 0)
     if rec_vp is not None:
         rec_vp.close()
     if rec_fp is not None:
@@ -727,10 +805,15 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "source_xyz": [float(src[0]), float(src[1]), float(src[2])],
         "steps": int(steps),
         "time_s": float(steps * dt),
-        "removed_particles": int(removed),
-        "leaked_particles": int(leaked),
+        "pollution_model": str(cfg.pollution_model),
         "success": bool(success),
     }
+    if plume is not None:
+        res["removed_mass_kg"] = float(removed_mass)
+        res["leaked_mass_kg"] = float(leaked_mass)
+    else:
+        res["removed_particles"] = int(removed)
+        res["leaked_particles"] = int(leaked)
     if record:
         res["media"] = {
             "viewport_mp4": str(out_dir / "contain_viewport.mp4"),
@@ -756,6 +839,7 @@ def main() -> int:
     ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
     ap.add_argument("--dataset_days_per_sim_second", type=float, default=SuiteCfg.dataset_days_per_sim_second)
+    ap.add_argument("--pollution_model", default=SuiteCfg.pollution_model, choices=("analytic", "ocpnet_3d"))
     args = ap.parse_args()
 
     _ensure_ssl_cert_file()
@@ -772,6 +856,7 @@ def main() -> int:
         current_npz=str(args.current_npz) if args.current_npz else None,
         current_depth_m=float(args.current_depth_m),
         dataset_days_per_sim_second=float(args.dataset_days_per_sim_second),
+        pollution_model=str(args.pollution_model),
     )
     cfg = _cfg_with_difficulty(cfg, str(args.difficulty))
     scenarios = list(args.scenarios) if args.scenarios else scenario_preset(args.preset)
@@ -788,6 +873,7 @@ def main() -> int:
         "cfg": asdict(cfg),
         "scenarios": {},
     }
+    suite_manifest["task_models"] = {"current": "constant_or_npz_series", "pollution_model": str(cfg.pollution_model)}
     current_series = _CurrentSeries(cfg.current_npz, depth_m=cfg.current_depth_m) if cfg.current_npz else None
     if current_series is not None:
         suite_manifest["data_grounding"] = {

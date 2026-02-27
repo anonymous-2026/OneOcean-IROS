@@ -31,6 +31,9 @@ This produces a top-level `results_manifest.json`, plus per-task `results_manife
 Difficulty presets:
 - `--difficulty easy|medium|hard`
 
+Plume pollution model:
+- `--pollution_model analytic|ocpnet_3d`
+
 ## 2.1) (Optional) Data-grounded currents from combined_environment.nc
 
 H3’s runtime venv (`.venv_h3_oceangym`) does not include xarray/netCDF, so we export a small current series to NPZ
