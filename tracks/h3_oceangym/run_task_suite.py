@@ -1006,6 +1006,16 @@ def main() -> int:
         "track": "h3_oceangym",
         "script": str(Path(__file__).resolve()),
         "python": sys.executable,
+        "command": list(sys.argv),
+        "out_dir": str(out_root),
+        "cfg": asdict(cfg),
+        "scenarios": {},
+    }
+    root_media_manifest: dict[str, object] = {
+        "track": "h3_oceangym",
+        "script": str(Path(__file__).resolve()),
+        "python": sys.executable,
+        "command": list(sys.argv),
         "out_dir": str(out_root),
         "cfg": asdict(cfg),
         "scenarios": {},
@@ -1013,7 +1023,7 @@ def main() -> int:
     suite_manifest["task_models"] = {"current": "constant_or_npz_series", "pollution_model": str(cfg.pollution_model)}
     current_series = _CurrentSeries(cfg.current_npz, depth_m=cfg.current_depth_m) if cfg.current_npz else None
     if current_series is not None:
-        suite_manifest["data_grounding"] = {
+        data_grounding = {
             "current_npz": current_series.path,
             "source_dataset": current_series.source_dataset,
             "lat": current_series.lat,
@@ -1021,6 +1031,8 @@ def main() -> int:
             "depth_selected_m": current_series.depth_selected_m,
             "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         }
+        suite_manifest["data_grounding"] = data_grounding
+        root_media_manifest["data_grounding"] = data_grounding
 
     tasks = [
         ("go_to_goal_current", 1),
@@ -1036,6 +1048,7 @@ def main() -> int:
             "episodes": [],
             "media": {},
         }
+        per_media: dict[str, object] = {}
 
         for task_name, n_agents in tasks:
             scenario = _patch_for_suite(base, cfg=cfg, add_viewport=True, n_agents=n_agents)
@@ -1043,7 +1056,8 @@ def main() -> int:
             task_dir.mkdir(parents=True, exist_ok=True)
 
             per_task = {"task": task_name, "n_agents": int(n_agents), "episodes": []}
-            media_manifest: dict[str, str] = {}
+            per_task_media_manifest: dict[str, str] = {}
+            media_task: dict[str, object] = {"task": task_name, "n_agents": int(n_agents), "episodes": {}}
 
             record_this = True
             for ep in range(cfg.episodes):
@@ -1118,19 +1132,30 @@ def main() -> int:
                 per_task["episodes"].append(res)
                 if "media" in res:
                     for k, v in dict(res["media"]).items():
-                        media_manifest[f"ep{ep:03d}_{k}"] = str(v)
+                        per_task_media_manifest[f"ep{ep:03d}_{k}"] = str(v)
+                    episodes_dict = media_task["episodes"]
+                    if isinstance(episodes_dict, dict):
+                        episodes_dict[f"ep{ep:03d}"] = dict(res["media"])
 
             per_task["summary"] = _summarize_task(task_name, list(per_task["episodes"]))
 
             # Write per-task manifest.
-            (task_dir / "media_manifest.json").write_text(json.dumps(media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            (task_dir / "media_manifest.json").write_text(
+                json.dumps(per_task_media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
             (task_dir / "results_manifest.json").write_text(json.dumps(per_task, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             (task_dir / "metrics.json").write_text(json.dumps(per_task["summary"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
             per["episodes"].append(per_task)
+            per_media[task_name] = media_task
 
         suite_manifest["scenarios"][scenario_name] = per
+        per_media["scenario_name"] = scenario_name
+        root_media_manifest["scenarios"][scenario_name] = per_media
 
     (out_root / "results_manifest.json").write_text(json.dumps(suite_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (out_root / "media_manifest.json").write_text(
+        json.dumps(root_media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print("[h3] wrote:", out_root / "results_manifest.json")
     return 0
 

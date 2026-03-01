@@ -94,6 +94,29 @@ class RunnerCfg:
     debug_draw_lifetime_s: float = 0.4
 
 
+_KNOWN_VARIANTS = (
+    "tiny",
+    "scene",
+    "public",
+    "public25_surface",
+    "public25_japan_surface",
+)
+
+
+def _default_variant_root() -> Path:
+    return Path("/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants")
+
+
+def _resolve_combined_nc(combined_nc: str, dataset_variant: str | None) -> str:
+    if not dataset_variant:
+        return str(Path(combined_nc).expanduser().resolve())
+    variant = str(dataset_variant).strip()
+    if variant not in _KNOWN_VARIANTS:
+        raise ValueError(f"Unknown --dataset-variant='{variant}'. Expected one of: {', '.join(_KNOWN_VARIANTS)}")
+    p = _default_variant_root() / variant / "combined" / "combined_environment.nc"
+    return str(p.resolve())
+
+
 def _ensure_uint8_rgb(frame) -> "np.ndarray":
     import numpy as np
 
@@ -1127,9 +1150,22 @@ def main() -> int:
     ap.add_argument("--scenario", type=str, default=os.environ.get("SCENARIO_NAME", RunnerCfg.scenario_name))
     ap.add_argument("--num-agents", type=int, default=int(os.environ.get("NUM_AGENTS", "10")))
     ap.add_argument("--seed", type=int, default=int(os.environ.get("SEED", "0")))
+    ap.add_argument("--fps", type=int, default=int(os.environ.get("FPS", str(RunnerCfg.fps))))
+    ap.add_argument("--render-quality", type=int, default=int(os.environ.get("RENDER_QUALITY", str(RunnerCfg.render_quality))))
+    ap.add_argument("--window-width", type=int, default=int(os.environ.get("WINDOW_WIDTH", str(RunnerCfg.window_width))))
+    ap.add_argument("--window-height", type=int, default=int(os.environ.get("WINDOW_HEIGHT", str(RunnerCfg.window_height))))
+    ap.add_argument(
+        "--dataset-variant",
+        type=str,
+        default=os.environ.get("DATASET_VARIANT", ""),
+        help=f"Shortcut for combined_environment.nc under OceanEnv variants ({', '.join(_KNOWN_VARIANTS)}). "
+        "If set, overrides --combined-nc.",
+    )
     ap.add_argument("--combined-nc", type=str, default=os.environ.get("COMBINED_NC", RunnerCfg.combined_nc))
     ap.add_argument("--time-index", type=int, default=int(os.environ.get("TIME_INDEX", "0")))
     ap.add_argument("--depth-index", type=int, default=int(os.environ.get("DEPTH_INDEX", "0")))
+    ap.add_argument("--current-scale", type=float, default=float(os.environ.get("CURRENT_SCALE", str(RunnerCfg.current_scale))))
+    ap.add_argument("--current-force-scale", type=float, default=float(os.environ.get("CURRENT_FORCE_SCALE", str(RunnerCfg.current_force_scale))))
     ap.add_argument(
         "--pollution-model",
         type=str,
@@ -1145,15 +1181,30 @@ def main() -> int:
     ap.add_argument("--pollution-emission-rate", type=float, default=float(os.environ.get("POLLUTION_EMISSION_RATE", str(RunnerCfg.pollution_emission_rate))))
     ap.add_argument("--pollution-sink-radius-m", type=float, default=float(os.environ.get("POLLUTION_SINK_RADIUS_M", str(RunnerCfg.pollution_sink_radius_m))))
     ap.add_argument("--pollution-sink-strength-per-s", type=float, default=float(os.environ.get("POLLUTION_SINK_STRENGTH_PER_S", str(RunnerCfg.pollution_sink_strength_per_s))))
+    ap.add_argument("--localize-seconds", type=float, default=float(os.environ.get("LOCALIZE_SECONDS", str(RunnerCfg.localize_seconds))))
+    ap.add_argument("--contain-seconds", type=float, default=float(os.environ.get("CONTAIN_SECONDS", str(RunnerCfg.contain_seconds))))
+    ap.add_argument("--contain-radius-m", type=float, default=float(os.environ.get("CONTAIN_RADIUS_M", str(RunnerCfg.contain_radius_m))))
+    ap.add_argument("--viewport-exposure", type=float, default=float(os.environ.get("VIEWPORT_EXPOSURE", str(RunnerCfg.viewport_exposure))))
+    ap.add_argument("--fpv-exposure", type=float, default=float(os.environ.get("FPV_EXPOSURE", str(RunnerCfg.fpv_exposure))))
+    ap.add_argument("--debug-draw", action=argparse.BooleanOptionalAction, default=bool(int(os.environ.get("DEBUG_DRAW", "1"))))
     args = ap.parse_args()
+
+    dataset_variant = str(args.dataset_variant).strip() or None
+    combined_nc = _resolve_combined_nc(str(args.combined_nc), dataset_variant)
 
     cfg = RunnerCfg(
         scenario_name=args.scenario,
         num_agents=int(args.num_agents),
         seed=int(args.seed),
-        combined_nc=str(args.combined_nc),
+        fps=int(args.fps),
+        window_width=int(args.window_width),
+        window_height=int(args.window_height),
+        render_quality=int(args.render_quality),
+        combined_nc=combined_nc,
         time_index=int(args.time_index),
         depth_index=int(args.depth_index),
+        current_scale=float(args.current_scale),
+        current_force_scale=float(args.current_force_scale),
         pollution_model=str(args.pollution_model),
         pollution_domain_xy_m=float(args.pollution_domain_xy_m),
         pollution_depth_range_m=(float(args.pollution_depth_min_m), float(args.pollution_depth_max_m)),
@@ -1163,6 +1214,12 @@ def main() -> int:
         pollution_emission_rate=float(args.pollution_emission_rate),
         pollution_sink_radius_m=float(args.pollution_sink_radius_m),
         pollution_sink_strength_per_s=float(args.pollution_sink_strength_per_s),
+        localize_seconds=float(args.localize_seconds),
+        contain_seconds=float(args.contain_seconds),
+        contain_radius_m=float(args.contain_radius_m),
+        viewport_exposure=float(args.viewport_exposure),
+        fpv_exposure=float(args.fpv_exposure),
+        debug_draw=bool(args.debug_draw),
     )
 
     out_dir = Path(args.out_dir).resolve()
@@ -1186,6 +1243,7 @@ def main() -> int:
         "python": sys.executable,
         "cfg": asdict(cfg),
         "dataset_current": current.summary(),
+        "dataset_variant": dataset_variant,
         "scenario_name": cfg.scenario_name,
         "scenario_cfg_note": "scenario loaded from installed package then patched in-memory (package_name + multi-agent + ViewportCapture + sensor Hz caps).",
         "outputs": {},
@@ -1228,6 +1286,45 @@ def main() -> int:
         "contain_cleanup": contain_res["metrics"],
     }
     _write_json(out_dir / "metrics.json", merged_metrics)
+
+    results_manifest = {
+        "created_at_utc": _utc_now(),
+        "track": "h2_holoocean",
+        "scenario": cfg.scenario_name,
+        "seed": int(cfg.seed),
+        "num_agents": int(cfg.num_agents),
+        "dataset_variant": dataset_variant,
+        "combined_nc": cfg.combined_nc,
+        "metrics_json": str((out_dir / "metrics.json").resolve()),
+        "media_manifest_json": str((out_dir / "media_manifest.json").resolve()),
+        "tasks": {
+            "plume_localize": {
+                "task_dir": localize_res["task_dir"],
+                "metrics_json": str((out_dir / "task_plume_localize" / "metrics.json").resolve()),
+                "video": localize_res["video"],
+                "gif": localize_res["gif"],
+                "video_fpv": localize_res["video_fpv"],
+                "gif_fpv": localize_res["gif_fpv"],
+                "start_png": localize_res["start_png"],
+                "end_png": localize_res["end_png"],
+                "start_fpv_png": localize_res["start_fpv_png"],
+                "end_fpv_png": localize_res["end_fpv_png"],
+            },
+            "plume_contain_cleanup": {
+                "task_dir": contain_res["task_dir"],
+                "metrics_json": str((out_dir / "task_plume_contain_cleanup" / "metrics.json").resolve()),
+                "video": contain_res["video"],
+                "gif": contain_res["gif"],
+                "video_fpv": contain_res["video_fpv"],
+                "gif_fpv": contain_res["gif_fpv"],
+                "start_png": contain_res["start_png"],
+                "end_png": contain_res["end_png"],
+                "start_fpv_png": contain_res["start_fpv_png"],
+                "end_fpv_png": contain_res["end_fpv_png"],
+            },
+        },
+    }
+    _write_json(out_dir / "results_manifest.json", results_manifest)
     return 0
 
 
