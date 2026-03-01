@@ -49,10 +49,28 @@ Key modifications:
 - task implementations + metrics + manifests,
 - data grounding hooks: currents exported from `combined_environment.nc` (NPZ) used in drift/advection.
 
+## Asset inventory (what exists in the packaged Ocean worlds)
+
+The packaged Ocean worlds ship with a large Unreal asset set. For quick “does it exist?” checks we scan:
+- `~/.local/share/holoocean/2.0.1/worlds/Ocean/Linux/Manifest_UFSFiles_Linux.txt`
+
+Examples of assets we confirmed are present (by manifest path):
+- **Ships / boats (surface)**:
+  - `Holodeck/Content/Worlds/ContainerShips/*` (container ship meshes/materials/textures)
+  - `Holodeck/Content/Worlds/Boats/*` and `Holodeck/Content/Worlds/BoatPack/*` (multiple small boats + props)
+  - `Holodeck/Content/HolodeckContent/Agents/SurfaceVessel/*` (surface vessel agent BP/mesh)
+- **Pipes (structures/props)**:
+  - `Holodeck/Content/Worlds/DamEnvironment/Meshes/*Pipe*`
+  - `Holodeck/Content/Worlds/ModularHarborSet/Meshes/*Pipe*`
+- **Aircraft (agent)**:
+  - `Holodeck/Content/HolodeckContent/Agents/FixedWing/*` (FixedWing / Archer plane geometry)
+
+What we did *not* find by name (manifest string scan):
+- explicit `oil*`, `platform*`, `rig*`-named world assets (the only “oil” substring hit was unrelated: `Sm_Toiliet`).
+
 ## Redistribution / compliance note (to be finalized by Lane F)
 
 HoloOcean / Unreal-derived assets typically have redistribution constraints (Epic UE EULA-related).
 We treat all external binaries/assets as **non-redistributable** unless explicitly confirmed.
 
 This repo contains only our **scripts** and **metadata**; heavy third-party binaries/assets remain in local caches.
-

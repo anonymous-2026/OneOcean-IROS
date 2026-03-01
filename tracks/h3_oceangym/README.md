@@ -37,15 +37,17 @@ Plume pollution model:
 ## 2.1) (Optional) Data-grounded currents from combined_environment.nc
 
 H3’s runtime venv (`.venv_h3_oceangym`) does not include xarray/netCDF, so we export a small current series to NPZ
-using a Python that has `xarray` (on this machine: the conda Python).
+using a Python that has `xarray` (in this workspace: `../.venv_ocean/`).
 
 Export a `(time, depth)` current series at a chosen lat/lon (nearest):
 
 ```bash
 cd "oneocean(iros-2026-code)"
-/home/shuaijun/miniconda3/bin/python tracks/h3_oceangym/export_current_series_npz.py \
+source ../.venv_ocean/bin/activate
+python tracks/h3_oceangym/export_current_series_npz.py \
   --dataset /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc \
   --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
+deactivate
 ```
 
 Then run the suite with dataset-grounded forcing (uniform current sampled from NPZ):
@@ -65,12 +67,14 @@ The suite/render scripts export MP4s. For paper/demo convenience, we also genera
 - `*.gif` next to each `*.mp4`
 - 3 keyframes per MP4: `*_keyframe_000.png`, `*_keyframe_<mid>.png`, `*_keyframe_<last>.png` (frame indices depend on video length)
 
-This requires `imageio+Pillow`. On this machine, use the conda Python:
+This requires `imageio+Pillow` (any Python with those deps is fine). In this workspace, use `../.venv_ocean/`:
 
 ```bash
 cd "oneocean(iros-2026-code)"
-/home/shuaijun/miniconda3/bin/python tracks/h3_oceangym/postprocess_media.py \
+source ../.venv_ocean/bin/activate
+python tracks/h3_oceangym/postprocess_media.py \
   --roots runs/oceangym_h3/scene_media_20260226_043035 runs/oceangym_h3/task_suite_20260226_043900
+deactivate
 ```
 
 It writes `postprocess_media_manifest.json` into each root for traceability.

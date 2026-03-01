@@ -49,6 +49,19 @@ Implementation notes:
 HoloOcean `Ocean` worlds are packaged Unreal assets (in `.pak`), so we do not attempt to enumerate every mesh/blueprint.
 Below is a **best-effort** list from the installed `materials.csv` and from what is visible in our exported media.
 
+### “Asset inventory” files (filename lists)
+
+These manifests list packaged `.uasset/.umap/.ubulk/.uexp` by path (useful for “what exists in the package by name”),
+but they are **not** a definitive list of what is placed in a specific world/map:
+
+- `Ocean v2.0.1` (also present on this machine):
+  - `/home/shuaijun/.local/share/holoocean/2.0.1/worlds/Ocean/Linux/Manifest_UFSFiles_Linux.txt`
+  - Examples present by name:
+    - ships/boats: `Holodeck/Content/Worlds/ContainerShips/*`, `Holodeck/Content/Worlds/Boats/*`, `Holodeck/Content/Worlds/BoatPack/*`
+    - pipe props: `Holodeck/Content/Worlds/DamEnvironment/Meshes/SM_Concrete_Pipe_*`, `Holodeck/Content/Worlds/ModularHarborSet/Meshes/SM__MetalPipe01*`
+    - fixed-wing aircraft agent asset: `Holodeck/Content/HolodeckContent/Agents/FixedWing/ArcherPlane_Assembled*`
+    - marine-life assets: `Worlds/OceanFloor/*Fish*`, `Worlds/ReefKit/*Fish*` (also `*Jellyfish*`, `*Starfish*`)
+
 ### Materials table (sonar/physics metadata)
 
 - File: `/home/shuaijun/.local/share/holoocean/0.5.0/worlds/Ocean/materials.csv`

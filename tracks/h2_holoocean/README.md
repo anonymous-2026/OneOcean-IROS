@@ -29,7 +29,7 @@ cd oneocean(iros-2026-code)
 
 ## Plume tasks (multi-agent; must-use-data)
 
-Runs 2 tasks and writes per-task MP4 + metrics + `media_manifest.json`:
+Runs 2 tasks and writes per-task MP4/GIF + metrics + `media_manifest.json` (+ `results_manifest.json`):
 - plume localization (multi-agent)
 - plume containment+cleanup (multi-agent; supports N=2–10; demo uses N=10)
 
@@ -51,6 +51,14 @@ cd oneocean(iros-2026-code)
 .venv_h2_holoocean_mrgh/bin/python tracks/h2_holoocean/run_plume_tasks.py --scenario PierHarbor-HoveringCamera --num-agents 10 --seed 0
 ```
 
+Select dataset variants (recommended for quick swaps):
+```bash
+cd oneocean(iros-2026-code)
+.venv_h2_holoocean_mrgh/bin/python tracks/h2_holoocean/run_plume_tasks.py \\
+  --scenario PierHarbor-HoveringCamera --num-agents 10 --seed 0 \\
+  --dataset-variant tiny
+```
+
 Optional tuning knobs:
 ```bash
 cd oneocean(iros-2026-code)
@@ -58,4 +66,13 @@ cd oneocean(iros-2026-code)
   --scenario PierHarbor-HoveringCamera --num-agents 10 --seed 0 \\
   --pollution-model ocpnet_3d --pollution-domain-xy-m 160 \\
   --pollution-warmup-s 20 --pollution-update-period-s 2
+```
+
+## Plume ladder (simple → hard)
+
+To generate a small “ladder” (N scaling + stronger currents/domain) and aggregate into a single parent `results_manifest.json`:
+```bash
+cd oneocean(iros-2026-code)
+.venv_h2_holoocean_mrgh/bin/python tracks/h2_holoocean/run_plume_ladder.py \\
+  --scenario PierHarbor-HoveringCamera --levels easy,hero,hard --dataset-variant tiny
 ```
