@@ -43,3 +43,32 @@ For H2 “official” task runs (see `tracks/h2_holoocean/run_plume_tasks.py`):
 
 Implementation notes:
 - World coordinates are taken directly from HoloOcean `PoseSensor`. The PollutionModel3D depth axis is treated as a **relative depth** coordinate (0 at `depth_min`), and we convert between “absolute depth” and solver depth internally.
+
+## Asset/material notes (best-effort)
+
+HoloOcean `Ocean` worlds are packaged Unreal assets (in `.pak`), so we do not attempt to enumerate every mesh/blueprint.
+Below is a **best-effort** list from the installed `materials.csv` and from what is visible in our exported media.
+
+### Materials table (sonar/physics metadata)
+
+- File: `/home/shuaijun/.local/share/holoocean/0.5.0/worlds/Ocean/materials.csv`
+- Example entries:
+  - Terrain/rocks: `M_Landscape`, `M_URockA..E`
+  - Vehicle/metal: `M_Sub`, `M_Steel_1`, `M_Steel_2`
+  - Pier/harbor: `M_Pier_Concrete_01`, `MI_Concrete_2`, `MI_Concrete_3`, `M_Pier_Wood_01`, `M_Pier_Fence_01`
+  - A ship-related material entry exists: `M_ship-9` (note: a material name does **not** guarantee a visible ship mesh in a specific world).
+
+### Assets observed in our media
+
+- Vehicles:
+  - `HoveringAUV` (box-frame AUV) appears in Hovering/HoveringCamera scenarios.
+  - `TorpedoAUV` (torpedo-shaped AUV) appears in Torpedo scenarios.
+- Static environment (examples):
+  - PierHarbor: large pipe / pipeline-like structure, kelp/seagrass, rocks/sand seafloor.
+  - Dam/SimpleUnderwater: steep terrain (canyon/walls), vegetation/kelp; metal tower/structure silhouettes in some views.
+
+### Not observed (in our current runs)
+
+- Fish / moving fauna NPCs.
+- Aircraft.
+- Visible surface ships/boats.
