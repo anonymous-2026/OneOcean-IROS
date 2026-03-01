@@ -117,6 +117,16 @@ def _resolve_combined_nc(combined_nc: str, dataset_variant: str | None) -> str:
     return str(p.resolve())
 
 
+def _world_roots_on_disk(package_name: str) -> list[str]:
+    roots: list[str] = []
+    base = Path.home() / ".local" / "share" / "holoocean"
+    if base.is_dir():
+        for p in base.glob(f"*/worlds/{package_name}"):
+            if p.is_dir():
+                roots.append(str(p.resolve()))
+    return sorted(set(roots))
+
+
 def _ensure_uint8_rgb(frame) -> "np.ndarray":
     import numpy as np
 
@@ -1246,6 +1256,8 @@ def main() -> int:
         "dataset_variant": dataset_variant,
         "scenario_name": cfg.scenario_name,
         "scenario_cfg_note": "scenario loaded from installed package then patched in-memory (package_name + multi-agent + ViewportCapture + sensor Hz caps).",
+        "worlds_roots_on_disk": _world_roots_on_disk(cfg.package_name),
+        "provenance_note": "For detailed external-scene provenance and licensing notes, see tracks/h2_holoocean/scene_provenance.md",
         "outputs": {},
         "command_hint": (
             "cd oneocean(iros-2026-code) && "
