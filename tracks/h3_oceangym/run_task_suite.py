@@ -25,6 +25,24 @@ def _ensure_ssl_cert_file() -> None:
         pass
 
 
+def _ensure_nofile_limit(min_soft: int = 4096) -> None:
+    """
+    HoloOcean spawns many short-lived Unreal clients during suites. Some systems default to `ulimit -n 1024`,
+    which can trigger `OSError: [Errno 24] Too many open files` mid-run.
+    """
+    try:
+        import resource  # type: ignore
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft >= min_soft:
+            return
+        target = min(int(hard), int(min_soft))
+        if target > int(soft):
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, int(hard)))
+    except Exception:
+        return
+
+
 def _tag_now_local() -> str:
     return time.strftime("%Y%m%d_%H%M%S")
 
@@ -958,6 +976,11 @@ def main() -> int:
     ap.add_argument("--episodes", type=int, default=SuiteCfg.episodes)
     ap.add_argument("--n_multiagent", type=int, default=SuiteCfg.n_multiagent)
     ap.add_argument("--out_dir", default=None)
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse existing per-task results under --out_dir and run only missing tasks.",
+    )
     ap.add_argument("--show_viewport", action="store_true")
     ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
@@ -975,6 +998,7 @@ def main() -> int:
     args = ap.parse_args()
 
     _ensure_ssl_cert_file()
+    _ensure_nofile_limit()
 
     from holoocean import packagemanager as pm  # type: ignore
     import holoocean  # type: ignore
@@ -1054,6 +1078,24 @@ def main() -> int:
             scenario = _patch_for_suite(base, cfg=cfg, add_viewport=True, n_agents=n_agents)
             task_dir = out_root / scenario_name.replace("/", "_") / task_name
             task_dir.mkdir(parents=True, exist_ok=True)
+
+            existing_results = task_dir / "results_manifest.json"
+            if bool(args.resume) and existing_results.exists():
+                try:
+                    loaded = json.loads(existing_results.read_text(encoding="utf-8"))
+                except Exception:
+                    loaded = None
+                if isinstance(loaded, dict) and isinstance(loaded.get("episodes"), list) and len(loaded["episodes"]) == int(cfg.episodes):
+                    per["episodes"].append(loaded)
+                    media_task: dict[str, object] = {"task": task_name, "n_agents": int(n_agents), "episodes": {}}
+                    episodes_dict = media_task["episodes"]
+                    if isinstance(episodes_dict, dict):
+                        for i, ep in enumerate(loaded.get("episodes", [])):
+                            m = ep.get("media") if isinstance(ep, dict) else None
+                            if isinstance(m, dict) and m:
+                                episodes_dict[f"ep{i:03d}"] = dict(m)
+                    per_media[task_name] = media_task
+                    continue
 
             per_task = {"task": task_name, "n_agents": int(n_agents), "episodes": []}
             per_task_media_manifest: dict[str, str] = {}
