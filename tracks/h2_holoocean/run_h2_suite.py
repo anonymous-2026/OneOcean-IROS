@@ -314,7 +314,8 @@ def _run_go_to_goal_current(*, env, rp, cfg, current, out_dir: Path, difficulty:
             u, v = current.velocity_xy_mps(float(pos[0]), float(pos[1]))
             fx += cfg.current_force_scale * cfg.current_scale * u
             fy += cfg.current_force_scale * cfg.current_scale * v
-            act = rp._action_from_force(fx, fy, fz, cfg)
+            bx, by, bz = rp._world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+            act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
         st_out = rp._safe_tick(env, publish=False)
@@ -397,7 +398,8 @@ def _run_station_keeping(*, env, rp, cfg, current, out_dir: Path, difficulty: st
             u, v = current.velocity_xy_mps(float(pos[0]), float(pos[1]))
             fx += cfg.current_force_scale * cfg.current_scale * u
             fy += cfg.current_force_scale * cfg.current_scale * v
-            act = rp._action_from_force(fx, fy, fz, cfg)
+            bx, by, bz = rp._world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+            act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
             e = float(np.sqrt(ex * ex + ey * ey + ez * ez))
@@ -454,6 +456,7 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
     wp_tol = float(_goal_radius_m(difficulty))
     wp_idx = 0
     success_step = None
+    last_p0 = None
     offsets = {}
     for i in range(int(cfg.num_agents)):
         pi = rp._pose_to_position(rp._state_agent(st, f"auv{i}").get("PoseSensor")) or p0
@@ -463,7 +466,7 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
     prev_colliding: dict[str, bool] = {}
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
-        nonlocal energy, collisions, wp_idx, success_step
+        nonlocal energy, collisions, wp_idx, success_step, last_p0
         target0 = waypoints[min(int(wp_idx), len(waypoints) - 1)]
         for i in range(int(cfg.num_agents)):
             name = f"auv{i}"
@@ -484,12 +487,15 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
             u, v = current.velocity_xy_mps(float(pos[0]), float(pos[1]))
             fx += cfg.current_force_scale * cfg.current_scale * u
             fy += cfg.current_force_scale * cfg.current_scale * v
-            act = rp._action_from_force(fx, fy, fz, cfg)
+            bx, by, bz = rp._world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+            act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
         st_out = rp._safe_tick(env, publish=False)
         collisions += rp._count_collision_events(st_out, num_agents=cfg.num_agents, prev=prev_colliding)
         p = rp._pose_to_position(rp._state_agent(st_out, "auv0").get("PoseSensor"))
+        if p is not None:
+            last_p0 = [float(p[0]), float(p[1]), float(p[2])]
         if p is not None and wp_idx < len(waypoints):
             e = float(np.hypot(float(p[0]) - float(target0[0]), float(p[1]) - float(target0[1])))
             if e <= wp_tol:
@@ -499,7 +505,7 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
         return st_out, {}
 
     media = _record_common(env=env, rp=rp, cfg=cfg, task_dir=task_dir, steps=steps, per_step_fn=per_step_fn, state_init=st, first_agent_z=first_z)
-    p = rp._pose_to_position(rp._state_agent(st, "auv0").get("PoseSensor")) or p0
+    p = last_p0 or p0
     last_wp = waypoints[-1]
     final_err = float(np.hypot(float(p[0]) - float(last_wp[0]), float(p[1]) - float(last_wp[1])))
     metrics = {
@@ -572,7 +578,8 @@ def _run_depth_profile_tracking(*, env, rp, cfg, current, out_dir: Path, difficu
             u, v = current.velocity_xy_mps(float(pos[0]), float(pos[1]))
             fx += cfg.current_force_scale * cfg.current_scale * u
             fy += cfg.current_force_scale * cfg.current_scale * v
-            act = rp._action_from_force(fx, fy, fz, cfg)
+            bx, by, bz = rp._world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+            act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
         st_out = rp._safe_tick(env, publish=False)
@@ -651,7 +658,9 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
         u, v = current.velocity_xy_mps(float(pL[0]), float(pL[1]))
         fx += cfg.current_force_scale * cfg.current_scale * u
         fy += cfg.current_force_scale * cfg.current_scale * v
-        act0 = rp._action_from_force(fx, fy, fz, cfg)
+        aL = rp._state_agent(st_in, "auv0")
+        bx0, by0, bz0 = rp._world_force_to_body(aL.get("PoseSensor"), fx, fy, fz)
+        act0 = rp._action_from_force(bx0, by0, bz0, cfg)
         energy += float(np.sum(act0 * act0)) * dt
         env.act("auv0", act0)
         for i in range(1, int(cfg.num_agents)):
@@ -673,7 +682,8 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
             u, v = current.velocity_xy_mps(float(pos[0]), float(pos[1]))
             fx += cfg.current_force_scale * cfg.current_scale * u
             fy += cfg.current_force_scale * cfg.current_scale * v
-            act = rp._action_from_force(fx, fy, fz, cfg)
+            bx, by, bz = rp._world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+            act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
             relx = float(pos[0] - pL[0]) - float(off[0])
@@ -957,4 +967,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

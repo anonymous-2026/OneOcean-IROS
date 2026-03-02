@@ -261,6 +261,27 @@ def _action_from_force(fx: float, fy: float, fz: float, cfg: RunnerCfg) -> "np.n
     return np.array([v, v, v, v, t4, t5, t6, t7], dtype=np.float32)
 
 
+def _world_force_to_body(pose, fx: float, fy: float, fz: float) -> tuple[float, float, float]:
+    """
+    Convert a desired world-frame force to body frame using the PoseSensor rotation.
+
+    HoloOcean thruster commands act in the vehicle/body frame, while our PID terms are computed
+    in world coordinates. Without this conversion, control can be rotated (e.g., yaw!=0),
+    causing navigation/containment policies to miss targets.
+    """
+    import numpy as np
+
+    if pose is None:
+        return float(fx), float(fy), float(fz)
+    arr = np.asarray(pose, dtype=np.float32)
+    if arr.shape != (4, 4):
+        return float(fx), float(fy), float(fz)
+    R = arr[:3, :3]  # world_from_body
+    f_world = np.asarray([float(fx), float(fy), float(fz)], dtype=np.float32)
+    f_body = R.T @ f_world
+    return float(f_body[0]), float(f_body[1]), float(f_body[2])
+
+
 class DatasetCurrent:
     def __init__(self, nc_path: str, time_index: int, depth_index: int):
         import xarray as xr
@@ -859,7 +880,8 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                 fx += cfg.current_force_scale * cfg.current_scale * u
                 fy += cfg.current_force_scale * cfg.current_scale * v
 
-                act = _action_from_force(fx, fy, fz, cfg)
+                bx, by, bz = _world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+                act = _action_from_force(bx, by, bz, cfg)
                 energy += float(np.sum(act * act)) * dt
                 env.act(name, act)
 
@@ -1065,7 +1087,8 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 fx += cfg.current_force_scale * cfg.current_scale * cu
                 fy += cfg.current_force_scale * cfg.current_scale * cv
 
-                act = _action_from_force(fx, fy, fz, cfg)
+                bx, by, bz = _world_force_to_body(ai.get("PoseSensor"), fx, fy, fz)
+                act = _action_from_force(bx, by, bz, cfg)
                 energy += float(np.sum(act * act)) * dt
                 env.act(name, act)
 
