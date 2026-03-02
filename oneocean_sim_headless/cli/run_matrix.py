@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run a headless experiment matrix and aggregate results (H1).")
     ap.add_argument("--drift-npz", type=str, required=True)
     ap.add_argument("--out-dir", type=str, default="")
-    ap.add_argument("--preset", type=str, default="", choices=["", "smoke", "hero"], help="Convenience presets (override tasks/difficulties/seeds/episodes).")
+    ap.add_argument("--preset", type=str, default="", choices=["", "smoke", "hero", "hero_full10"], help="Convenience presets (override tasks/difficulties/seeds/episodes).")
     ap.add_argument("--seeds", type=str, default="0-9", help="Seed range like '0-9' or list like '0,1,2'")
     ap.add_argument("--episodes", type=int, default=1, help="Episodes per seed (writes episode subfolders when >1).")
     ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode within a base seed.")
@@ -155,6 +155,13 @@ def main() -> int:
         args.pollution_models = "gaussian"
         args.seeds = "0-4"
         args.episodes = 2
+    elif str(args.preset).strip() == "hero_full10":
+        # Full canonical 10-task suite for paper-scale reporting.
+        args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        args.difficulties = "medium,hard"
+        args.pollution_models = "gaussian"
+        args.seeds = "0-9"
+        args.episodes = 2
 
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     diffs = [d.strip() for d in args.difficulties.split(",") if d.strip()]
@@ -182,6 +189,11 @@ def main() -> int:
     }
     if str(args.preset).strip() == "hero":
         # Hero runs should showcase multi-agent settings (N=8/10) even for simple tasks.
+        for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
+            if k in defaults:
+                defaults[k]["n_agents"] = 8
+    elif str(args.preset).strip() == "hero_full10":
+        # Same as hero: use N=8/10 for paper-facing multi-agent evaluation (except fixed-N tasks).
         for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
             if k in defaults:
                 defaults[k]["n_agents"] = 8
