@@ -170,7 +170,7 @@ def _postprocess_root(root: Path, *, gif_cfg: GifCfg) -> dict:
         "outputs": outputs,
         "notes": (
             "If gif is null, run this script with a Python that has imageio+Pillow installed "
-            "(e.g., /home/shuaijun/miniconda3/bin/python)."
+            "(e.g., /home/shuaijun/miniconda3/envs/demo2arm_sim_py310/bin/python)."
         ),
     }
     _write_json(root / "postprocess_media_manifest.json", manifest)
@@ -198,4 +198,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

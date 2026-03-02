@@ -67,14 +67,27 @@ The suite/render scripts export MP4s. For paper/demo convenience, we also genera
 - `*.gif` next to each `*.mp4`
 - 3 keyframes per MP4: `*_keyframe_000.png`, `*_keyframe_<mid>.png`, `*_keyframe_<last>.png` (frame indices depend on video length)
 
-This requires `imageio+Pillow` (any Python with those deps is fine). In this workspace, use `../.venv_ocean/`:
+This requires `imageio+Pillow` (any Python with those deps is fine).
+
+Note: `../.venv_ocean/` is used for netCDF/xarray exports, but it does **not** include `imageio` by default in this workspace.
+Use a conda env that already has `imageio` installed (example on this machine: `demo2arm_sim_py310`).
 
 ```bash
 cd "oneocean(iros-2026-code)"
-source ../.venv_ocean/bin/activate
-python tracks/h3_oceangym/postprocess_media.py \
+/home/shuaijun/miniconda3/envs/demo2arm_sim_py310/bin/python tracks/h3_oceangym/postprocess_media.py \
   --roots runs/oceangym_h3/scene_media_20260226_043035 runs/oceangym_h3/task_suite_20260226_043900
-deactivate
 ```
 
 It writes `postprocess_media_manifest.json` into each root for traceability.
+
+## 4) One-command “hero bundle” (dataset-grounded + MP4/GIF/PNGs)
+
+This runs:
+1) export CMEMS current series NPZ from `combined_environment.nc` (if missing),
+2) a dataset-grounded task suite run (all Ocean worlds), and
+3) GIF + keyframe generation.
+
+```bash
+cd "oneocean(iros-2026-code)"
+bash tracks/h3_oceangym/run_hero_bundle.sh
+```
