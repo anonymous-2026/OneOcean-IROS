@@ -204,7 +204,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=6.0,
             max_steps=360 if d == "easy" else 460 if d == "medium" else 620,
-            lift_attach_radius_m=7.0 if d == "easy" else 6.0 if d == "medium" else 5.0,
+            lift_attach_radius_m=8.0 if d == "easy" else 7.0 if d == "medium" else 6.0,
             lift_hold_s=1.5 if d == "easy" else 2.0 if d == "medium" else 2.5,
         )
     if kind == "fish_herding_8uuv":
@@ -220,7 +220,8 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             kind=kind,
             difficulty=difficulty,
             success_radius_m=8.0,
-            max_steps=520 if d == "easy" else 720 if d == "medium" else 980,
+            # Needs to be large enough to traverse a lawnmower grid; keep generous for headless replay.
+            max_steps=900 if d == "easy" else 1400 if d == "medium" else 2200,
             scan_cell_size_m=30.0 if d == "easy" else 22.0 if d == "medium" else 16.0,
             scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.92,
         )
@@ -229,7 +230,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             kind=kind,
             difficulty=difficulty,
             success_radius_m=9.0 if d == "easy" else 7.0 if d == "medium" else 5.0,
-            max_steps=360 if d == "easy" else 520 if d == "medium" else 760,
+            max_steps=520 if d == "easy" else 880 if d == "medium" else 1400,
             pipeline_leaks_n=2 if d == "easy" else 3 if d == "medium" else 4,
             pipeline_detect_radius_m=14.0 if d == "easy" else 10.0 if d == "medium" else 7.0,
         )
@@ -260,9 +261,14 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
         if cfg.kind == "pipeline_inspection_leak_detection":
             st.pipeline_xyz = wps.astype(np.float64)
             l = int(max(1, cfg.pipeline_leaks_n))
-            leak_ts = rng.uniform(0.15, 0.95, size=(l,))
-            leak = (1.0 - leak_ts[:, None]) * p0[None, :] + leak_ts[:, None] * p1[None, :]
-            leak[:, 1] = wps[0, 1]
+            # Place leaks *on the pipeline* (on random waypoint segments) so a waypoint-following policy can detect them.
+            leak = np.zeros((l, 3), dtype=np.float64)
+            for li in range(l):
+                seg = int(rng.integers(0, max(1, k - 1)))
+                a = wps[seg]
+                b = wps[min(k - 1, seg + 1)]
+                tt = float(rng.uniform(0.2, 0.8))
+                leak[li] = (1.0 - tt) * a + tt * b
             st.leak_xyz = leak.astype(np.float64)
             st.leak_detected = np.zeros((l,), dtype=bool)
             st.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
@@ -286,7 +292,7 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
 
     if cfg.kind == "underwater_pollution_lift_5uuv":
         barrel = rng.uniform(lo, hi).astype(np.float64)
-        barrel[1] = min(hi[1] - 0.5, lo[1] + 0.85 * float(hi[1] - lo[1]))  # deep
+        barrel[1] = min(hi[1] - 0.5, lo[1] + 0.70 * float(hi[1] - lo[1]))  # deep-ish but reachable
         st.lift_barrel_xyz = barrel
         st.lift_phase = "approach"
         st.lift_attached = np.zeros((int(n_agents),), dtype=bool)

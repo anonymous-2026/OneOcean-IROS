@@ -351,7 +351,7 @@ class HeadlessOceanEnv:
             barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
             goals = np.repeat(barrel.reshape(1, 3), self.n_agents, axis=0)
             # Side attachments for the first 4 agents; the 5th aims from below.
-            r = 5.0
+            r = 2.5
             offsets = [
                 np.array([+r, 0.0, 0.0], dtype=np.float64),
                 np.array([-r, 0.0, 0.0], dtype=np.float64),
@@ -480,21 +480,32 @@ class HeadlessOceanEnv:
         # Update task-side semantics (fish/barrel) after the physics step.
         if self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
             fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
-            # Drift fish with a small current at their centroid and repulsion from agents.
+            # Drift fish with current + deterministic herding proxy (move away from nearest agent).
             cen = np.mean(fish, axis=0)
             cx, cz = self._sample_current(float(cen[0]), float(cen[2]))
             drift = np.array([cx, 0.0, cz], dtype=np.float64) * float(self.cfg.dt_s)
-            noise = self.rng.normal(scale=0.35, size=fish.shape).astype(np.float64)
+            noise = self.rng.normal(scale=0.18, size=fish.shape).astype(np.float64)
             noise[:, 1] = 0.0
-            fish = fish + 0.25 * drift[None, :] + 0.15 * noise
-            # Repel from agents (simple herding proxy).
-            for p in self._positions:
-                d = fish - p[None, :]
+
+            # Nearest-agent repulsion provides the main "herding" motion.
+            agents = np.asarray(self._positions, dtype=np.float64).reshape(self.n_agents, 3)
+            fish_next = fish.copy()
+            for fi in range(fish.shape[0]):
+                d = agents - fish[fi][None, :]
                 d[:, 1] = 0.0
                 r2 = np.sum(d[:, [0, 2]] ** 2, axis=1)
-                w = np.exp(-r2 / (2.0 * (18.0**2)))
-                fish[:, 0] += 0.6 * w * (d[:, 0] / (np.sqrt(r2) + 1e-6))
-                fish[:, 2] += 0.6 * w * (d[:, 2] / (np.sqrt(r2) + 1e-6))
+                j = int(np.argmin(r2))
+                v = -(d[j])
+                v[1] = 0.0
+                nrm = float(np.linalg.norm(v[[0, 2]]))
+                if not np.isfinite(nrm) or nrm < 1e-9:
+                    v = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+                else:
+                    v = v / nrm
+                speed = 0.9  # meters per step
+                fish_next[fi] = fish[fi] + speed * v * float(self.cfg.dt_s) + 0.10 * drift + noise[fi]
+
+            fish = fish_next
             lo, hi = self.bounds_xyz
             fish = np.minimum(np.maximum(fish, lo[None, :]), hi[None, :])
             self.task_state.fish_xyz = fish
