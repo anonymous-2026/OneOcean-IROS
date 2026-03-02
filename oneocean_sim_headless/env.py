@@ -12,6 +12,7 @@ from oneocean_sim_habitat.drift import CachedDriftField
 from oneocean_sim_habitat.drift import METERS_PER_DEG_LAT, meters_per_deg_lon
 
 from .controllers import ControllerConfig, compute_actions
+from .dynamics import quat_from_yaw_roll_pitch, rotmat_yaw_roll_pitch, wrap_pi
 from .drift_cache import DriftCacheInfo, load_drift_cache
 from .pollution import PollutionModelKind, build_pollution_field
 from .recorder import HeadlessRecorder, RecorderConfig
@@ -33,6 +34,23 @@ class EnvConfig:
     seafloor_clearance_m: float = 1.0
     max_speed_mps: float = 1.2
     current_gain: float = 1.0
+
+    # Dynamics model selection (v2+).
+    dynamics_model: Literal["kinematic", "3dof", "6dof"] = "kinematic"
+
+    # Minimal diagonal 6DoF-ish model parameters (used for 3dof/6dof modes).
+    # These are engineering parameters for a stable, paper-defensible relative-velocity model.
+    dyn_mass_linear: tuple[float, float, float] = (12.0, 12.0, 12.0)  # u,v,w
+    dyn_mass_angular: tuple[float, float, float] = (6.0, 6.0, 6.0)  # p,q,r
+    dyn_damping_linear: tuple[float, float, float] = (8.0, 8.0, 8.0)
+    dyn_damping_angular: tuple[float, float, float] = (3.0, 3.0, 3.0)
+    dyn_kp_linear: tuple[float, float, float] = (18.0, 18.0, 18.0)
+    dyn_kp_angular: tuple[float, float, float] = (10.0, 10.0, 10.0)
+    dyn_kd_angular: tuple[float, float, float] = (2.0, 2.0, 2.0)
+    dyn_max_angular_rate_rps: tuple[float, float, float] = (1.2, 1.2, 1.2)  # p,q,r
+    dyn_yaw_rate_kp: float = 2.0  # maps yaw error -> desired q
+    dyn_attitude_rate_kp: float = 2.0  # maps (roll/pitch) angle -> desired (p/r)
+    dyn_max_tilt_rad: float = 0.6  # safety clamp for roll/pitch in dynamics modes
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -76,6 +94,11 @@ class HeadlessOceanEnv:
 
         self._positions = np.zeros((self.n_agents, 3), dtype=np.float64)
         self._yaws = np.zeros((self.n_agents,), dtype=np.float64)
+        # rpy convention (see dynamics.py): roll about +x, pitch about +z, yaw about +y (down).
+        self._angles_rpy = np.zeros((self.n_agents, 3), dtype=np.float64)
+        # Relative body velocity nu=[u,v,w,p,q,r] where q is yaw-rate about +y (down).
+        self._nu_body = np.zeros((self.n_agents, 6), dtype=np.float64)
+        self._quats_xyzw = np.zeros((self.n_agents, 4), dtype=np.float64)
         self._t = 0.0
         self._energy = 0.0
         self._constraint_violations = 0
@@ -240,6 +263,11 @@ class HeadlessOceanEnv:
                     self._positions[i] = p
                     break
             self._yaws[i] = float(self.rng.uniform(-math.pi, math.pi))
+            self._angles_rpy[i, 0] = 0.0
+            self._angles_rpy[i, 1] = 0.0
+            self._angles_rpy[i, 2] = float(self._yaws[i])
+            self._nu_body[i] = 0.0
+            self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
 
         # Task-specific spawn adjustments to improve determinism and replay usability.
         if task.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
@@ -739,40 +767,149 @@ class HeadlessOceanEnv:
         elev_arr = np.zeros((self.n_agents,), dtype=np.float64)
         mask_arr = np.zeros((self.n_agents,), dtype=np.float64)
         lo, hi = self.bounds_xyz
+        dt = float(self.cfg.dt_s)
+        mode = str(self.cfg.dynamics_model)
+
         for i in range(self.n_agents):
             cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
             currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
-            new_p = self._positions[i] + (act[i] + currents[i]) * float(self.cfg.dt_s)
-            new_p = np.minimum(np.maximum(new_p, lo), hi)
-            if self._violates_constraints(new_p):
-                # Hard constraint: reject invalid states (land/NoData/touchdown).
-                new_p = self._positions[i]
-                self._constraint_violations += 1
-            self._positions[i] = new_p
-            if float(np.linalg.norm(act[i])) > 1e-6:
-                self._yaws[i] = float(math.atan2(act[i, 2], act[i, 0]))
 
-            # extra audit-friendly observables
-            lat = float(self.origin_lat + (float(self._positions[i, 2]) / METERS_PER_DEG_LAT))
-            lon = float(self.origin_lon + (float(self._positions[i, 0]) / meters_per_deg_lon(self.origin_lat)))
-            lat_arr[i] = float(lat)
-            lon_arr[i] = float(lon)
-            elev = self.drift_field.sample_elevation_xz(
-                x_m=float(self._positions[i, 0]),
-                z_m=float(self._positions[i, 2]),
-                origin_lat=self.origin_lat,
-                origin_lon=self.origin_lon,
-            )
-            elev_arr[i] = float(np.nan if elev is None else elev)
-            m = self.drift_field.sample_land_mask_xz(
-                x_m=float(self._positions[i, 0]),
-                z_m=float(self._positions[i, 2]),
-                origin_lat=self.origin_lat,
-                origin_lon=self.origin_lon,
-            )
-            mask_arr[i] = float(np.nan if m is None else m)
+        if mode == "kinematic":
+            for i in range(self.n_agents):
+                new_p = self._positions[i] + (act[i] + currents[i]) * dt
+                new_p = np.minimum(np.maximum(new_p, lo), hi)
+                if self._violates_constraints(new_p):
+                    new_p = self._positions[i]
+                    self._constraint_violations += 1
+                self._positions[i] = new_p
 
-            self._energy += float(np.dot(act[i], act[i])) * float(self.cfg.dt_s)
+                if float(np.linalg.norm(act[i])) > 1e-6:
+                    self._yaws[i] = float(math.atan2(act[i, 2], act[i, 0]))
+                self._angles_rpy[i, 0] = 0.0
+                self._angles_rpy[i, 1] = 0.0
+                self._angles_rpy[i, 2] = float(self._yaws[i])
+                self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
+                # Record a body-relative velocity proxy derived from the commanded action.
+                R = rotmat_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
+                v_body = (R.T @ act[i].reshape(3)).reshape(3)
+                self._nu_body[i] = np.array([float(v_body[0]), float(v_body[1]), float(v_body[2]), 0.0, 0.0, 0.0], dtype=np.float64)
+
+                lat_arr[i] = float(self.origin_lat + (float(self._positions[i, 2]) / METERS_PER_DEG_LAT))
+                lon_arr[i] = float(self.origin_lon + (float(self._positions[i, 0]) / meters_per_deg_lon(self.origin_lat)))
+                elev = self.drift_field.sample_elevation_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                elev_arr[i] = float(np.nan if elev is None else elev)
+                m = self.drift_field.sample_land_mask_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                mask_arr[i] = float(np.nan if m is None else m)
+                self._energy += float(np.dot(act[i], act[i])) * dt
+        else:
+            # 3dof/6dof: integrate relative body velocity with a minimal diagonal model.
+            m_lin = np.array([float(x) for x in self.cfg.dyn_mass_linear], dtype=np.float64).reshape(3)
+            m_ang = np.array([float(x) for x in self.cfg.dyn_mass_angular], dtype=np.float64).reshape(3)
+            d_lin = np.array([float(x) for x in self.cfg.dyn_damping_linear], dtype=np.float64).reshape(3)
+            d_ang = np.array([float(x) for x in self.cfg.dyn_damping_angular], dtype=np.float64).reshape(3)
+            kp_lin = np.array([float(x) for x in self.cfg.dyn_kp_linear], dtype=np.float64).reshape(3)
+            kp_ang = np.array([float(x) for x in self.cfg.dyn_kp_angular], dtype=np.float64).reshape(3)
+            kd_ang = np.array([float(x) for x in self.cfg.dyn_kd_angular], dtype=np.float64).reshape(3)
+            wmax = np.array([float(x) for x in self.cfg.dyn_max_angular_rate_rps], dtype=np.float64).reshape(3)
+
+            for i in range(self.n_agents):
+                roll = float(self._angles_rpy[i, 0])
+                pitch = float(self._angles_rpy[i, 1])
+                yaw = float(self._angles_rpy[i, 2])
+                R = rotmat_yaw_roll_pitch(yaw_y=yaw, roll_x=roll, pitch_z=pitch)
+
+                # High-level command: desired relative velocity in world frame.
+                cmd_world = act[i].reshape(3)
+                cmd_body = (R.T @ cmd_world).reshape(3)
+
+                # Desired angular-rate commands.
+                # For yaw, align to the commanded horizontal direction (if any).
+                horiz = float(np.linalg.norm(cmd_world[[0, 2]]))
+                yaw_des = float(math.atan2(float(cmd_world[2]), float(cmd_world[0]))) if horiz > 1e-6 else yaw
+                yaw_err = wrap_pi(yaw_des - yaw)
+                q_cmd = float(np.clip(float(self.cfg.dyn_yaw_rate_kp) * yaw_err, -wmax[1], wmax[1]))
+                p_cmd = float(np.clip(-float(self.cfg.dyn_attitude_rate_kp) * roll, -wmax[0], wmax[0]))
+                r_cmd = float(np.clip(-float(self.cfg.dyn_attitude_rate_kp) * pitch, -wmax[2], wmax[2]))
+
+                nu_cmd = np.array([cmd_body[0], cmd_body[1], cmd_body[2], p_cmd, q_cmd, r_cmd], dtype=np.float64)
+                nu = np.asarray(self._nu_body[i], dtype=np.float64).reshape(6)
+
+                # Velocity tracking -> generalized force/torque (diagonal PID-lite).
+                tau = np.zeros((6,), dtype=np.float64)
+                tau[:3] = kp_lin * (nu_cmd[:3] - nu[:3])
+                tau[3:] = kp_ang * (nu_cmd[3:] - nu[3:]) - kd_ang * nu[3:]
+
+                nu_dot = np.zeros((6,), dtype=np.float64)
+                nu_dot[:3] = (tau[:3] - d_lin * nu[:3]) / np.maximum(1e-6, m_lin)
+                nu_dot[3:] = (tau[3:] - d_ang * nu[3:]) / np.maximum(1e-6, m_ang)
+                nu = nu + nu_dot * dt
+
+                # 3dof mode: suppress roll/pitch dynamics (keep only yaw about +y).
+                if mode == "3dof":
+                    nu[3] = 0.0
+                    nu[5] = 0.0
+                    roll = 0.0
+                    pitch = 0.0
+
+                # Clip relative speed.
+                sp = float(np.linalg.norm(nu[:3]))
+                if sp > float(self.cfg.max_speed_mps) and sp > 1e-9:
+                    nu[:3] = nu[:3] * (float(self.cfg.max_speed_mps) / sp)
+                nu[3:] = np.clip(nu[3:], -wmax, wmax)
+
+                # Integrate pose.
+                v_world_rel = (R @ nu[:3].reshape(3)).reshape(3)
+                new_p = self._positions[i] + (v_world_rel + currents[i]) * dt
+                new_p = np.minimum(np.maximum(new_p, lo), hi)
+                if self._violates_constraints(new_p):
+                    new_p = self._positions[i]
+                    # Rejecting invalid states: cancel the linear relative velocity.
+                    nu[:3] = 0.0
+                    self._constraint_violations += 1
+                self._positions[i] = new_p
+
+                # Update angles (small-angle approximation; roll/pitch should remain small by design).
+                roll = float(np.clip(roll + float(nu[3]) * dt, -float(self.cfg.dyn_max_tilt_rad), float(self.cfg.dyn_max_tilt_rad)))
+                yaw = wrap_pi(yaw + float(nu[4]) * dt)
+                pitch = float(np.clip(pitch + float(nu[5]) * dt, -float(self.cfg.dyn_max_tilt_rad), float(self.cfg.dyn_max_tilt_rad)))
+                if mode == "3dof":
+                    roll = 0.0
+                    pitch = 0.0
+
+                self._angles_rpy[i, 0] = roll
+                self._angles_rpy[i, 1] = pitch
+                self._angles_rpy[i, 2] = yaw
+                self._yaws[i] = yaw
+                self._nu_body[i] = nu
+                self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=yaw, roll_x=roll, pitch_z=pitch)
+
+                lat_arr[i] = float(self.origin_lat + (float(self._positions[i, 2]) / METERS_PER_DEG_LAT))
+                lon_arr[i] = float(self.origin_lon + (float(self._positions[i, 0]) / meters_per_deg_lon(self.origin_lat)))
+                elev = self.drift_field.sample_elevation_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                elev_arr[i] = float(np.nan if elev is None else elev)
+                m = self.drift_field.sample_land_mask_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                mask_arr[i] = float(np.nan if m is None else m)
+                self._energy += float(np.dot(act[i], act[i])) * dt
 
         # Update pollution field.
         if hasattr(self.pollution, "advect_center"):
@@ -855,7 +992,8 @@ class HeadlessOceanEnv:
         self.rec.step(
             self._t,
             positions_xyz=self._positions,
-            yaws_rad=self._yaws,
+            quats_xyzw=self._quats_xyzw,
+            body_vel_uvw_pqr=self._nu_body,
             actions_xyz=act,
             currents_xyz=currents,
             pollution_probe=probe2,

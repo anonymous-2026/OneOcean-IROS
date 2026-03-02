@@ -98,6 +98,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--dt", type=float, default=1.0)
     ap.add_argument("--tile-x", type=float, default=600.0)
     ap.add_argument("--tile-z", type=float, default=600.0)
+    ap.add_argument("--dynamics-model", type=str, default="kinematic", choices=["kinematic", "3dof", "6dof"])
     ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"])
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
@@ -247,6 +248,7 @@ def main() -> int:
                 "dt_s": float(args.dt),
                 "tile_size_x_m": float(args.tile_x),
                 "tile_size_z_m": float(args.tile_z),
+                "dynamics_model": str(args.dynamics_model),
                 "constraint_mode": str(args.constraint_mode),
                 "bathy_mode": str(args.bathy_mode),
                 "seafloor_clearance_m": float(args.seafloor_clearance_m),
@@ -280,6 +282,7 @@ def main() -> int:
             dt_s=float(args.dt),
             tile_size_x_m=float(args.tile_x),
             tile_size_z_m=float(args.tile_z),
+            dynamics_model=str(args.dynamics_model),  # type: ignore[arg-type]
             constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
             bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
             seafloor_clearance_m=float(args.seafloor_clearance_m),

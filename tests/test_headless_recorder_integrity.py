@@ -39,6 +39,8 @@ def test_headless_recording_validates(tmp_path: Path, monkeypatch) -> None:
             "0",
             "--dt",
             "1.0",
+            "--dynamics-model",
+            "6dof",
             "--constraint-mode",
             "off",
             "--max-steps",

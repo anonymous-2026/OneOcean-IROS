@@ -65,6 +65,7 @@ Streams:
 - `results_manifest.json` (root index)
 - `summary.csv` (row = episode; used for paper tables)
 - `agents/agent_000/pose_groundtruth/data.csv` (t,x,y,z,qx,qy,qz,qw)
+- `agents/agent_000/body_velocity/data.csv` (t,u,v,w,p,q,r)  # relative body velocity (current handled via relative-velocity convention)
 - `agents/agent_000/actions/data.csv`
 - `agents/agent_000/obs/local_current/data.csv`
 - `agents/agent_000/obs/pollution_probe/data.csv`
@@ -117,6 +118,7 @@ Notes:
 python3 -m oneocean_sim_headless.cli.run_matrix \
   --drift-npz runs/headless/_cache/drift_scene_t0_d0.npz \
   --preset smoke \
+  --dynamics-model 6dof \
   --constraint-mode hard \
   --bathy-mode off \
   --validate

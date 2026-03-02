@@ -60,6 +60,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--episodes", type=int, default=1, help="Number of episodes to run (writes episode subfolders when >1).")
     ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode.")
     ap.add_argument("--dt", type=float, default=1.0)
+    ap.add_argument("--dynamics-model", type=str, default="kinematic", choices=["kinematic", "3dof", "6dof"])
     ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"], help="Hard constraints using land_mask (invalid regions).")
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"], help="Hard constraints using elevation vs agent depth (touchdown/too-shallow).")
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0, help="Minimum clearance above seafloor when bathy-mode=hard.")
@@ -94,6 +95,7 @@ def main() -> int:
         drift_cache_npz=str(Path(args.drift_npz).expanduser()),
         pollution_model=str(args.pollution_model),
         dt_s=float(args.dt),
+        dynamics_model=str(args.dynamics_model),  # type: ignore[arg-type]
         constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
         bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
         seafloor_clearance_m=float(args.seafloor_clearance_m),

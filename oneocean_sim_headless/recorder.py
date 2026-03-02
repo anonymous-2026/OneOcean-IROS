@@ -45,6 +45,7 @@ class HeadlessRecorder:
         self.cfg = config or RecorderConfig()
 
         self._pose: list[_CsvStream] = []
+        self._body_vel: list[_CsvStream] = []
         self._actions: list[_CsvStream] = []
         self._current: list[_CsvStream] = []
         self._probe: list[_CsvStream] = []
@@ -59,6 +60,12 @@ class HeadlessRecorder:
                 _CsvStream(
                     agent_dir / "pose_groundtruth" / "data.csv",
                     header=["t", "x", "y", "z", "qx", "qy", "qz", "qw"],
+                )
+            )
+            self._body_vel.append(
+                _CsvStream(
+                    agent_dir / "body_velocity" / "data.csv",
+                    header=["t", "u", "v", "w", "p", "q", "r"],
                 )
             )
             self._actions.append(_CsvStream(agent_dir / "actions" / "data.csv", header=["t", "ax", "ay", "az"]))
@@ -106,7 +113,8 @@ class HeadlessRecorder:
         t: float,
         *,
         positions_xyz: np.ndarray,
-        yaws_rad: np.ndarray,
+        quats_xyzw: np.ndarray,
+        body_vel_uvw_pqr: np.ndarray,
         actions_xyz: np.ndarray,
         currents_xyz: np.ndarray,
         pollution_probe: np.ndarray,
@@ -116,7 +124,8 @@ class HeadlessRecorder:
         land_mask: np.ndarray,
     ) -> None:
         pos = np.asarray(positions_xyz, dtype=np.float64).reshape(self.n_agents, 3)
-        yaw = np.asarray(yaws_rad, dtype=np.float64).reshape(self.n_agents)
+        quat = np.asarray(quats_xyzw, dtype=np.float64).reshape(self.n_agents, 4)
+        nu = np.asarray(body_vel_uvw_pqr, dtype=np.float64).reshape(self.n_agents, 6)
         act = np.asarray(actions_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         cur = np.asarray(currents_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         probe = np.asarray(pollution_probe, dtype=np.float64).reshape(self.n_agents)
@@ -126,9 +135,29 @@ class HeadlessRecorder:
         mask = np.asarray(land_mask, dtype=np.float64).reshape(self.n_agents)
 
         for i in range(self.n_agents):
-            qy = float(np.sin(0.5 * yaw[i]))
-            qw = float(np.cos(0.5 * yaw[i]))
-            self._pose[i].write_row([float(t), float(pos[i, 0]), float(pos[i, 1]), float(pos[i, 2]), 0.0, qy, 0.0, qw])
+            self._pose[i].write_row(
+                [
+                    float(t),
+                    float(pos[i, 0]),
+                    float(pos[i, 1]),
+                    float(pos[i, 2]),
+                    float(quat[i, 0]),
+                    float(quat[i, 1]),
+                    float(quat[i, 2]),
+                    float(quat[i, 3]),
+                ]
+            )
+            self._body_vel[i].write_row(
+                [
+                    float(t),
+                    float(nu[i, 0]),
+                    float(nu[i, 1]),
+                    float(nu[i, 2]),
+                    float(nu[i, 3]),
+                    float(nu[i, 4]),
+                    float(nu[i, 5]),
+                ]
+            )
             self._actions[i].write_row([float(t), float(act[i, 0]), float(act[i, 1]), float(act[i, 2])])
             self._current[i].write_row([float(t), float(cur[i, 0]), float(cur[i, 1]), float(cur[i, 2])])
             self._probe[i].write_row([float(t), float(probe[i])])
@@ -136,7 +165,7 @@ class HeadlessRecorder:
             self._bathy[i].write_row([float(t), float(elev[i]), float(mask[i])])
 
     def close(self) -> None:
-        for streams in (self._pose, self._actions, self._current, self._probe, self._latlon, self._bathy):
+        for streams in (self._pose, self._body_vel, self._actions, self._current, self._probe, self._latlon, self._bathy):
             for s in streams:
                 s.close()
 
@@ -147,6 +176,7 @@ def required_streams_exist(run_dir: str | Path, *, n_agents: int) -> bool:
         agent_dir = root / "agents" / f"agent_{i:03d}"
         for rel in (
             "pose_groundtruth/data.csv",
+            "body_velocity/data.csv",
             "actions/data.csv",
             "obs/local_current/data.csv",
             "obs/pollution_probe/data.csv",

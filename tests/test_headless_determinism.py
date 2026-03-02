@@ -51,6 +51,8 @@ def test_headless_determinism_same_seed(tmp_path: Path, monkeypatch) -> None:
                 "123",
                 "--dt",
                 "1.0",
+                "--dynamics-model",
+                "6dof",
                 "--constraint-mode",
                 "off",
                 "--max-steps",
