@@ -66,8 +66,10 @@ def main() -> int:
     ap.add_argument("--gpu-ids", type=str, default="0,1,2,3,4,5,6,7", help="Comma list of GPU ids for CUDA_VISIBLE_DEVICES mapping.")
     ap.add_argument("--max-parallel", type=int, default=0, help="Optional cap on concurrent processes (0 = use shards).")
     ap.add_argument("--poll-s", type=float, default=1.0, help="Polling interval for job completion.")
-    ap.add_argument("--", dest="sep", action="store_true", help="Separator before run_matrix args (optional).")
     args, rest = ap.parse_known_args()
+    # Allow passing run_matrix args after a `--` separator; argparse keeps it in `rest`.
+    if rest and rest[0] == "--":
+        rest = rest[1:]
 
     shards = int(args.shards)
     if shards < 1:
@@ -165,4 +167,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
