@@ -197,7 +197,7 @@ def _get_fpv_frame(agent_state: dict):
     return None
 
 
-def _safe_tick(env, *, publish: bool, retries: int = 6, base_sleep_s: float = 0.15):
+def _safe_tick(env, *, publish: bool, retries: int = 18, base_sleep_s: float = 0.20):
     import time
 
     last_exc: Exception | None = None
