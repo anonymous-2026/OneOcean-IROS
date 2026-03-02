@@ -138,7 +138,7 @@ def _difficulty_presets(task_id: str, difficulty: str) -> dict:
 
     if d == "easy" and task_id == "formation_transit_multiagent":
         # Formation is sensitive to leader speed; keep thrust moderate so followers can maintain spacing.
-        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 70.0, "max_vertical_force": 60.0}
+        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 45.0, "max_vertical_force": 60.0}
 
     return dict(base)
 
