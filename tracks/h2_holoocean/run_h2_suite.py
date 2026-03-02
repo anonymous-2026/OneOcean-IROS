@@ -827,7 +827,10 @@ def main() -> int:
 
     dataset_variant = str(args.dataset_variant).strip() or None
     combined_nc = rp._resolve_combined_nc(str(args.combined_nc), dataset_variant)
-    out_dir = Path(args.out_dir).resolve()
+    out_dir = Path(args.out_dir)
+    if not out_dir.is_absolute():
+        out_dir = _REPO_ROOT / out_dir
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     tasks = [t.strip() for t in str(args.tasks).split(",") if t.strip()]

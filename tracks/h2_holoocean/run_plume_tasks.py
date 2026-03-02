@@ -1291,7 +1291,10 @@ def main() -> int:
         debug_draw=bool(args.debug_draw),
     )
 
-    out_dir = Path(args.out_dir).resolve()
+    out_dir = Path(args.out_dir)
+    if not out_dir.is_absolute():
+        out_dir = _REPO_ROOT / out_dir
+    out_dir = out_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     import numpy as np
