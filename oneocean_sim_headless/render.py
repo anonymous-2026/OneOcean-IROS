@@ -109,7 +109,7 @@ def render_topdown_rollout(*, run_dir: str | Path, out_mp4: str | Path, out_keyf
 
     for ti in range(0, t_len, stride):
         img = np.zeros((height, width, 3), dtype=np.uint8)
-        img[:, :, :] = np.array([10, 14, 22], dtype=np.uint8)  # dark ocean bg
+        img[:, :, :] = np.array([12, 18, 30], dtype=np.uint8)  # dark ocean bg (slightly brighter for visibility)
 
         # Draw semantic objects if present near this time.
         key = int(round(float(poses[0][ti, 0]) * 1000.0))
@@ -118,19 +118,19 @@ def render_topdown_rollout(*, run_dir: str | Path, out_mp4: str | Path, out_keyf
             if "cleanup_sources_xyz" in s:
                 for p in s["cleanup_sources_xyz"]:
                     px, py = _map_xz_to_px(float(p[0]), float(p[2]), lo=lo, hi=hi, width=width, height=height)
-                    _draw_disk(img, cx=px, cy=py, r=6, color=(255, 220, 80))
+                    _draw_disk(img, cx=px, cy=py, r=8, color=(255, 220, 80))
             if "barrel_xyz" in s:
                 p = s["barrel_xyz"]
                 px, py = _map_xz_to_px(float(p[0]), float(p[2]), lo=lo, hi=hi, width=width, height=height)
-                _draw_disk(img, cx=px, cy=py, r=7, color=(255, 160, 40))
+                _draw_disk(img, cx=px, cy=py, r=10, color=(255, 160, 40))
             if "fish_centroid_xyz" in s:
                 p = s["fish_centroid_xyz"]
                 px, py = _map_xz_to_px(float(p[0]), float(p[2]), lo=lo, hi=hi, width=width, height=height)
-                _draw_disk(img, cx=px, cy=py, r=6, color=(120, 220, 255))
+                _draw_disk(img, cx=px, cy=py, r=8, color=(120, 220, 255))
             if "leak_xyz" in s:
                 for p in s["leak_xyz"]:
                     px, py = _map_xz_to_px(float(p[0]), float(p[2]), lo=lo, hi=hi, width=width, height=height)
-                    _draw_disk(img, cx=px, cy=py, r=5, color=(255, 60, 60))
+                    _draw_disk(img, cx=px, cy=py, r=7, color=(255, 60, 60))
 
         # Draw agents + short trails.
         for ai, p in enumerate(poses):
@@ -140,10 +140,10 @@ def render_topdown_rollout(*, run_dir: str | Path, out_mp4: str | Path, out_keyf
             for tj in range(t0, ti, max(1, 6 * stride)):
                 x, z = float(p[tj, 1]), float(p[tj, 3])
                 px, py = _map_xz_to_px(x, z, lo=lo, hi=hi, width=width, height=height)
-                _draw_disk(img, cx=px, cy=py, r=2, color=(40, 60, 90))
+                _draw_disk(img, cx=px, cy=py, r=3, color=(60, 90, 140))
             x, z = float(p[ti, 1]), float(p[ti, 3])
             px, py = _map_xz_to_px(x, z, lo=lo, hi=hi, width=width, height=height)
-            _draw_disk(img, cx=px, cy=py, r=5, color=c)
+            _draw_disk(img, cx=px, cy=py, r=8, color=c)
 
         frames.append(img)
 
