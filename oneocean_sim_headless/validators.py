@@ -52,6 +52,8 @@ def validate_run_dir(run_dir: str | Path) -> ValidationResult:
     meta_path = root / "run_meta.json"
     if not meta_path.exists():
         return ValidationResult(False, "missing run_meta.json")
+    if not (root / "spec_snapshot.json").exists():
+        return ValidationResult(False, "missing spec_snapshot.json (v2 contract)")
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception as e:

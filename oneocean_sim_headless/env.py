@@ -15,6 +15,7 @@ from .controllers import ControllerConfig, compute_actions
 from .drift_cache import DriftCacheInfo, load_drift_cache
 from .pollution import PollutionModelKind, build_pollution_field
 from .recorder import HeadlessRecorder, RecorderConfig
+from .specs import build_spec_snapshot
 from .tasks import TaskConfig, TaskState, compute_success, required_n_agents, reset_task
 
 
@@ -410,6 +411,13 @@ class HeadlessOceanEnv:
             },
             "bounds_xyz": {"lo": lo.tolist(), "hi": hi.tolist()},
         }
+        # v2 contract snapshot for paper-facing reproducibility (separate stable file).
+        try:
+            spec = build_spec_snapshot(env_cfg=self.cfg, controller=controller)
+            (self.out_dir / "spec_snapshot.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
+            meta["spec_snapshot"] = {"schema_version": "v2", "path": str((self.out_dir / "spec_snapshot.json").resolve())}
+        except Exception as e:
+            meta["spec_snapshot_error"] = f"{type(e).__name__}: {e}"
         self.rec.write_run_meta(meta)
         return meta
 

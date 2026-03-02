@@ -61,7 +61,7 @@ Runs are written under:
 - `runs/headless/<run_id>/`
 
 Streams:
-- `run_meta.json`, `metrics.json`, `metrics.csv`
+- `run_meta.json`, `spec_snapshot.json`, `metrics.json`, `metrics.csv`
 - `results_manifest.json` (root index)
 - `summary.csv` (row = episode; used for paper tables)
 - `agents/agent_000/pose_groundtruth/data.csv` (t,x,y,z,qx,qy,qz,qw)
