@@ -52,7 +52,8 @@ def parse_args() -> argparse.Namespace:
         ],
     )
     ap.add_argument("--difficulty", type=str, default="medium", choices=["easy", "medium", "hard"])
-    ap.add_argument("--controller", type=str, required=True, choices=["go_to_goal", "station_keep", "plume_gradient", "containment_ring"])
+    ap.add_argument("--controller", type=str, required=True, choices=["go_to_goal", "station_keep", "plume_gradient", "containment_ring", "mlp_bc"])
+    ap.add_argument("--bc-weights-npz", type=str, default="", help="Required for controller=mlp_bc: path to exported bc_mlp_v1_weights.npz")
     ap.add_argument("--pollution-model", type=str, default="gaussian", choices=["gaussian", "ocpnet_3d"])
     ap.add_argument("--n-agents", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
@@ -103,7 +104,7 @@ def main() -> int:
     if float(args.success_radius) > 0:
         preset = TaskConfig(**{**preset.to_dict(), "success_radius_m": float(args.success_radius)})
     task_cfg = preset
-    ctrl_cfg = preset_controller(kind=str(args.controller), max_speed_mps=env_cfg.max_speed_mps)  # type: ignore[arg-type]
+    ctrl_cfg = preset_controller(kind=str(args.controller), max_speed_mps=env_cfg.max_speed_mps, bc_weights_npz=str(args.bc_weights_npz))  # type: ignore[arg-type]
 
     batch_metrics = []
     for ep in range(int(max(1, args.episodes))):

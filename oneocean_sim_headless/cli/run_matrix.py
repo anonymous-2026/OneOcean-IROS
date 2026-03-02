@@ -86,6 +86,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--difficulties", type=str, default="easy,medium,hard")
     ap.add_argument("--pollution-models", type=str, default="gaussian", help="Comma list: gaussian,ocpnet_3d")
     ap.add_argument("--n-agents", type=int, default=-1, help="Override n_agents for all scenarios (useful for scaling sweeps).")
+    ap.add_argument("--controller-override", type=str, default="", help="Override controller kind for all tasks (e.g., mlp_bc).")
+    ap.add_argument("--bc-weights-npz", type=str, default="", help="Weights for controller=mlp_bc (exported bc_mlp_v1_weights.npz).")
     ap.add_argument("--validate", action="store_true")
     ap.add_argument("--dt", type=float, default=1.0)
     ap.add_argument("--tile-x", type=float, default=600.0)
@@ -209,11 +211,14 @@ def main() -> int:
         for diff in diffs:
             for pm in pmods:
                 for seed in seeds:
+                    ctrl = str(defaults[task]["controller"])
+                    if str(args.controller_override).strip():
+                        ctrl = str(args.controller_override).strip()
                     scenarios.append(
                         Scenario(
                             task=task,
                             difficulty=diff,
-                            controller=str(defaults[task]["controller"]),
+                            controller=ctrl,
                             pollution_model=pm,
                             n_agents=int(defaults[task]["n_agents"]),
                             seed=int(seed),
@@ -261,7 +266,7 @@ def main() -> int:
             seafloor_clearance_m=float(args.seafloor_clearance_m),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
-        ctrl_cfg = preset_controller(kind=str(sc.controller), max_speed_mps=env_cfg.max_speed_mps)  # type: ignore[arg-type]
+        ctrl_cfg = preset_controller(kind=str(sc.controller), max_speed_mps=env_cfg.max_speed_mps, bc_weights_npz=str(args.bc_weights_npz))  # type: ignore[arg-type]
 
         for ep in range(int(episodes)):
             seed = int(sc.seed) + ep * int(seed_step)

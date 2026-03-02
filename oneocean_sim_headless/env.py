@@ -618,6 +618,7 @@ class HeadlessOceanEnv:
             goal_xyz=goal,
             pollution_probe=probe,
             rng=self.rng,
+            task_kind=str(self.task_cfg.kind),
         )
         # Clip actions to max speed.
         for i in range(self.n_agents):

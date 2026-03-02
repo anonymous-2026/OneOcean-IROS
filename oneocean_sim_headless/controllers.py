@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
 
 
-ControllerKind = Literal["go_to_goal", "station_keep", "plume_gradient", "containment_ring"]
+ControllerKind = Literal["go_to_goal", "station_keep", "plume_gradient", "containment_ring", "mlp_bc"]
 
 
 @dataclass(frozen=True)
@@ -16,12 +17,13 @@ class ControllerConfig:
     max_speed_mps: float = 1.2
     kp: float = 0.8
     ring_radius_m: float = 20.0
+    bc_weights_npz: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def preset_controller(kind: ControllerKind, *, max_speed_mps: float) -> ControllerConfig:
+def preset_controller(kind: ControllerKind, *, max_speed_mps: float, bc_weights_npz: str = "") -> ControllerConfig:
     if kind == "go_to_goal":
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.9)
     if kind == "station_keep":
@@ -30,6 +32,8 @@ def preset_controller(kind: ControllerKind, *, max_speed_mps: float) -> Controll
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.7, ring_radius_m=16.0)
     if kind == "containment_ring":
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.7, ring_radius_m=22.0)
+    if kind == "mlp_bc":
+        return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), bc_weights_npz=str(bc_weights_npz))
     raise ValueError(f"Unknown controller kind: {kind}")
 
 
@@ -48,6 +52,7 @@ def compute_actions(
     goal_xyz: np.ndarray,
     pollution_probe: np.ndarray,
     rng: np.random.Generator,
+    task_kind: str | None = None,
 ) -> np.ndarray:
     pos = np.asarray(positions_xyz, dtype=np.float64).reshape(-1, 3)
     n = pos.shape[0]
@@ -119,4 +124,71 @@ def compute_actions(
             actions[i] = _clip_speed(float(cfg.kp) * (target - pos[i]), cfg.max_speed_mps)
         return actions
 
+    if cfg.kind == "mlp_bc":
+        weights_path = str(cfg.bc_weights_npz).strip()
+        if not weights_path:
+            raise ValueError("mlp_bc controller requires bc_weights_npz (path to bc_mlp_v1_weights.npz).")
+        w = _load_bc_weights(weights_path)
+        task_vocab = w["task_vocab"]
+        kind = str(task_kind or "")
+        onehot = np.zeros((len(task_vocab),), dtype=np.float32)
+        if kind in task_vocab:
+            onehot[task_vocab.index(kind)] = 1.0
+
+        # Build features per agent: [goal_delta(3), depth_y(1), probe(1), task_onehot]
+        feats = np.zeros((n, 5 + len(task_vocab)), dtype=np.float32)
+        for i in range(n):
+            d = goal[i] - pos[i]
+            feats[i, 0:3] = d.astype(np.float32)
+            feats[i, 3] = float(pos[i, 1])
+            feats[i, 4] = float(probe[i])
+            feats[i, 5:] = onehot
+        pred = _bc_forward(w, feats)
+        for i in range(n):
+            actions[i] = _clip_speed(pred[i].astype(np.float64), cfg.max_speed_mps)
+        return actions
+
     raise ValueError(f"Unknown controller kind: {cfg.kind}")
+
+
+def _relu(x: np.ndarray) -> np.ndarray:
+    return np.maximum(x, 0.0)
+
+
+def _bc_forward(w: dict[str, Any], x: np.ndarray) -> np.ndarray:
+    x_mean = w["x_mean"]
+    x_std = w["x_std"]
+    y_mean = w["y_mean"]
+    y_std = w["y_std"]
+    x_n = (x - x_mean) / x_std
+    h0 = _relu(x_n @ w["w0"].T + w["b0"][None, :])
+    h1 = _relu(h0 @ w["w1"].T + w["b1"][None, :])
+    y_n = h1 @ w["w2"].T + w["b2"][None, :]
+    y = y_n * y_std + y_mean
+    return y.astype(np.float32)
+
+
+_BC_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def _load_bc_weights(path: str) -> dict[str, Any]:
+    path = str(Path(path).expanduser().resolve())
+    if path in _BC_CACHE:
+        return _BC_CACHE[path]
+    data = np.load(path, allow_pickle=True)
+    task_vocab = [str(x) for x in list(data["task_vocab"].tolist())] if "task_vocab" in data else []
+    w = {
+        "w0": np.asarray(data["w0"], dtype=np.float32),
+        "b0": np.asarray(data["b0"], dtype=np.float32),
+        "w1": np.asarray(data["w1"], dtype=np.float32),
+        "b1": np.asarray(data["b1"], dtype=np.float32),
+        "w2": np.asarray(data["w2"], dtype=np.float32),
+        "b2": np.asarray(data["b2"], dtype=np.float32),
+        "x_mean": np.asarray(data["x_mean"], dtype=np.float32),
+        "x_std": np.asarray(data["x_std"], dtype=np.float32),
+        "y_mean": np.asarray(data["y_mean"], dtype=np.float32),
+        "y_std": np.asarray(data["y_std"], dtype=np.float32),
+        "task_vocab": task_vocab,
+    }
+    _BC_CACHE[path] = w
+    return w
