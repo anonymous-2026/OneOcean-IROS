@@ -127,7 +127,7 @@ Outputs:
 - `runs/headless/matrix_<timestamp>/matrix_summary.json`
 - `runs/headless/matrix_<timestamp>/results_manifest.json`
 
-## 3) Export a run to demo_ref-compatible JSON (env + multi-agent paths)
+## 3) Export a run to demo-compatible JSON (env + multi-agent paths)
 
 This does **not** modify `demo/`. It produces JSON files that can be imported by the demo UI.
 

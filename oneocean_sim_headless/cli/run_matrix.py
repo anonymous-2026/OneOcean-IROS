@@ -143,8 +143,11 @@ def main() -> int:
                 "go_to_goal_current",
                 "station_keeping",
                 "surface_pollution_cleanup_multiagent",
+                "area_scan_terrain_recon",
                 "formation_transit_multiagent",
                 "pipeline_inspection_leak_detection",
+                "route_following_waypoints",
+                "depth_profile_tracking",
             ]
         )
         args.difficulties = "medium,hard"
@@ -175,6 +178,11 @@ def main() -> int:
         "pollution_localization": {"controller": "plume_gradient", "n_agents": 8},
         "pollution_containment_multiagent": {"controller": "containment_ring", "n_agents": 10},
     }
+    if str(args.preset).strip() == "hero":
+        # Hero runs should showcase multi-agent settings (N=8/10) even for simple tasks.
+        for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
+            if k in defaults:
+                defaults[k]["n_agents"] = 8
 
     scenarios: list[Scenario] = []
     for task in tasks:

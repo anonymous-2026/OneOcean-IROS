@@ -13,7 +13,7 @@ from ..drift_cache import load_drift_cache
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Export a headless run into demo_ref-compatible JSON (env + paths).")
+    ap = argparse.ArgumentParser(description="Export a headless run into demo-compatible JSON (env + paths).")
     ap.add_argument("--run-dir", type=str, required=True, help="runs/headless/... episode dir (contains agents/* and run_meta.json).")
     ap.add_argument("--out-dir", type=str, required=True, help="Output folder to write drone_map_data.json + drone_path_data.json.")
     ap.add_argument("--stride", type=int, default=4, help="Downsample stride over recorded steps.")
