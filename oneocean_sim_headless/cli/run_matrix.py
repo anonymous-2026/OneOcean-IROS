@@ -180,7 +180,7 @@ def main() -> int:
     }
     if str(args.preset).strip() == "hero":
         # Hero runs should showcase multi-agent settings (N=8/10) even for simple tasks.
-        for k in ("go_to_goal_current", "station_keeping", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
+        for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
             if k in defaults:
                 defaults[k]["n_agents"] = 8
 
