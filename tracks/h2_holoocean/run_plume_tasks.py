@@ -290,8 +290,23 @@ class DatasetCurrent:
     def __init__(self, nc_path: str, time_index: int, depth_index: int):
         import xarray as xr
         import numpy as np
+        import time
 
-        ds = xr.open_dataset(nc_path)
+        last_exc: Exception | None = None
+        ds = None
+        for i in range(5):
+            try:
+                ds = xr.open_dataset(nc_path, engine="netcdf4")
+                break
+            except OSError as e:
+                # Transient HDF errors can happen on shared filesystems under heavy read concurrency.
+                last_exc = e
+                time.sleep(0.6 * float(i + 1))
+        if ds is None:
+            try:
+                ds = xr.open_dataset(nc_path, engine="h5netcdf")
+            except Exception:
+                raise last_exc or RuntimeError(f"Failed to open dataset: {nc_path}")
         if "uo" not in ds or "vo" not in ds:
             raise ValueError("Dataset must include uo and vo.")
 
@@ -299,6 +314,10 @@ class DatasetCurrent:
         self.longitude = ds["longitude"].values.astype(np.float32)
         self.u = ds["uo"].isel(time=int(time_index), depth=int(depth_index)).values.astype(np.float32)
         self.v = ds["vo"].isel(time=int(time_index), depth=int(depth_index)).values.astype(np.float32)
+        try:
+            ds.close()
+        except Exception:
+            pass
 
         self.lat0 = float(np.nanmedian(self.latitude))
         self.lon0 = float(np.nanmedian(self.longitude))
