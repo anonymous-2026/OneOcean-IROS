@@ -107,6 +107,8 @@ class HeadlessOceanEnv:
         self._llm_planner = None
         self._llm_last_done_mask: np.ndarray | None = None
         self._llm_last_call_step: int = -10**9
+        self._llm_last_wp_call_step: int = -10**9
+        self._llm_last_wp_assign: np.ndarray | None = None
 
         self.rec = HeadlessRecorder(self.out_dir, n_agents=self.n_agents, config=RecorderConfig())
         self._initial_pollution_mass: float | None = None
@@ -192,10 +194,14 @@ class HeadlessOceanEnv:
             )
             self._llm_last_done_mask = None
             self._llm_last_call_step = -10**9
+            self._llm_last_wp_call_step = -10**9
+            self._llm_last_wp_assign = None
         else:
             self._llm_planner = None
             self._llm_last_done_mask = None
             self._llm_last_call_step = -10**9
+            self._llm_last_wp_call_step = -10**9
+            self._llm_last_wp_assign = None
         req_n = required_n_agents(task.kind)
         if req_n is not None and int(self.n_agents) != int(req_n):
             raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
@@ -635,15 +641,35 @@ class HeadlessOceanEnv:
                     self.task_state.waypoint_index = i + 1
                     i = int(self.task_state.waypoint_index)
             lo, hi = self.bounds_xyz
-            # Multi-agent scan: assign agents to different points along the lawnmower path (phase offsets),
-            # so coverage scales with N instead of all agents clustering at the same waypoint.
-            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+            # Multi-agent scan: default deterministic spreading. Optional: LLM can assign waypoint indices.
+            use_llm = str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None
             k = int(wps.shape[0])
-            delta = int(max(1, round(0.5 * float(k) / max(1.0, float(self.n_agents)))))
+            assign = None
+            if use_llm:
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                if (step_i - int(self._llm_last_wp_call_step)) >= stride:
+                    plan = self._llm_planner.plan_waypoint_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        waypoints_xyz=wps,
+                        n_agents=int(self.n_agents),
+                        detected_mask=None,
+                    )
+                    self._llm_last_wp_call_step = int(step_i)
+                    if plan is not None:
+                        self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+                assign = self._llm_last_wp_assign
+
+            if assign is None:
+                delta = int(max(1, round(0.5 * float(k) / max(1.0, float(self.n_agents)))))
+                assign = np.asarray([(i + ai * delta) % k for ai in range(self.n_agents)], dtype=np.int64)
+
+            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
             grid_n = int(max(1, math.ceil(math.sqrt(self.n_agents))))
             spacing = float(max(2.0, 0.55 * float(self.task_cfg.scan_cell_size_m)))
             for ai in range(self.n_agents):
-                ii = int((i + ai * delta) % k)
+                ii = int(np.clip(int(assign[ai]), 0, k - 1))
                 base = wps[ii]
                 r = int(ai // grid_n)
                 c = int(ai % grid_n)
@@ -664,6 +690,32 @@ class HeadlessOceanEnv:
                     i = int(self.task_state.waypoint_index)
             self.task_state.goal_xyz = wps[i].copy()
             goal = self.task_state.goal_xyz
+            # Optional: LLM splits pipeline waypoints among agents to speed inspection.
+            if str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None:
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                if (step_i - int(self._llm_last_wp_call_step)) >= stride:
+                    det = None
+                    if self.task_state.leak_detected is not None:
+                        det = np.asarray(self.task_state.leak_detected, dtype=bool)
+                    plan = self._llm_planner.plan_waypoint_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        waypoints_xyz=wps,
+                        n_agents=int(self.n_agents),
+                        detected_mask=det,
+                    )
+                    self._llm_last_wp_call_step = int(step_i)
+                    if plan is not None:
+                        self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+                if self._llm_last_wp_assign is not None:
+                    assign = np.asarray(self._llm_last_wp_assign, dtype=np.int64).reshape(self.n_agents)
+                    goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+                    k = int(wps.shape[0])
+                    for ai in range(self.n_agents):
+                        ii = int(np.clip(int(assign[ai]), 0, k - 1))
+                        goals[ai] = wps[ii]
+                    goal = goals
 
         act = compute_actions(
             self.controller_cfg,

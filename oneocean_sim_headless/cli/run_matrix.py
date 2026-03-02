@@ -99,6 +99,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"])
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
+    ap.add_argument("--current-gain", type=float, default=1.0, help="Scale dataset currents (ablation/stress-test).")
     return ap.parse_args()
 
 
@@ -268,6 +269,7 @@ def main() -> int:
             constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
             bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
             seafloor_clearance_m=float(args.seafloor_clearance_m),
+            current_gain=float(args.current_gain),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
         ctrl_cfg = preset_controller(
