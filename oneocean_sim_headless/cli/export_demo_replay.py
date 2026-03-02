@@ -125,26 +125,29 @@ def main() -> int:
     }
     (out_dir / "drone_map_data.json").write_text(json.dumps(env_data), encoding="utf-8")
 
-    (out_dir / "export_manifest.json").write_text(
-        json.dumps(
-            {
-                "run_dir": str(run_dir),
-                "out_dir": str(out_dir),
-                "written": ["drone_map_data.json", "drone_path_data.json"],
-                "task": task_id,
-                "n_agents": n_agents,
-                "stride": stride,
-                "frames_exported": frames_exported,
-                "terrain_step_m": float(step_m),
-                "terrain_points": int(len(terrain)),
-                "dt_s": float(meta.get("env_config", {}).get("dt_s", float("nan"))),
-                "git": root_manifest.get("git"),
-                "source_results_manifest": str(root_manifest_path) if root_manifest_path.exists() else None,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    # Optional convenience bundle: single JSON that includes both env + paths + manifest.
+    bundle = {
+        "type": "oneocean_h1_replay_bundle",
+        "export_manifest": {
+            "run_dir": str(run_dir),
+            "out_dir": str(out_dir),
+            "written": ["drone_map_data.json", "drone_path_data.json", "replay_bundle.json"],
+            "task": task_id,
+            "n_agents": n_agents,
+            "stride": stride,
+            "frames_exported": frames_exported,
+            "terrain_step_m": float(step_m),
+            "terrain_points": int(len(terrain)),
+            "dt_s": float(meta.get("env_config", {}).get("dt_s", float("nan"))),
+            "git": root_manifest.get("git"),
+            "source_results_manifest": str(root_manifest_path) if root_manifest_path.exists() else None,
+        },
+        "drone_map_data": env_data,
+        "drone_path_data": path_data,
+    }
+    (out_dir / "replay_bundle.json").write_text(json.dumps(bundle), encoding="utf-8")
+
+    (out_dir / "export_manifest.json").write_text(json.dumps(bundle["export_manifest"], indent=2), encoding="utf-8")
     print(json.dumps({"out_dir": str(out_dir)}, indent=2))
     return 0
 
