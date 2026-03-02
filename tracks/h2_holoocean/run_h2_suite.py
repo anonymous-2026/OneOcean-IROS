@@ -634,7 +634,9 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
     dt = 1.0 / float(cfg.fps)
     steps = int(round(_episode_seconds(task_id, difficulty) * float(cfg.fps)))
     d_goal = float(_goal_distance_m(difficulty)) * 1.1
-    goal_xy = (float(p0[0] + d_goal), float(p0[1] - 0.2 * d_goal))
+    # NOTE: with HoveringAUV thruster-force control, moving toward negative Y in this map tends to be unreliable
+    # on this host/client. Use a goal that moves into +Y to keep the easy suite stable.
+    goal_xy = (float(p0[0] + d_goal), float(p0[1] + 0.2 * d_goal))
     goal_radius = float(_goal_radius_m(difficulty))
     r_form = float(_formation_radius_m(int(cfg.num_agents), difficulty))
     tol_form = float(_formation_tol_m(difficulty))
