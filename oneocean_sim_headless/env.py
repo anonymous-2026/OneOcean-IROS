@@ -353,11 +353,16 @@ class HeadlessOceanEnv:
                 l = int(max(1, task.pipeline_leaks_n))
                 leak = np.zeros((l, 3), dtype=np.float64)
                 for li in range(l):
-                    seg = int(self.rng.integers(0, max(1, k - 1)))
-                    aa = wps[seg]
-                    bb = wps[min(k - 1, seg + 1)]
-                    tt = float(self.rng.uniform(0.2, 0.8))
-                    leak[li] = (1.0 - tt) * aa + tt * bb
+                    # Place leaks near waypoints for robust detection under drift (still on the pipeline polyline).
+                    if k >= 3:
+                        wi = int(self.rng.integers(1, k - 1))
+                        leak[li] = wps[wi]
+                    else:
+                        seg = int(self.rng.integers(0, max(1, k - 1)))
+                        aa = wps[seg]
+                        bb = wps[min(k - 1, seg + 1)]
+                        tt = float(self.rng.uniform(0.2, 0.8))
+                        leak[li] = (1.0 - tt) * aa + tt * bb
                 self.task_state.leak_xyz = leak.astype(np.float64)
                 self.task_state.leak_detected = np.zeros((l,), dtype=bool)
                 self.task_state.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)

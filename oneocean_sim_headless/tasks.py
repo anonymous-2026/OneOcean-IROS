@@ -267,11 +267,16 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
             # Place leaks *on the pipeline* (on random waypoint segments) so a waypoint-following policy can detect them.
             leak = np.zeros((l, 3), dtype=np.float64)
             for li in range(l):
-                seg = int(rng.integers(0, max(1, k - 1)))
-                a = wps[seg]
-                b = wps[min(k - 1, seg + 1)]
-                tt = float(rng.uniform(0.2, 0.8))
-                leak[li] = (1.0 - tt) * a + tt * b
+                # Prefer placing leaks close to waypoints to make detection robust under drift.
+                if k >= 3:
+                    wi = int(rng.integers(1, k - 1))
+                    leak[li] = wps[wi]
+                else:
+                    seg = int(rng.integers(0, max(1, k - 1)))
+                    a = wps[seg]
+                    b = wps[min(k - 1, seg + 1)]
+                    tt = float(rng.uniform(0.2, 0.8))
+                    leak[li] = (1.0 - tt) * a + tt * b
             st.leak_xyz = leak.astype(np.float64)
             st.leak_detected = np.zeros((l,), dtype=bool)
             st.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
