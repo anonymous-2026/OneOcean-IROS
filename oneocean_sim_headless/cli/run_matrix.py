@@ -170,7 +170,8 @@ def main() -> int:
         "surface_pollution_cleanup_multiagent": {"controller": "go_to_goal", "n_agents": 10},
         "underwater_pollution_lift_5uuv": {"controller": "go_to_goal", "n_agents": 5},
         "fish_herding_8uuv": {"controller": "go_to_goal", "n_agents": 8},
-        "area_scan_terrain_recon": {"controller": "go_to_goal", "n_agents": 2},
+        # Scanning is inherently multi-agent in our paper setup; default to N=8 for reliable coverage.
+        "area_scan_terrain_recon": {"controller": "go_to_goal", "n_agents": 8},
         "pipeline_inspection_leak_detection": {"controller": "go_to_goal", "n_agents": 2},
         "route_following_waypoints": {"controller": "go_to_goal", "n_agents": 2},
         "depth_profile_tracking": {"controller": "go_to_goal", "n_agents": 2},
