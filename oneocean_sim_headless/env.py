@@ -211,6 +211,42 @@ class HeadlessOceanEnv:
                     break
             self._yaws[i] = float(self.rng.uniform(-math.pi, math.pi))
 
+        # Task-specific spawn adjustments to improve determinism and replay usability.
+        if task.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+            barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+            offsets = [
+                np.array([+3.0, 0.0, 0.0], dtype=np.float64),
+                np.array([-3.0, 0.0, 0.0], dtype=np.float64),
+                np.array([0.0, 0.0, +3.0], dtype=np.float64),
+                np.array([0.0, 0.0, -3.0], dtype=np.float64),
+                np.array([0.0, +3.0, 0.0], dtype=np.float64),
+            ]
+            for i in range(min(self.n_agents, len(offsets))):
+                p = barrel + offsets[i]
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+
+        if task.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            cen = np.mean(fish, axis=0)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            push = tgt - cen
+            push[1] = 0.0
+            nrm = float(np.linalg.norm(push))
+            push = push / max(1e-9, nrm)
+            back = -push
+            ring_center = cen + 14.0 * back
+            rr = 10.0
+            for i in range(self.n_agents):
+                ang = 2.0 * math.pi * (i / max(1, self.n_agents))
+                off = np.array([rr * math.cos(ang), 0.0, rr * math.sin(ang)], dtype=np.float64)
+                p = ring_center + off
+                p[1] = float(cen[1])
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+
         # Task-specific goal/anchor choices.
         if task.kind == "station_keeping":
             self.task_state.goal_xyz = np.mean(self._positions, axis=0)
@@ -498,12 +534,30 @@ class HeadlessOceanEnv:
                 v = -(d[j])
                 v[1] = 0.0
                 nrm = float(np.linalg.norm(v[[0, 2]]))
-                if not np.isfinite(nrm) or nrm < 1e-9:
-                    v = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+                tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+                dir_goal = tgt - fish[fi]
+                dir_goal[1] = 0.0
+                gn = float(np.linalg.norm(dir_goal[[0, 2]]))
+                if gn > 1e-9 and np.isfinite(gn):
+                    dir_goal = dir_goal / gn
                 else:
-                    v = v / nrm
-                speed = 0.9  # meters per step
-                fish_next[fi] = fish[fi] + speed * v * float(self.cfg.dt_s) + 0.10 * drift + noise[fi]
+                    dir_goal = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+
+                if not np.isfinite(nrm) or nrm < 1e-9:
+                    rep = dir_goal
+                    dist = float("inf")
+                else:
+                    rep = v / nrm
+                    dist = float(math.sqrt(float(r2[j])))
+
+                # When UUVs are far away, fish progresses toward goal slowly; when close, it flees (herding).
+                flee = 0.85 if dist <= 45.0 else 0.25
+                speed = 0.85  # meters per step
+                move = flee * rep + (1.0 - flee) * dir_goal
+                mn = float(np.linalg.norm(move[[0, 2]]))
+                if mn > 1e-9:
+                    move = move / mn
+                fish_next[fi] = fish[fi] + speed * move * float(self.cfg.dt_s) + 0.08 * drift + noise[fi]
 
             fish = fish_next
             lo, hi = self.bounds_xyz

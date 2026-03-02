@@ -70,6 +70,7 @@ class TaskConfig:
     # scan
     scan_cell_size_m: float = 25.0
     scan_target_coverage: float = 0.8
+    scan_radius_m: float = 28.0
 
     # surface cleanup
     cleanup_sources_n: int = 4
@@ -224,6 +225,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             max_steps=900 if d == "easy" else 1400 if d == "medium" else 2200,
             scan_cell_size_m=30.0 if d == "easy" else 22.0 if d == "medium" else 16.0,
             scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.92,
+            scan_radius_m=35.0 if d == "easy" else 30.0 if d == "medium" else 24.0,
         )
     if kind == "pipeline_inspection_leak_detection":
         return TaskConfig(
@@ -232,7 +234,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             success_radius_m=9.0 if d == "easy" else 7.0 if d == "medium" else 5.0,
             max_steps=520 if d == "easy" else 880 if d == "medium" else 1400,
             pipeline_leaks_n=2 if d == "easy" else 3 if d == "medium" else 4,
-            pipeline_detect_radius_m=14.0 if d == "easy" else 10.0 if d == "medium" else 7.0,
+            pipeline_detect_radius_m=16.0 if d == "easy" else 12.0 if d == "medium" else 9.0,
         )
     raise ValueError(f"Unknown task kind: {kind}")
 
@@ -488,9 +490,15 @@ def compute_success(
         cell = float(cfg.scan_cell_size_m)
         x = float(pos[0, 0])
         z = float(pos[0, 2])
-        j = int(np.clip(math.floor((x - ox) / cell), 0, w - 1))
-        i = int(np.clip(math.floor((z - oz) / cell), 0, h - 1))
-        visited[i, j] = True
+        j0 = int(np.clip(math.floor((x - ox) / cell), 0, w - 1))
+        i0 = int(np.clip(math.floor((z - oz) / cell), 0, h - 1))
+        # A scan covers an area around the vehicle (proxy for a sonar/FOV footprint).
+        rr = int(max(0, math.ceil(float(cfg.scan_radius_m) / max(1e-9, cell))))
+        i_lo = max(0, i0 - rr)
+        i_hi = min(h, i0 + rr + 1)
+        j_lo = max(0, j0 - rr)
+        j_hi = min(w, j0 + rr + 1)
+        visited[i_lo:i_hi, j_lo:j_hi] = True
         task_state.scan_visited = visited
         coverage = float(np.count_nonzero(visited) / float(visited.size))
         return coverage >= float(cfg.scan_target_coverage), {
