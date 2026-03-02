@@ -294,6 +294,9 @@ class HeadlessOceanEnv:
                     goal[1] = float(lo[1] + 0.8)
                     if not self._violates_constraints(goal):
                         self.task_state.goal_xyz = goal
+                        init = float(np.linalg.norm((cen[[0, 2]] - goal[[0, 2]])))
+                        if np.isfinite(init) and init > 1e-6:
+                            self.task_state.fish_init_dist_to_goal_xz_m = init
                         break
         elif task.kind == "area_scan_terrain_recon":
             # Define a region-of-interest grid around the initial centroid (instead of scanning the full tile).

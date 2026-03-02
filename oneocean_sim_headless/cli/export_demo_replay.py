@@ -42,6 +42,13 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     meta = json.loads((run_dir / "run_meta.json").read_text(encoding="utf-8"))
+    root_manifest: dict[str, Any] = {}
+    root_manifest_path = run_dir / "results_manifest.json"
+    if root_manifest_path.exists():
+        try:
+            root_manifest = json.loads(root_manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            root_manifest = {}
     env_cfg = meta.get("env_config", {})
     drift_npz = str(env_cfg.get("drift_cache_npz", ""))
     if not drift_npz:
@@ -56,9 +63,12 @@ def main() -> int:
     # --- Export PATH data ---
     stride = int(max(1, args.stride))
     paths = []
+    frames_exported: int | None = None
     for i in range(n_agents):
         p = run_dir / "agents" / f"agent_{i:03d}" / "pose_groundtruth" / "data.csv"
         pose = _read_pose_csv(p)[::stride]
+        if frames_exported is None:
+            frames_exported = int(pose.shape[0])
         # Demo schema uses {x,y,z}. We export y as (-depth) so deeper is more negative.
         one = [{"x": float(x), "y": float(-y), "z": float(z)} for (_t, x, y, z) in pose.tolist()]
         paths.append(one)
@@ -121,6 +131,15 @@ def main() -> int:
                 "run_dir": str(run_dir),
                 "out_dir": str(out_dir),
                 "written": ["drone_map_data.json", "drone_path_data.json"],
+                "task": task_id,
+                "n_agents": n_agents,
+                "stride": stride,
+                "frames_exported": frames_exported,
+                "terrain_step_m": float(step_m),
+                "terrain_points": int(len(terrain)),
+                "dt_s": float(meta.get("env_config", {}).get("dt_s", float("nan"))),
+                "git": root_manifest.get("git"),
+                "source_results_manifest": str(root_manifest_path) if root_manifest_path.exists() else None,
             },
             indent=2,
         ),
@@ -132,4 +151,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

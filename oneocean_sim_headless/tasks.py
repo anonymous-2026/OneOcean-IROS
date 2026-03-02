@@ -121,6 +121,7 @@ class TaskState:
     # fish
     fish_xyz: np.ndarray | None = None  # (F,3)
     fish_stage: int = 0
+    fish_init_dist_to_goal_xz_m: float | None = None
 
     # scan
     scan_visited: np.ndarray | None = None  # (H,W) bool
@@ -475,11 +476,19 @@ def compute_success(
         fish = np.asarray(task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
         centroid = np.mean(fish, axis=0)
         dist = float(np.linalg.norm(centroid[[0, 2]] - goal[[0, 2]]))
-        total = max(1e-6, float(np.linalg.norm((goal[[0, 2]] - fish[0, [0, 2]]))))
-        prog = float(np.clip(1.0 - dist / total, 0.0, 1.0))
+        init = float(task_state.fish_init_dist_to_goal_xz_m or float("nan"))
+        if not np.isfinite(init) or init <= 1e-6:
+            init = max(1e-6, float(dist))
+            task_state.fish_init_dist_to_goal_xz_m = init
+        prog = float(np.clip(1.0 - dist / init, 0.0, 1.0))
         stage = int(np.clip(int(math.floor(prog * 4.0)), 0, 3))
         task_state.fish_stage = stage
-        return dist <= float(cfg.success_radius_m), {"fish_progress": prog, "fish_stage": int(stage), "fish_dist_to_goal_xz_m": dist}
+        return dist <= float(cfg.success_radius_m), {
+            "fish_progress": prog,
+            "fish_stage": int(stage),
+            "fish_dist_to_goal_xz_m": dist,
+            "fish_init_dist_to_goal_xz_m": float(init),
+        }
 
     if cfg.kind == "area_scan_terrain_recon":
         if task_state.scan_visited is None or task_state.scan_grid_origin_xz is None or task_state.scan_grid_hw is None:
