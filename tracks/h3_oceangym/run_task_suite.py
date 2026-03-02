@@ -1666,23 +1666,25 @@ def main() -> int:
             }
 
             record_this = True
-            for ep in range(cfg.episodes):
-                seed = _stable_seed(scenario_name, task_id, task_variant, task_alias, ep)
-                record = bool(not cfg.record_first_episode_only or ep == 0)
-                record_this = False
+            with holoocean.make(
+                scenario_cfg=scenario,
+                show_viewport=cfg.show_viewport,
+                ticks_per_sec=cfg.ticks_per_sec,
+                frames_per_sec=cfg.fps,
+                verbose=False,
+            ) as env:
+                env.set_render_quality(int(cfg.render_quality))
+                env.should_render_viewport(True)
 
-                with holoocean.make(
-                    scenario_cfg=scenario,
-                    show_viewport=cfg.show_viewport,
-                    ticks_per_sec=cfg.ticks_per_sec,
-                    frames_per_sec=cfg.fps,
-                    verbose=False,
-                ) as env:
-                    env.set_render_quality(int(cfg.render_quality))
-                    env.should_render_viewport(True)
+                for ep in range(cfg.episodes):
+                    seed = _stable_seed(scenario_name, task_id, task_variant, task_alias, ep)
+                    record = bool(not cfg.record_first_episode_only or ep == 0)
+                    record_this = False
+
+                    # Reset between episodes to avoid cumulative drift and to reduce resource churn.
+                    state = env.reset()
 
                     # Warmup for sensors.
-                    state = env.tick(num_ticks=1, publish=False)
                     for _ in range(120):
                         if n_agents == 1:
                             ok = ("PoseSensor" in state)
@@ -1765,18 +1767,18 @@ def main() -> int:
                     else:
                         raise ValueError(task_alias)
 
-                # Normalize ids for unified paper tables.
-                res["task_id"] = task_id
-                res["task_alias"] = task_alias
-                res["task_variant"] = task_variant
+                    # Normalize ids for unified paper tables.
+                    res["task_id"] = task_id
+                    res["task_alias"] = task_alias
+                    res["task_variant"] = task_variant
 
-                per_task["episodes"].append(res)
-                if "media" in res:
-                    for k, v in dict(res["media"]).items():
-                        per_task_media_manifest[f"ep{ep:03d}_{k}"] = str(v)
-                    episodes_dict = media_task["episodes"]
-                    if isinstance(episodes_dict, dict):
-                        episodes_dict[f"ep{ep:03d}"] = dict(res["media"])
+                    per_task["episodes"].append(res)
+                    if "media" in res:
+                        for k, v in dict(res["media"]).items():
+                            per_task_media_manifest[f"ep{ep:03d}_{k}"] = str(v)
+                        episodes_dict = media_task["episodes"]
+                        if isinstance(episodes_dict, dict):
+                            episodes_dict[f"ep{ep:03d}"] = dict(res["media"])
 
             per_task["summary"] = _summarize_task(task_alias, list(per_task["episodes"]))
 
