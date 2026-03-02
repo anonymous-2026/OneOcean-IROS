@@ -248,6 +248,61 @@ class HeadlessOceanEnv:
                 if not self._violates_constraints(p):
                     self._positions[i] = p
 
+        # Waypoint-family tasks: re-sample a *reachable* polyline around the initial centroid.
+        # The default reset_task() samples endpoints uniformly over the full tile, which can be unreachable
+        # within max_steps at the capped max_speed. This makes smoke runs look "broken" even when logic is fine.
+        if task.kind in ("route_following_waypoints", "depth_profile_tracking", "pipeline_inspection_leak_detection"):
+            lo, hi = self.bounds_xyz
+            center = np.mean(self._positions, axis=0).astype(np.float64)
+            k = int(max(2, int(task.waypoints_n)))
+            ang = float(self.rng.uniform(0.0, 2.0 * math.pi))
+            dir_xz = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
+            # Conservative travel budget (policy won't drive at max speed all the time under currents).
+            travel_budget = float(task.max_steps) * float(self.cfg.dt_s) * float(self.cfg.max_speed_mps) * 0.55
+            # Keep inside the tile even on small cached slices.
+            tile_scale = 0.8 * float(min(self.tile_size_x_m, self.tile_size_z_m))
+            total_len = float(np.clip(0.75 * travel_budget, 40.0, max(60.0, tile_scale)))
+            p0 = center - 0.25 * total_len * dir_xz
+            p1 = center + 0.75 * total_len * dir_xz
+            p0 = np.minimum(np.maximum(p0, lo), hi)
+            p1 = np.minimum(np.maximum(p1, lo), hi)
+
+            ts = np.linspace(0.0, 1.0, k, dtype=np.float64)
+            wps = (1.0 - ts[:, None]) * p0[None, :] + ts[:, None] * p1[None, :]
+            wig = self.rng.normal(scale=0.05 * total_len, size=(k, 2))
+            wps[:, 0] = np.clip(wps[:, 0] + wig[:, 0], lo[0], hi[0])
+            wps[:, 2] = np.clip(wps[:, 2] + wig[:, 1], lo[2], hi[2])
+
+            if task.kind == "depth_profile_tracking":
+                amp = 0.35 * float(hi[1] - lo[1])
+                base = float(np.clip(center[1], lo[1], hi[1]))
+                # One smooth depth cycle along the route.
+                wps[:, 1] = np.clip(base + amp * np.sin(2.0 * math.pi * ts), lo[1], hi[1])
+            else:
+                wps[:, 1] = float(np.clip(center[1], lo[1], hi[1]))
+
+            self.task_state.waypoints_xyz = wps.astype(np.float64)
+            self.task_state.waypoint_index = 0
+            self.task_state.goal_xyz = wps[0].copy()
+
+            if task.kind == "pipeline_inspection_leak_detection":
+                self.task_state.pipeline_xyz = wps.astype(np.float64)
+                l = int(max(1, int(task.pipeline_leaks_n)))
+                leak = np.zeros((l, 3), dtype=np.float64)
+                for li in range(l):
+                    if k >= 3:
+                        wi = int(self.rng.integers(1, k - 1))
+                        leak[li] = wps[wi]
+                    else:
+                        seg = int(self.rng.integers(0, max(1, k - 1)))
+                        a = wps[seg]
+                        b = wps[min(k - 1, seg + 1)]
+                        tt = float(self.rng.uniform(0.2, 0.8))
+                        leak[li] = (1.0 - tt) * a + tt * b
+                self.task_state.leak_xyz = leak.astype(np.float64)
+                self.task_state.leak_detected = np.zeros((l,), dtype=bool)
+                self.task_state.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
+
         # Task-specific goal/anchor choices.
         if task.kind == "station_keeping":
             self.task_state.goal_xyz = np.mean(self._positions, axis=0)
