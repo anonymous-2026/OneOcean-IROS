@@ -77,8 +77,8 @@ import os
 # if __name__ == "__main__":
 #
 #     fetch_and_merge_copernicus_data(
-#         username='sliu42',  # CMEMS username
-#         password='Lsj200106013519',  # CMEMS password
+#         username='YOUR_CMEMS_USERNAME',  # CMEMS username (do not hardcode real credentials)
+#         password='YOUR_CMEMS_PASSWORD',  # CMEMS password (do not hardcode real credentials)
 
 #         # Bos
 #         minimum_longitude=32.0,
@@ -168,4 +168,3 @@ missing = df.isnull().sum().compute()
 
 print("Missing value count per column:")
 print(missing)
-

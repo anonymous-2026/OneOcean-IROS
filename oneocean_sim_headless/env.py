@@ -104,6 +104,9 @@ class HeadlessOceanEnv:
         self.task_cfg: TaskConfig | None = None
         self.task_state: TaskState | None = None
         self.controller_cfg: ControllerConfig | None = None
+        self._llm_planner = None
+        self._llm_last_done_mask: np.ndarray | None = None
+        self._llm_last_call_step: int = -10**9
 
         self.rec = HeadlessRecorder(self.out_dir, n_agents=self.n_agents, config=RecorderConfig())
         self._initial_pollution_mass: float | None = None
@@ -173,6 +176,26 @@ class HeadlessOceanEnv:
     def reset(self, *, task: TaskConfig, controller: ControllerConfig) -> dict[str, Any]:
         self.task_cfg = task
         self.controller_cfg = controller
+        if str(controller.kind) == "llm_planner":
+            from .llm_planner import LLMPlanner, LLMPlannerConfig
+
+            cache_dir = str(controller.llm_cache_dir).strip()
+            if not cache_dir:
+                cache_dir = str((Path("runs") / "headless" / "_cache" / "llm_planner").resolve())
+            self._llm_planner = LLMPlanner(
+                LLMPlannerConfig(
+                    model_path=str(controller.llm_model_path),
+                    cache_dir=cache_dir,
+                    call_stride_steps=int(controller.llm_call_stride_steps),
+                    max_new_tokens=int(controller.llm_max_new_tokens),
+                )
+            )
+            self._llm_last_done_mask = None
+            self._llm_last_call_step = -10**9
+        else:
+            self._llm_planner = None
+            self._llm_last_done_mask = None
+            self._llm_last_call_step = -10**9
         req_n = required_n_agents(task.kind)
         if req_n is not None and int(self.n_agents) != int(req_n):
             raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
@@ -515,17 +538,48 @@ class HeadlessOceanEnv:
             done = np.asarray(self.task_state.cleanup_done, dtype=bool)
             if self.task_state.cleanup_assigned_source is None:
                 self.task_state.cleanup_assigned_source = np.full((self.n_agents,), -1, dtype=np.int64)
-            # Pick nearest unfinished per agent.
-            for ai in range(self.n_agents):
-                cur = int(self.task_state.cleanup_assigned_source[ai])
-                if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
-                    continue
-                if np.all(done):
-                    self.task_state.cleanup_assigned_source[ai] = -1
-                    continue
-                cand = np.where(~done)[0]
-                dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
-                self.task_state.cleanup_assigned_source[ai] = int(cand[int(np.argmin(dists))])
+            # Baseline: pick nearest unfinished per agent. Optional: LLM can propose a global assignment.
+            use_llm = str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None
+            assigned: np.ndarray | None = None
+            if use_llm and not np.all(done):
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                need_call = False
+                if self._llm_last_done_mask is None:
+                    need_call = True
+                else:
+                    try:
+                        need_call = bool(np.any(self._llm_last_done_mask != done))
+                    except Exception:
+                        need_call = True
+                if (step_i - int(self._llm_last_call_step)) >= stride:
+                    need_call = True
+                if need_call:
+                    plan = self._llm_planner.plan_cleanup_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        sources_xyz=srcs,
+                        done_mask=done,
+                        n_agents=int(self.n_agents),
+                    )
+                    self._llm_last_call_step = int(step_i)
+                    self._llm_last_done_mask = done.copy()
+                    if plan is not None:
+                        assigned = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+
+            if assigned is None:
+                assigned = np.asarray(self.task_state.cleanup_assigned_source, dtype=np.int64).reshape(self.n_agents)
+                for ai in range(self.n_agents):
+                    cur = int(assigned[ai])
+                    if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
+                        continue
+                    if np.all(done):
+                        assigned[ai] = -1
+                        continue
+                    cand = np.where(~done)[0]
+                    dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
+                    assigned[ai] = int(cand[int(np.argmin(dists))])
+            self.task_state.cleanup_assigned_source = assigned.astype(np.int64)
             goals = np.repeat(goal.reshape(1, 3), self.n_agents, axis=0)
             for ai in range(self.n_agents):
                 si = int(self.task_state.cleanup_assigned_source[ai])

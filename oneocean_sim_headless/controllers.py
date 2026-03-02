@@ -8,7 +8,7 @@ from typing import Any, Literal
 import numpy as np
 
 
-ControllerKind = Literal["go_to_goal", "station_keep", "plume_gradient", "containment_ring", "mlp_bc"]
+ControllerKind = Literal["go_to_goal", "station_keep", "plume_gradient", "containment_ring", "mlp_bc", "llm_planner"]
 
 
 @dataclass(frozen=True)
@@ -18,12 +18,25 @@ class ControllerConfig:
     kp: float = 0.8
     ring_radius_m: float = 20.0
     bc_weights_npz: str = ""
+    llm_model_path: str = ""
+    llm_cache_dir: str = ""
+    llm_call_stride_steps: int = 30
+    llm_max_new_tokens: int = 192
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
-def preset_controller(kind: ControllerKind, *, max_speed_mps: float, bc_weights_npz: str = "") -> ControllerConfig:
+def preset_controller(
+    kind: ControllerKind,
+    *,
+    max_speed_mps: float,
+    bc_weights_npz: str = "",
+    llm_model_path: str = "",
+    llm_cache_dir: str = "",
+    llm_call_stride_steps: int = 30,
+    llm_max_new_tokens: int = 192,
+) -> ControllerConfig:
     if kind == "go_to_goal":
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.9)
     if kind == "station_keep":
@@ -34,6 +47,16 @@ def preset_controller(kind: ControllerKind, *, max_speed_mps: float, bc_weights_
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), kp=0.7, ring_radius_m=22.0)
     if kind == "mlp_bc":
         return ControllerConfig(kind=kind, max_speed_mps=float(max_speed_mps), bc_weights_npz=str(bc_weights_npz))
+    if kind == "llm_planner":
+        return ControllerConfig(
+            kind=kind,
+            max_speed_mps=float(max_speed_mps),
+            kp=0.9,
+            llm_model_path=str(llm_model_path),
+            llm_cache_dir=str(llm_cache_dir),
+            llm_call_stride_steps=int(llm_call_stride_steps),
+            llm_max_new_tokens=int(llm_max_new_tokens),
+        )
     raise ValueError(f"Unknown controller kind: {kind}")
 
 
@@ -69,6 +92,14 @@ def compute_actions(
 
     actions = np.zeros((n, 3), dtype=np.float64)
     if cfg.kind in ("go_to_goal", "station_keep"):
+        for i in range(n):
+            d = goal[i] - pos[i]
+            actions[i] = _clip_speed(float(cfg.kp) * d, cfg.max_speed_mps)
+        return actions
+
+    if cfg.kind == "llm_planner":
+        # LLM is only allowed to operate at a high level (goal/phase selection).
+        # Low-level control remains a standard goal-following controller.
         for i in range(n):
             d = goal[i] - pos[i]
             actions[i] = _clip_speed(float(cfg.kp) * d, cfg.max_speed_mps)

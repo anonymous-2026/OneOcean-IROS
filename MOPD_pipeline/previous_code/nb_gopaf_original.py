@@ -185,8 +185,8 @@ import copernicusmarine
 
 # 登录 CMEMS 账号
 copernicusmarine.login(
-    username='sliu42',  # 替换为您的 CMEMS 用户名
-    password='Lsj200106013519'   # 替换为您的 CMEMS 密码
+    username='YOUR_CMEMS_USERNAME',  # 替换为您的 CMEMS 用户名（不要硬编码真实凭据）
+    password='YOUR_CMEMS_PASSWORD'   # 替换为您的 CMEMS 密码（不要硬编码真实凭据）
 )
 # 修改深度范围以获取不同深度的数据
 copernicusmarine.subset(
@@ -257,4 +257,3 @@ if __name__ == "__main__":
     create_combined_image(output_images_directory, combined_image_output_path)
 
     print(f"Combined visualization saved at: {combined_image_output_path}")
-

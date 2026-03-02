@@ -88,6 +88,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--n-agents", type=int, default=-1, help="Override n_agents for all scenarios (useful for scaling sweeps).")
     ap.add_argument("--controller-override", type=str, default="", help="Override controller kind for all tasks (e.g., mlp_bc).")
     ap.add_argument("--bc-weights-npz", type=str, default="", help="Weights for controller=mlp_bc (exported bc_mlp_v1_weights.npz).")
+    ap.add_argument("--llm-model-path", type=str, default="", help="Local LLM model path for controller=llm_planner (no download).")
+    ap.add_argument("--llm-cache-dir", type=str, default="", help="Cache directory for deterministic LLM outputs (JSON per state).")
+    ap.add_argument("--llm-call-stride-steps", type=int, default=30, help="Max frequency of LLM calls (steps).")
+    ap.add_argument("--llm-max-new-tokens", type=int, default=192, help="Generation budget for LLM JSON outputs.")
     ap.add_argument("--validate", action="store_true")
     ap.add_argument("--dt", type=float, default=1.0)
     ap.add_argument("--tile-x", type=float, default=600.0)
@@ -266,7 +270,15 @@ def main() -> int:
             seafloor_clearance_m=float(args.seafloor_clearance_m),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
-        ctrl_cfg = preset_controller(kind=str(sc.controller), max_speed_mps=env_cfg.max_speed_mps, bc_weights_npz=str(args.bc_weights_npz))  # type: ignore[arg-type]
+        ctrl_cfg = preset_controller(
+            kind=str(sc.controller),  # type: ignore[arg-type]
+            max_speed_mps=env_cfg.max_speed_mps,
+            bc_weights_npz=str(args.bc_weights_npz),
+            llm_model_path=str(args.llm_model_path),
+            llm_cache_dir=str(args.llm_cache_dir),
+            llm_call_stride_steps=int(args.llm_call_stride_steps),
+            llm_max_new_tokens=int(args.llm_max_new_tokens),
+        )
 
         for ep in range(int(episodes)):
             seed = int(sc.seed) + ep * int(seed_step)

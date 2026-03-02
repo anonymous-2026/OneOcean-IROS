@@ -137,8 +137,8 @@ def _difficulty_presets(task_id: str, difficulty: str) -> dict:
         base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 90.0, "max_vertical_force": 60.0}
 
     if d == "easy" and task_id == "formation_transit_multiagent":
-        # Formation is sensitive to leader speed; keep thrust moderate so followers can maintain spacing.
-        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 45.0, "max_vertical_force": 60.0}
+        # Formation is sensitive, but we still need the leader to overcome dataset-current forcing reliably.
+        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 90.0, "max_vertical_force": 60.0}
 
     return dict(base)
 
@@ -222,9 +222,11 @@ def _record_common(*, env, rp, cfg, task_dir: Path, steps: int, per_step_fn, sta
     last_fpv = None
 
     st = state_init
+    steps_run = 0
     with rp._Mp4Writer(mp4_path, fps=cfg.fps) as vw, rp._Mp4Writer(fpv_mp4_path, fps=cfg.fps) as fw:
         for t in range(int(steps)):
-            st, _step = per_step_fn(int(t), st)
+            st, step_info = per_step_fn(int(t), st)
+            steps_run = int(t) + 1
             a0 = rp._state_agent(st, "auv0")
             frame = a0.get("ViewportCapture")
             last_fpv = rp._get_fpv_frame(a0)
@@ -242,6 +244,8 @@ def _record_common(*, env, rp, cfg, task_dir: Path, steps: int, per_step_fn, sta
                     imageio.imwrite(start_fpv_png, rgb)
                 if (t % gif_stride) == 0:
                     fpv_gif_frames.append(rp._downscale_for_gif(rgb, target_width=480))
+            if isinstance(step_info, dict) and step_info.get("done"):
+                break
         if frame is not None:
             imageio.imwrite(end_png, rp._maybe_expose(rp._ensure_uint8_rgb(frame), cfg.viewport_exposure))
         if last_fpv is not None:
@@ -250,6 +254,7 @@ def _record_common(*, env, rp, cfg, task_dir: Path, steps: int, per_step_fn, sta
     rp._write_gif(gif_path, gif_frames, fps=8)
     rp._write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
     return {
+        "steps_run": int(steps_run),
         "video": str(mp4_path),
         "gif": str(gif_path),
         "video_fpv": str(fpv_mp4_path),
@@ -301,6 +306,7 @@ def _run_go_to_goal_current(*, env, rp, cfg, current, out_dir: Path, difficulty:
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
         nonlocal energy, collisions, success_step, goal_err_sum, goal_err_max
+        done = False
         for i in range(int(cfg.num_agents)):
             name = f"auv{i}"
             ai = rp._state_agent(st_in, name)
@@ -333,22 +339,28 @@ def _run_go_to_goal_current(*, env, rp, cfg, current, out_dir: Path, difficulty:
             goal_err_max = max(goal_err_max, e)
             if success_step is None and e <= float(_goal_radius_m(difficulty)):
                 success_step = int(t)
-        return st_out, {}
+        if success_step is not None:
+            hold = int(round(2.0 * float(cfg.fps)))
+            if int(t) >= int(success_step) + hold:
+                done = True
+        return st_out, {"done": bool(done)}
 
     media = _record_common(env=env, rp=rp, cfg=cfg, task_dir=task_dir, steps=steps, per_step_fn=per_step_fn, state_init=st, first_agent_z=first_z)
+    steps_run = int(media.get("steps_run") or steps)
     metrics = {
         "task_id": task_id,
         "difficulty": difficulty,
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,
         "time_to_success_s": (float(success_step + 1) * dt) if success_step is not None else None,
         "goal_xy": [float(goal_xy[0]), float(goal_xy[1])],
         "goal_radius_m": float(_goal_radius_m(difficulty)),
-        "mean_goal_error_m": float(goal_err_sum / float(max(1, steps))),
+        "mean_goal_error_m": float(goal_err_sum / float(max(1, steps_run))),
         "max_goal_error_m": float(goal_err_max),
         "collisions": int(collisions),
         "energy_proxy": float(energy),
@@ -384,6 +396,7 @@ def _run_station_keeping(*, env, rp, cfg, current, out_dir: Path, difficulty: st
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
         nonlocal energy, collisions, success_step, err_sum, err_max
+        done = False
         all_in = True
         for i in range(int(cfg.num_agents)):
             name = f"auv{i}"
@@ -420,21 +433,27 @@ def _run_station_keeping(*, env, rp, cfg, current, out_dir: Path, difficulty: st
             success_step = int(t)
         st_out = rp._safe_tick(env, publish=False)
         collisions += rp._count_collision_events(st_out, num_agents=cfg.num_agents, prev=prev_colliding)
-        return st_out, {}
+        if success_step is not None:
+            hold = int(round(2.0 * float(cfg.fps)))
+            if int(t) >= int(success_step) + hold:
+                done = True
+        return st_out, {"done": bool(done)}
 
     media = _record_common(env=env, rp=rp, cfg=cfg, task_dir=task_dir, steps=steps, per_step_fn=per_step_fn, state_init=st, first_agent_z=first_z)
+    steps_run = int(media.get("steps_run") or steps)
     metrics = {
         "task_id": task_id,
         "difficulty": difficulty,
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,
         "time_to_success_s": (float(success_step + 1) * dt) if success_step is not None else None,
         "station_radius_m": float(radius),
-        "station_error_mean_m": float(err_sum / float(max(1, steps * max(1, int(cfg.num_agents))))),
+        "station_error_mean_m": float(err_sum / float(max(1, steps_run * max(1, int(cfg.num_agents))))),
         "station_error_max_m": float(err_max),
         "collisions": int(collisions),
         "energy_proxy": float(energy),
@@ -473,6 +492,7 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
         nonlocal energy, collisions, wp_idx, success_step, last_p0
+        done = False
         target0 = waypoints[min(int(wp_idx), len(waypoints) - 1)]
         for i in range(int(cfg.num_agents)):
             name = f"auv{i}"
@@ -508,9 +528,14 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
                 wp_idx += 1
                 if wp_idx >= len(waypoints) and success_step is None:
                     success_step = int(t)
-        return st_out, {}
+        if success_step is not None:
+            hold = int(round(2.0 * float(cfg.fps)))
+            if int(t) >= int(success_step) + hold:
+                done = True
+        return st_out, {"done": bool(done)}
 
     media = _record_common(env=env, rp=rp, cfg=cfg, task_dir=task_dir, steps=steps, per_step_fn=per_step_fn, state_init=st, first_agent_z=first_z)
+    steps_run = int(media.get("steps_run") or steps)
     p = last_p0 or p0
     last_wp = waypoints[-1]
     final_err = float(np.hypot(float(p[0]) - float(last_wp[0]), float(p[1]) - float(last_wp[1])))
@@ -519,7 +544,8 @@ def _run_route_following_waypoints(*, env, rp, cfg, current, out_dir: Path, diff
         "difficulty": difficulty,
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,
@@ -636,11 +662,12 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
     d_goal = float(_goal_distance_m(difficulty)) * 1.1
     # NOTE: with HoveringAUV thruster-force control, moving toward negative Y in this map tends to be unreliable
     # on this host/client. Use a goal that moves into +Y to keep the easy suite stable.
-    goal_xy = (float(p0[0] + d_goal), float(p0[1] + 0.2 * d_goal))
+    # Match the go-to-goal direction to avoid local geometry that can stall thruster-force control in this map.
+    goal_xy = (float(p0[0] + d_goal), float(p0[1] + 0.35 * d_goal))
     goal_radius = float(_goal_radius_m(difficulty))
     if difficulty == "easy":
-        # The leader's waypoint reach can be a bit flaky under thruster-force control; relax for smoke gating.
-        goal_radius = float(max(goal_radius, 12.0))
+        # Slightly relax just enough to avoid frequent near-miss failures (but still require motion).
+        goal_radius = 11.0
     r_form = float(_formation_radius_m(int(cfg.num_agents), difficulty))
     tol_form = float(_formation_tol_m(difficulty))
     offsets = {"auv0": (0.0, 0.0)}
@@ -658,6 +685,7 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
         nonlocal energy, collisions, success_step, form_err_sum, form_err_max, leader_goal_err_min
+        done = False
         pL = rp._pose_to_position(rp._state_agent(st_in, "auv0").get("PoseSensor")) or p0
         vL_raw = rp._state_agent(st_in, "auv0").get("VelocitySensor")
         vL = np.asarray(vL_raw, dtype=np.float32).reshape(3) if vL_raw is not None else np.zeros((3,), dtype=np.float32)
@@ -675,7 +703,6 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
         act0 = rp._action_from_force(bx0, by0, bz0, cfg)
         energy += float(np.sum(act0 * act0)) * dt
         env.act("auv0", act0)
-        ferrs_this = []
         for i in range(1, int(cfg.num_agents)):
             name = f"auv{i}"
             ai = rp._state_agent(st_in, name)
@@ -699,37 +726,53 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
             act = rp._action_from_force(bx, by, bz, cfg)
             energy += float(np.sum(act * act)) * dt
             env.act(name, act)
-            relx = float(pos[0] - pL[0]) - float(off[0])
-            rely = float(pos[1] - pL[1]) - float(off[1])
-            ferr = float(np.hypot(relx, rely))
-            ferrs_this.append(float(ferr))
-            form_err_sum += ferr
-            form_err_max = max(form_err_max, ferr)
         st_out = rp._safe_tick(env, publish=False)
         collisions += rp._count_collision_events(st_out, num_agents=cfg.num_agents, prev=prev_colliding)
         pL2 = rp._pose_to_position(rp._state_agent(st_out, "auv0").get("PoseSensor"))
+        ferrs_now: list[float] = []
+        if pL2 is None:
+            pL2 = pL
+        for i in range(1, int(cfg.num_agents)):
+            name = f"auv{i}"
+            ai2 = rp._state_agent(st_out, name)
+            pos2 = rp._pose_to_position(ai2.get("PoseSensor"))
+            if pos2 is None:
+                continue
+            off = offsets[name]
+            relx = float(pos2[0] - pL2[0]) - float(off[0])
+            rely = float(pos2[1] - pL2[1]) - float(off[1])
+            ferr = float(np.hypot(relx, rely))
+            ferrs_now.append(float(ferr))
+            form_err_sum += float(ferr)
+            form_err_max = max(form_err_max, float(ferr))
         if pL2 is not None:
             gerr = float(np.hypot(float(pL2[0]) - float(goal_xy[0]), float(pL2[1]) - float(goal_xy[1])))
             leader_goal_err_min = min(float(leader_goal_err_min), float(gerr))
             if success_step is None and gerr <= goal_radius:
                 # Use *current* formation error near goal; cumulative error is too strict for a transit task.
-                if ferrs_this:
-                    mean_f = float(sum(ferrs_this) / float(len(ferrs_this)))
-                    max_f = float(max(ferrs_this))
+                if ferrs_now:
+                    mean_f = float(sum(ferrs_now) / float(len(ferrs_now)))
+                    max_f = float(max(ferrs_now))
                 else:
                     mean_f, max_f = 0.0, 0.0
                 if mean_f <= tol_form and max_f <= (1.5 * tol_form):
                     success_step = int(t)
-        return st_out, {}
+        if success_step is not None:
+            hold = int(round(2.0 * float(cfg.fps)))
+            if int(t) >= int(success_step) + hold:
+                done = True
+        return st_out, {"done": bool(done)}
 
     media = _record_common(env=env, rp=rp, cfg=cfg, task_dir=task_dir, steps=steps, per_step_fn=per_step_fn, state_init=st, first_agent_z=first_z)
-    denom = float(max(1, steps * max(1, int(cfg.num_agents) - 1)))
+    steps_run = int(media.get("steps_run") or steps)
+    denom = float(max(1, steps_run * max(1, int(cfg.num_agents) - 1)))
     metrics = {
         "task_id": task_id,
         "difficulty": difficulty,
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,

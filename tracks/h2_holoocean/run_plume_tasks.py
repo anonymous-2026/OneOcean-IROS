@@ -823,7 +823,8 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     gt_world = pollution_meta.get("hotspot_world_xyz") or src_world
     gt_kind = "hotspot" if pollution_meta.get("hotspot_world_xyz") is not None else "source"
 
-    steps = int(round(cfg.localize_seconds * cfg.fps))
+    steps_planned = int(round(cfg.localize_seconds * cfg.fps))
+    steps_run = int(steps_planned)
     dt = 1.0 / float(cfg.fps)
 
     mp4_path = task_dir / "rollout.mp4"
@@ -843,7 +844,7 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     collisions = 0
     prev_colliding: dict[str, bool] = {}
 
-    explore_steps = max(1, int(round(0.55 * float(steps))))
+    explore_steps = max(1, int(round(0.55 * float(steps_planned))))
     search_r = float(min(float(cfg.pollution_min_source_dist_m) + 8.0, 0.40 * float(cfg.pollution_domain_xy_m)))
     origin_x, origin_y = float(origin_xy[0]), float(origin_xy[1])
     waypoints = {
@@ -855,15 +856,16 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
     fpv_gif_frames = []
     gif_stride = max(1, int(round(float(cfg.fps) / 8.0)))
     last_fpv = None
+    hold_after_success_steps = int(round(2.0 * float(cfg.fps)))
     with _Mp4Writer(mp4_path, fps=cfg.fps) as vw, _Mp4Writer(fpv_mp4_path, fps=cfg.fps) as fw:
-        for t in range(steps):
+        for t in range(int(steps_planned)):
             pollution.step_if_due(dt)
 
             # Camera follows auv0 to keep at least one vehicle visible.
             if t % 2 == 0:
                 p_cam = _pose_to_position(_state_agent(st, "auv0").get("PoseSensor")) or [p0[0], p0[1], p0[2]]
                 cam_target = [p_cam[0], p_cam[1], float(src_world[2])]
-                a = 2.0 * math.pi * (t / float(max(1, steps)))
+                a = 2.0 * math.pi * (t / float(max(1, steps_planned)))
                 r = float(cfg.cam_back_m)
                 cam_pos = [p_cam[0] + r * math.cos(a), p_cam[1] + r * math.sin(a), float(src_world[2]) + cfg.cam_height_m]
                 env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
@@ -888,10 +890,10 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                     best_conc = conc
                     best_xy = (x, y)
 
-                if t < explore_steps:
-                    target = waypoints[name]
-                else:
-                    target = [float(best_xy[0]), float(best_xy[1]), float(src_world[2])]
+            if t < explore_steps:
+                target = waypoints[name]
+            else:
+                target = [float(best_xy[0]), float(best_xy[1]), float(src_world[2])]
 
                 ex = float(target[0]) - float(x)
                 ey = float(target[1]) - float(y)
@@ -939,6 +941,11 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
                     if math.hypot(pos[0] - float(gt_world[0]), pos[1] - float(gt_world[1])) <= cfg.success_radius_m:
                         success_step = t
                         break
+            if success_step is not None and int(t) >= int(success_step) + int(hold_after_success_steps):
+                steps_run = int(t) + 1
+                break
+        else:
+            steps_run = int(steps_planned)
 
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
@@ -955,7 +962,8 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         "task": "plume_localize",
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps_planned),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,
@@ -1026,7 +1034,8 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     # Initialize mass proxy baseline after warmup (and after optionally freezing the source).
     _ = pollution.mass_fraction()
 
-    steps = int(round(cfg.contain_seconds * cfg.fps))
+    steps_planned = int(round(cfg.contain_seconds * cfg.fps))
+    steps_run = int(steps_planned)
     dt = 1.0 / float(cfg.fps)
 
     mp4_path = task_dir / "rollout.mp4"
@@ -1062,14 +1071,15 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     fpv_gif_frames = []
     gif_stride = max(1, int(round(float(cfg.fps) / 8.0)))
     last_fpv = None
+    hold_after_success_steps = int(round(2.0 * float(cfg.fps)))
     with _Mp4Writer(mp4_path, fps=cfg.fps) as vw, _Mp4Writer(fpv_mp4_path, fps=cfg.fps) as fw:
-        for t in range(steps):
+        for t in range(int(steps_planned)):
             pollution.step_if_due(dt)
 
             # Camera follows plume center to show the task region.
             if t % 2 == 0:
                 cam_target = [float(center[0]), float(center[1]), float(center[2])]
-                a = 2.0 * math.pi * (t / float(max(1, steps)))
+                a = 2.0 * math.pi * (t / float(max(1, steps_planned)))
                 r = float(cfg.cam_back_m)
                 cam_pos = [float(center[0]) + r * math.cos(a), float(center[1]) + r * math.sin(a), float(center[2]) + cfg.cam_height_m]
                 env.move_viewport(cam_pos, _look_at_rpy(cam_pos, cam_target))
@@ -1170,6 +1180,11 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 and (coverage >= float(cfg.coverage_success_min))
             ):
                 success_step = t
+            if success_step is not None and int(t) >= int(success_step) + int(hold_after_success_steps):
+                steps_run = int(t) + 1
+                break
+        else:
+            steps_run = int(steps_planned)
 
         if frame is not None:
             imageio.imwrite(end_png, _maybe_expose(_ensure_uint8_rgb(frame), cfg.viewport_exposure))
@@ -1181,13 +1196,14 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
 
     mass_frac_final_raw = pollution.mass_fraction()
     mass_frac_final = None if mass_frac_final_raw is None else float(max(0.0, min(1.0, float(mass_frac_final_raw))))
-    mean_coverage = float(coverage_sum / float(max(1, steps)))
-    mean_leakage = float(leakage_sum / float(max(1, steps)))
+    mean_coverage = float(coverage_sum / float(max(1, steps_run)))
+    mean_leakage = float(leakage_sum / float(max(1, steps_run)))
     metrics = {
         "task": "plume_contain_cleanup",
         "seed": int(cfg.seed),
         "n_agents": int(cfg.num_agents),
-        "steps": int(steps),
+        "steps": int(steps_run),
+        "steps_planned": int(steps_planned),
         "dt_s": float(dt),
         "success": success_step is not None,
         "success_step": int(success_step) if success_step is not None else None,

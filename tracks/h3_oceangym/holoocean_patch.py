@@ -13,6 +13,8 @@ class HoloCfg:
     window_height: int = 720
     render_quality: int = 3
     show_viewport: bool = False
+    camera_width: int = 768
+    camera_height: int = 768
 
 
 def patch_scenario_for_recording(base: dict, cfg: HoloCfg, *, add_viewport_capture: bool) -> dict:
@@ -50,9 +52,21 @@ def patch_scenario_for_recording(base: dict, cfg: HoloCfg, *, add_viewport_captu
                 "sensor_name": "LeftCamera",
                 "socket": "CameraLeftSocket",
                 "Hz": int(cfg.fps),
-                "configuration": {"CaptureWidth": 512, "CaptureHeight": 512},
+                "configuration": {"CaptureWidth": int(cfg.camera_width), "CaptureHeight": int(cfg.camera_height)},
             }
         )
+    else:
+        # If cameras already exist, bump resolution slightly for clearer screenshots/GIFs.
+        for s in sensors:
+            if s.get("sensor_type") != "RGBCamera":
+                continue
+            conf = dict(s.get("configuration", {}) or {})
+            w = int(conf.get("CaptureWidth", 512))
+            h = int(conf.get("CaptureHeight", 512))
+            if w < int(cfg.camera_width) or h < int(cfg.camera_height):
+                conf["CaptureWidth"] = int(cfg.camera_width)
+                conf["CaptureHeight"] = int(cfg.camera_height)
+            s["configuration"] = conf
 
     if not any(s.get("sensor_type") == "CollisionSensor" for s in sensors):
         sensors.append({"sensor_type": "CollisionSensor", "sensor_name": "CollisionSensor", "Hz": cfg.ticks_per_sec})
