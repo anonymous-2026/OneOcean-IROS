@@ -132,9 +132,13 @@ def _difficulty_presets(task_id: str, difficulty: str) -> dict:
                 "coverage_success_min": 0.7,
             }
 
-    if d == "easy" and task_id in {"go_to_goal_current", "route_following_waypoints", "formation_transit_multiagent"}:
+    if d == "easy" and task_id in {"go_to_goal_current", "route_following_waypoints"}:
         # Easy should succeed reliably; raise thrust limits for faster motion.
         base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 90.0, "max_vertical_force": 60.0}
+
+    if d == "easy" and task_id == "formation_transit_multiagent":
+        # Formation is sensitive to leader speed; keep thrust moderate so followers can maintain spacing.
+        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 55.0, "max_vertical_force": 60.0}
 
     return dict(base)
 
@@ -645,9 +649,10 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
     success_step = None
     form_err_sum = 0.0
     form_err_max = 0.0
+    leader_goal_err_min = float("inf")
 
     def per_step_fn(t: int, st_in: dict) -> tuple[dict, dict]:
-        nonlocal energy, collisions, success_step, form_err_sum, form_err_max
+        nonlocal energy, collisions, success_step, form_err_sum, form_err_max, leader_goal_err_min
         pL = rp._pose_to_position(rp._state_agent(st_in, "auv0").get("PoseSensor")) or p0
         vL_raw = rp._state_agent(st_in, "auv0").get("VelocitySensor")
         vL = np.asarray(vL_raw, dtype=np.float32).reshape(3) if vL_raw is not None else np.zeros((3,), dtype=np.float32)
@@ -665,6 +670,7 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
         act0 = rp._action_from_force(bx0, by0, bz0, cfg)
         energy += float(np.sum(act0 * act0)) * dt
         env.act("auv0", act0)
+        ferrs_this = []
         for i in range(1, int(cfg.num_agents)):
             name = f"auv{i}"
             ai = rp._state_agent(st_in, name)
@@ -691,6 +697,7 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
             relx = float(pos[0] - pL[0]) - float(off[0])
             rely = float(pos[1] - pL[1]) - float(off[1])
             ferr = float(np.hypot(relx, rely))
+            ferrs_this.append(float(ferr))
             form_err_sum += ferr
             form_err_max = max(form_err_max, ferr)
         st_out = rp._safe_tick(env, publish=False)
@@ -698,9 +705,15 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
         pL2 = rp._pose_to_position(rp._state_agent(st_out, "auv0").get("PoseSensor"))
         if pL2 is not None:
             gerr = float(np.hypot(float(pL2[0]) - float(goal_xy[0]), float(pL2[1]) - float(goal_xy[1])))
+            leader_goal_err_min = min(float(leader_goal_err_min), float(gerr))
             if success_step is None and gerr <= goal_radius:
-                mean_f = float(form_err_sum / float(max(1, (t + 1) * max(1, int(cfg.num_agents) - 1))))
-                if mean_f <= tol_form:
+                # Use *current* formation error near goal; cumulative error is too strict for a transit task.
+                if ferrs_this:
+                    mean_f = float(sum(ferrs_this) / float(len(ferrs_this)))
+                    max_f = float(max(ferrs_this))
+                else:
+                    mean_f, max_f = 0.0, 0.0
+                if mean_f <= tol_form and max_f <= (1.5 * tol_form):
                     success_step = int(t)
         return st_out, {}
 
@@ -718,6 +731,7 @@ def _run_formation_transit_multiagent(*, env, rp, cfg, current, out_dir: Path, d
         "time_to_success_s": (float(success_step + 1) * dt) if success_step is not None else None,
         "goal_xy": [float(goal_xy[0]), float(goal_xy[1])],
         "goal_radius_m": float(goal_radius),
+        "leader_goal_error_min_m": None if not np.isfinite(leader_goal_err_min) else float(leader_goal_err_min),
         "formation_radius_m": float(r_form),
         "formation_tol_m": float(tol_form),
         "formation_error_mean_m": float(form_err_sum / denom),
