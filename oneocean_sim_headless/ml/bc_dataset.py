@@ -77,6 +77,7 @@ def build_bc_dataset(
         if not meta_path.exists():
             continue
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        dt_s = float((meta.get("env_config") or {}).get("dt_s", 1.0))
         n_agents = int(meta.get("n_agents", 0))
         task = str((meta.get("task") or {}).get("kind") or meta.get("task", {}).get("kind") or meta.get("task_kind") or meta.get("task", {}).get("kind") or meta.get("task", {}).get("kind") or meta.get("task", {}).get("kind") or "")
         # In our run_meta.json layout, task kind is stored at meta["task"]["kind"].
@@ -94,14 +95,16 @@ def build_bc_dataset(
             agent_dir = run_dir / "agents" / f"agent_{ai:03d}"
             pose_p = agent_dir / "pose_groundtruth" / "data.csv"
             act_p = agent_dir / "actions" / "data.csv"
+            cur_p = agent_dir / "obs" / "local_current" / "data.csv"
             probe_p = agent_dir / "obs" / "pollution_probe" / "data.csv"
-            if not (pose_p.exists() and act_p.exists() and probe_p.exists()):
+            if not (pose_p.exists() and act_p.exists() and cur_p.exists() and probe_p.exists()):
                 continue
 
             pose_it = _read_rows(pose_p)
             act_it = _read_rows(act_p)
+            cur_it = _read_rows(cur_p)
             probe_it = _read_rows(probe_p)
-            for prow, arow, rrow in zip(pose_it, act_it, probe_it):
+            for prow, arow, crow, rrow in zip(pose_it, act_it, cur_it, probe_it):
                 # t alignment is validated elsewhere; use pose t.
                 t = float(prow[0])
                 # Only train on downsampled steps where goal is recorded.
@@ -116,8 +119,14 @@ def build_bc_dataset(
                 else:
                     gx, gy, gz = [float(x) for x in goal_any]
 
-                x, y, z = float(prow[1]), float(prow[2]), float(prow[3])
+                # Recorder stores pose AFTER applying (action + current) for this step, but timestamps it at t.
+                # For BC we want the PRE-step pose that produced the logged action.
+                x_post, y_post, z_post = float(prow[1]), float(prow[2]), float(prow[3])
                 ax, ay, az = float(arow[1]), float(arow[2]), float(arow[3])
+                cx, cy, cz = float(crow[1]), float(crow[2]), float(crow[3])
+                x = x_post - (ax + cx) * dt_s
+                y = y_post - (ay + cy) * dt_s
+                z = z_post - (az + cz) * dt_s
                 probe = float(rrow[1])
 
                 dx, dy, dz = (gx - x), (gy - y), (gz - z)
@@ -147,7 +156,7 @@ def build_bc_dataset(
         "run_dirs": used_runs,
         "task_vocab": task_vocab,
         "n_samples": int(x.shape[0]),
-        "note": "Features=[goal_delta(3), depth_y(1), probe(1), task_onehot]; Targets=[action_xyz].",
+        "note": "Features=[goal_delta(3) from PRE-step pose, depth_y(1), probe(1), task_onehot]; Targets=[action_xyz].",
         "semantics_goal_source": "environment_samples/semantics.jsonl:goal_for_action_xyz",
         "max_samples": int(max_samples),
     }
@@ -159,4 +168,3 @@ def save_dataset(ds: Dataset, *, out_npz: Path, out_meta_json: Path) -> None:
     np.savez_compressed(out_npz, x=ds.x, y=ds.y)
     out_meta_json.parent.mkdir(parents=True, exist_ok=True)
     out_meta_json.write_text(json.dumps(ds.meta, indent=2), encoding="utf-8")
-

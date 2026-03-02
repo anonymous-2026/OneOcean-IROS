@@ -31,13 +31,17 @@ class LLMPlanner:
     def _ensure_model(self) -> None:
         if self._tok is not None and self._model is not None:
             return
+        mp = str(self.cfg.model_path).strip()
+        if not mp:
+            raise ValueError("LLMPlanner requires a non-empty model_path.")
+        cached = _GLOBAL_MODEL_CACHE.get(mp)
+        if cached is not None:
+            self._tok, self._model = cached
+            return
         # Import torch/transformers only when LLM planning is enabled.
         from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
         import torch
 
-        mp = str(self.cfg.model_path).strip()
-        if not mp:
-            raise ValueError("LLMPlanner requires a non-empty model_path.")
         tok = AutoTokenizer.from_pretrained(mp, trust_remote_code=True)
         model = AutoModelForCausalLM.from_pretrained(
             mp,
@@ -48,6 +52,7 @@ class LLMPlanner:
         model.eval()
         self._tok = tok
         self._model = model
+        _GLOBAL_MODEL_CACHE[mp] = (tok, model)
 
     def _cache_key(self, payload: dict[str, Any]) -> str:
         b = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -139,8 +144,8 @@ class LLMPlanner:
                 **inputs,
                 max_new_tokens=int(self.cfg.max_new_tokens),
                 do_sample=False,
-                temperature=0.0,
                 top_p=1.0,
+                top_k=0,
             )
         decoded = tok.decode(out[0], skip_special_tokens=True)
 
@@ -190,3 +195,5 @@ def _extract_json(text: str) -> Any:
     except Exception:
         return None
 
+
+_GLOBAL_MODEL_CACHE: dict[str, tuple[Any, Any]] = {}

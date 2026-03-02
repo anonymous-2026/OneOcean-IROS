@@ -30,9 +30,25 @@ def main() -> int:
     ap.add_argument("--dataset-meta", required=True)
     ap.add_argument("--out-dir", required=True, help="Output directory for logs + weights")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--hidden", type=int, default=64)
+    ap.add_argument("--hidden2", type=int, default=64)
+    ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--batch-size", type=int, default=4096)
+    ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--weight-decay", type=float, default=0.0)
+    ap.add_argument("--val-frac", type=float, default=0.1)
     args = ap.parse_args()
 
-    cfg = TrainConfig(seed=int(args.seed))
+    cfg = TrainConfig(
+        seed=int(args.seed),
+        hidden=int(args.hidden),
+        hidden2=int(args.hidden2),
+        epochs=int(args.epochs),
+        batch_size=int(args.batch_size),
+        lr=float(args.lr),
+        weight_decay=float(args.weight_decay),
+        val_frac=float(args.val_frac),
+    )
     out_dir = Path(args.out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -162,4 +178,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
