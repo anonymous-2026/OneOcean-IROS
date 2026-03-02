@@ -212,7 +212,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=25.0 if d == "easy" else 18.0 if d == "medium" else 12.0,
+            success_radius_m=28.0 if d == "easy" else 24.0 if d == "medium" else 18.0,
             max_steps=360 if d == "easy" else 520 if d == "medium" else 760,
             fish_count=50 if d == "easy" else 70 if d == "medium" else 90,
         )
@@ -488,17 +488,18 @@ def compute_success(
         ox, oz = [float(x) for x in np.asarray(task_state.scan_grid_origin_xz, dtype=np.float64).reshape(2)]
         h, w = task_state.scan_grid_hw
         cell = float(cfg.scan_cell_size_m)
-        x = float(pos[0, 0])
-        z = float(pos[0, 2])
-        j0 = int(np.clip(math.floor((x - ox) / cell), 0, w - 1))
-        i0 = int(np.clip(math.floor((z - oz) / cell), 0, h - 1))
-        # A scan covers an area around the vehicle (proxy for a sonar/FOV footprint).
+        # A scan covers an area around each vehicle (proxy for a sonar/FOV footprint).
         rr = int(max(0, math.ceil(float(cfg.scan_radius_m) / max(1e-9, cell))))
-        i_lo = max(0, i0 - rr)
-        i_hi = min(h, i0 + rr + 1)
-        j_lo = max(0, j0 - rr)
-        j_hi = min(w, j0 + rr + 1)
-        visited[i_lo:i_hi, j_lo:j_hi] = True
+        for ai in range(n_agents):
+            x = float(pos[ai, 0])
+            z = float(pos[ai, 2])
+            j0 = int(np.clip(math.floor((x - ox) / cell), 0, w - 1))
+            i0 = int(np.clip(math.floor((z - oz) / cell), 0, h - 1))
+            i_lo = max(0, i0 - rr)
+            i_hi = min(h, i0 + rr + 1)
+            j_lo = max(0, j0 - rr)
+            j_hi = min(w, j0 + rr + 1)
+            visited[i_lo:i_hi, j_lo:j_hi] = True
         task_state.scan_visited = visited
         coverage = float(np.count_nonzero(visited) / float(visited.size))
         return coverage >= float(cfg.scan_target_coverage), {

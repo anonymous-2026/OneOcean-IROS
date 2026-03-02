@@ -275,26 +275,83 @@ class HeadlessOceanEnv:
                     self.task_state.goal_xyz = goal
                     break
         elif task.kind == "fish_herding_8uuv":
-            # Deep corner target (XZ); keep depth near shallow for goal semantics.
-            self.task_state.goal_xyz = np.array([hi[0] - 20.0, lo[1] + 0.8, hi[2] - 20.0], dtype=np.float64)
+            # Choose a reachable XZ goal relative to the fish centroid so a simple headless herding proxy can succeed.
+            if self.task_state.fish_xyz is not None:
+                fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+                cen = np.mean(fish, axis=0)
+                dist = 200.0 if task.difficulty == "easy" else 280.0 if task.difficulty == "medium" else 360.0
+                for _ in range(200):
+                    ang = float(self.rng.uniform(0, 2 * math.pi))
+                    off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
+                    goal = np.minimum(np.maximum(cen + off, lo), hi)
+                    goal[1] = float(lo[1] + 0.8)
+                    if not self._violates_constraints(goal):
+                        self.task_state.goal_xyz = goal
+                        break
         elif task.kind == "area_scan_terrain_recon":
-            # Precompute a lawnmower scan path over the scan grid.
-            if self.task_state.scan_grid_origin_xz is not None and self.task_state.scan_grid_hw is not None:
-                ox, oz = [float(x) for x in np.asarray(self.task_state.scan_grid_origin_xz, dtype=np.float64).reshape(2)]
-                h, w = self.task_state.scan_grid_hw
-                cell = float(task.scan_cell_size_m)
-                pts = []
-                y = float(np.mean(self._positions[:, 1]))
-                for i in range(h):
-                    xs = range(w) if (i % 2 == 0) else range(w - 1, -1, -1)
-                    for j in xs:
-                        x = ox + (float(j) + 0.5) * cell
-                        z = oz + (float(i) + 0.5) * cell
-                        pts.append([float(np.clip(x, lo[0], hi[0])), y, float(np.clip(z, lo[2], hi[2]))])
-                self.task_state.waypoints_xyz = np.asarray(pts, dtype=np.float64)
+            # Define a region-of-interest grid around the initial centroid (instead of scanning the full tile).
+            center = np.mean(self._positions, axis=0)
+            roi = 220.0 if task.difficulty == "easy" else 340.0 if task.difficulty == "medium" else 480.0
+            cell = float(task.scan_cell_size_m)
+            w = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
+            h = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
+            ox = float(np.clip(float(center[0]) - 0.5 * roi, float(lo[0]), float(hi[0]) - float(w) * cell))
+            oz = float(np.clip(float(center[2]) - 0.5 * roi, float(lo[2]), float(hi[2]) - float(h) * cell))
+            self.task_state.scan_grid_hw = (h, w)
+            self.task_state.scan_grid_origin_xz = np.array([ox, oz], dtype=np.float64)
+            self.task_state.scan_visited = np.zeros((h, w), dtype=bool)
+
+            # Precompute a lawnmower scan path over the ROI grid.
+            pts = []
+            y = float(np.mean(self._positions[:, 1]))
+            rr = float(task.scan_radius_m)
+            stride = int(max(1, math.ceil((0.9 * rr) / max(1e-9, cell))))
+            for i in range(0, h, stride):
+                xs = range(0, w, stride) if ((i // stride) % 2 == 0) else range(w - 1, -1, -stride)
+                for j in xs:
+                    x = ox + (float(j) + 0.5) * cell
+                    z = oz + (float(i) + 0.5) * cell
+                    pts.append([float(np.clip(x, lo[0], hi[0])), y, float(np.clip(z, lo[2], hi[2]))])
+            self.task_state.waypoints_xyz = np.asarray(pts, dtype=np.float64)
+            self.task_state.waypoint_index = 0
+            if self.task_state.waypoints_xyz.size:
+                self.task_state.goal_xyz = np.asarray(self.task_state.waypoints_xyz[0], dtype=np.float64)
+        elif task.kind == "pipeline_inspection_leak_detection":
+            # Re-generate a reachable pipeline polyline around the initial centroid; keep it short enough to traverse.
+            k = int(max(3, task.waypoints_n))
+            center = np.mean(self._positions, axis=0)
+            length = 260.0 if task.difficulty == "easy" else 360.0 if task.difficulty == "medium" else 480.0
+            for _ in range(200):
+                ang = float(self.rng.uniform(0, 2 * math.pi))
+                a = center + np.array([math.cos(ang) * 0.5 * length, 0.0, math.sin(ang) * 0.5 * length], dtype=np.float64)
+                b = center - np.array([math.cos(ang) * 0.5 * length, 0.0, math.sin(ang) * 0.5 * length], dtype=np.float64)
+                a = np.minimum(np.maximum(a, lo), hi)
+                b = np.minimum(np.maximum(b, lo), hi)
+                if self._violates_constraints(a) or self._violates_constraints(b):
+                    continue
+                ts = np.linspace(0.0, 1.0, k, dtype=np.float64)
+                wps = (1.0 - ts[:, None]) * a[None, :] + ts[:, None] * b[None, :]
+                # Small lateral wiggle.
+                wig = self.rng.normal(scale=0.04 * length, size=(k, 2))
+                wps[:, 0] = np.clip(wps[:, 0] + wig[:, 0], lo[0], hi[0])
+                wps[:, 2] = np.clip(wps[:, 2] + wig[:, 1], lo[2], hi[2])
+                wps[:, 1] = np.clip(wps[:, 1], lo[1], hi[1])
+                self.task_state.waypoints_xyz = wps.astype(np.float64)
+                self.task_state.pipeline_xyz = wps.astype(np.float64)
                 self.task_state.waypoint_index = 0
-                if self.task_state.waypoints_xyz.size:
-                    self.task_state.goal_xyz = np.asarray(self.task_state.waypoints_xyz[0], dtype=np.float64)
+                self.task_state.goal_xyz = wps[0].copy()
+                l = int(max(1, task.pipeline_leaks_n))
+                leak = np.zeros((l, 3), dtype=np.float64)
+                for li in range(l):
+                    seg = int(self.rng.integers(0, max(1, k - 1)))
+                    aa = wps[seg]
+                    bb = wps[min(k - 1, seg + 1)]
+                    tt = float(self.rng.uniform(0.2, 0.8))
+                    leak[li] = (1.0 - tt) * aa + tt * bb
+                self.task_state.leak_xyz = leak.astype(np.float64)
+                self.task_state.leak_detected = np.zeros((l,), dtype=bool)
+                self.task_state.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
+                break
         elif task.kind == "depth_profile_tracking":
             # If waypoints exist, encode a depth profile into waypoint y (depth positive down).
             if self.task_state.waypoints_xyz is not None:
@@ -431,7 +488,22 @@ class HeadlessOceanEnv:
                 if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
                     self.task_state.waypoint_index = i + 1
                     i = int(self.task_state.waypoint_index)
-            goal = wps[i]
+            base = wps[i]
+            lo, hi = self.bounds_xyz
+            # Spread agents around the base scan waypoint to increase coverage without adding per-agent waypoint state.
+            goals = np.repeat(base.reshape(1, 3), self.n_agents, axis=0)
+            grid_n = int(max(1, math.ceil(math.sqrt(self.n_agents))))
+            spacing = float(max(2.0, 0.55 * float(self.task_cfg.scan_cell_size_m)))
+            for ai in range(self.n_agents):
+                r = int(ai // grid_n)
+                c = int(ai % grid_n)
+                dx = (float(c) - 0.5 * float(grid_n - 1)) * spacing
+                dz = (float(r) - 0.5 * float(grid_n - 1)) * spacing
+                p = base + np.array([dx, 0.0, dz], dtype=np.float64)
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    goals[ai] = p
+            goal = goals
         elif self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.waypoints_xyz is not None:
             wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
             i = int(np.clip(int(self.task_state.waypoint_index), 0, wps.shape[0] - 1))
@@ -552,7 +624,7 @@ class HeadlessOceanEnv:
 
                 # When UUVs are far away, fish progresses toward goal slowly; when close, it flees (herding).
                 flee = 0.85 if dist <= 45.0 else 0.25
-                speed = 0.85  # meters per step
+                speed = 1.05  # meters per step
                 move = flee * rep + (1.0 - flee) * dir_goal
                 mn = float(np.linalg.norm(move[[0, 2]]))
                 if mn > 1e-9:
