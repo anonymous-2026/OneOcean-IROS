@@ -279,11 +279,18 @@ class HeadlessOceanEnv:
             if self.task_state.fish_xyz is not None:
                 fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
                 cen = np.mean(fish, axis=0)
-                dist = 200.0 if task.difficulty == "easy" else 280.0 if task.difficulty == "medium" else 360.0
+                dist = 180.0 if task.difficulty == "easy" else 240.0 if task.difficulty == "medium" else 320.0
+                margin = 55.0
+                lo2 = lo.copy()
+                hi2 = hi.copy()
+                lo2[0] = min(lo2[0] + margin, hi2[0] - margin)
+                lo2[2] = min(lo2[2] + margin, hi2[2] - margin)
+                hi2[0] = max(hi2[0] - margin, lo2[0] + margin)
+                hi2[2] = max(hi2[2] - margin, lo2[2] + margin)
                 for _ in range(200):
                     ang = float(self.rng.uniform(0, 2 * math.pi))
                     off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
-                    goal = np.minimum(np.maximum(cen + off, lo), hi)
+                    goal = np.minimum(np.maximum(cen + off, lo2), hi2)
                     goal[1] = float(lo[1] + 0.8)
                     if not self._violates_constraints(goal):
                         self.task_state.goal_xyz = goal
@@ -624,7 +631,7 @@ class HeadlessOceanEnv:
 
                 # When UUVs are far away, fish progresses toward goal slowly; when close, it flees (herding).
                 flee = 0.85 if dist <= 45.0 else 0.25
-                speed = 1.05  # meters per step
+                speed = 1.15  # meters per step
                 move = flee * rep + (1.0 - flee) * dir_goal
                 mn = float(np.linalg.norm(move[[0, 2]]))
                 if mn > 1e-9:
