@@ -15,7 +15,7 @@ from typing import Any
 
 from oneocean_sim_headless.controllers import preset_controller
 from oneocean_sim_headless.env import EnvConfig, HeadlessOceanEnv
-from oneocean_sim_headless.tasks import preset_task
+from oneocean_sim_headless.tasks import CANONICAL_TASKS_10, preset_task
 from oneocean_sim_headless.validators import validate_run_dir
 
 
@@ -78,7 +78,10 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run a headless experiment matrix and aggregate results (H1).")
     ap.add_argument("--drift-npz", type=str, required=True)
     ap.add_argument("--out-dir", type=str, default="")
+    ap.add_argument("--preset", type=str, default="", choices=["", "smoke", "hero"], help="Convenience presets (override tasks/difficulties/seeds/episodes).")
     ap.add_argument("--seeds", type=str, default="0-9", help="Seed range like '0-9' or list like '0,1,2'")
+    ap.add_argument("--episodes", type=int, default=1, help="Episodes per seed (writes episode subfolders when >1).")
+    ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode within a base seed.")
     ap.add_argument("--tasks", type=str, default="go_to_goal_current,station_keeping,pollution_localization,pollution_containment_multiagent")
     ap.add_argument("--difficulties", type=str, default="easy,medium,hard")
     ap.add_argument("--pollution-models", type=str, default="gaussian", help="Comma list: gaussian,ocpnet_3d")
@@ -126,15 +129,49 @@ def main() -> int:
     (root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     _write_env_snapshot(root)
 
+    if str(args.preset).strip() == "smoke":
+        args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        args.difficulties = "easy,medium,hard"
+        args.pollution_models = "gaussian"
+        args.seeds = "0"
+        args.episodes = 1
+    elif str(args.preset).strip() == "hero":
+        # Designed to hit: seeds>=5 and episodes>=10 (interpreting episodes as seeds×episodes).
+        # Keep small enough to run routinely.
+        args.tasks = ",".join(
+            [
+                "go_to_goal_current",
+                "station_keeping",
+                "surface_pollution_cleanup_multiagent",
+                "formation_transit_multiagent",
+                "pipeline_inspection_leak_detection",
+            ]
+        )
+        args.difficulties = "medium,hard"
+        args.pollution_models = "gaussian"
+        args.seeds = "0-4"
+        args.episodes = 2
+
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     diffs = [d.strip() for d in args.difficulties.split(",") if d.strip()]
     pmods = [p.strip() for p in args.pollution_models.split(",") if p.strip()]
     seeds = _parse_seeds(str(args.seeds))
+    episodes = int(max(1, int(args.episodes)))
+    seed_step = int(max(1, int(args.seed_step)))
 
     # Task-specific default controllers and agent counts.
     defaults = {
         "go_to_goal_current": {"controller": "go_to_goal", "n_agents": 2},
         "station_keeping": {"controller": "station_keep", "n_agents": 2},
+        "surface_pollution_cleanup_multiagent": {"controller": "go_to_goal", "n_agents": 10},
+        "underwater_pollution_lift_5uuv": {"controller": "go_to_goal", "n_agents": 5},
+        "fish_herding_8uuv": {"controller": "go_to_goal", "n_agents": 8},
+        "area_scan_terrain_recon": {"controller": "go_to_goal", "n_agents": 2},
+        "pipeline_inspection_leak_detection": {"controller": "go_to_goal", "n_agents": 2},
+        "route_following_waypoints": {"controller": "go_to_goal", "n_agents": 2},
+        "depth_profile_tracking": {"controller": "go_to_goal", "n_agents": 2},
+        "formation_transit_multiagent": {"controller": "go_to_goal", "n_agents": 10},
+        # legacy/internal
         "pollution_localization": {"controller": "plume_gradient", "n_agents": 8},
         "pollution_containment_multiagent": {"controller": "containment_ring", "n_agents": 10},
     }
@@ -167,10 +204,13 @@ def main() -> int:
                 "constraint_mode": str(args.constraint_mode),
                 "bathy_mode": str(args.bathy_mode),
                 "seafloor_clearance_m": float(args.seafloor_clearance_m),
+                "preset": str(args.preset),
                 "tasks": tasks,
                 "difficulties": diffs,
                 "pollution_models": pmods,
                 "seeds": seeds,
+                "episodes": int(episodes),
+                "seed_step": int(seed_step),
                 "scenario_count": int(len(scenarios)),
             },
             indent=2,
@@ -181,8 +221,8 @@ def main() -> int:
     rows = []
     t_all = time.time()
     for idx, sc in enumerate(scenarios):
-        run_dir = root / f"{sc.task}" / f"{sc.difficulty}" / f"{sc.pollution_model}" / f"seed_{sc.seed:03d}"
-        run_dir.mkdir(parents=True, exist_ok=True)
+        base_run_dir = root / f"{sc.task}" / f"{sc.difficulty}" / f"{sc.pollution_model}" / f"n{int(sc.n_agents)}" / f"seed_{sc.seed:03d}"
+        base_run_dir.mkdir(parents=True, exist_ok=True)
 
         env_cfg = EnvConfig(
             drift_cache_npz=str(Path(args.drift_npz).expanduser()),
@@ -197,80 +237,95 @@ def main() -> int:
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
         ctrl_cfg = preset_controller(kind=str(sc.controller), max_speed_mps=env_cfg.max_speed_mps)  # type: ignore[arg-type]
 
-        t0 = time.time()
-        env = HeadlessOceanEnv(env_cfg, out_dir=run_dir, seed=int(sc.seed), n_agents=int(sc.n_agents))
-        env.reset(task=task_cfg, controller=ctrl_cfg)
-        done = False
-        last = {}
-        steps = 0
-        while not done:
-            done, info = env.step()
-            last = info
-            steps += 1
-        env.close()
+        for ep in range(int(episodes)):
+            seed = int(sc.seed) + ep * int(seed_step)
+            run_dir = base_run_dir if int(episodes) == 1 else (base_run_dir / f"episode_{ep:03d}")
+            run_dir.mkdir(parents=True, exist_ok=True)
 
-        metrics = {
-            "task": sc.task,
-            "difficulty": sc.difficulty,
-            "controller": sc.controller,
-            "pollution_model": sc.pollution_model,
-            "seed": int(sc.seed),
-            "n_agents": int(sc.n_agents),
-            "steps": int(steps),
-            "dt_s": float(args.dt),
-            "success": bool(last.get("success", False)),
-            "time_to_success_s": env.time_to_success_s,
-            "energy_proxy": float(env.energy_proxy),
-            "constraint_violations": int(env.constraint_violations),
-            "final": last,
-        }
-        # Mirror the runner convention (metrics.json + metrics.csv).
-        try:
-            env.rec.write_metrics(metrics)
-        except Exception:
-            (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+            t0 = time.time()
+            env = HeadlessOceanEnv(env_cfg, out_dir=run_dir, seed=int(seed), n_agents=int(sc.n_agents))
+            env.reset(task=task_cfg, controller=ctrl_cfg)
+            done = False
+            last = {}
+            steps = 0
+            while not done:
+                done, info = env.step()
+                last = info
+                steps += 1
+            env.close()
 
-        if bool(args.validate):
-            vr = validate_run_dir(run_dir)
-            (run_dir / "validation.json").write_text(json.dumps(asdict(vr), indent=2), encoding="utf-8")
-            if not vr.ok:
-                print(json.dumps({"scenario_index": idx, "run_dir": str(run_dir), "ok": False, "reason": vr.reason}, indent=2))
-                return 2
-
-        rows.append(
-            {
+            metrics = {
                 "task": sc.task,
                 "difficulty": sc.difficulty,
                 "controller": sc.controller,
                 "pollution_model": sc.pollution_model,
+                "seed": int(seed),
+                "base_seed": int(sc.seed),
+                "episode_index": int(ep),
                 "n_agents": int(sc.n_agents),
-                "seed": int(sc.seed),
-                "success": bool(metrics["success"]),
-                "time_to_success_s": metrics["time_to_success_s"],
                 "steps": int(steps),
                 "dt_s": float(args.dt),
-                "energy_proxy": metrics["energy_proxy"],
-                "constraint_violations": metrics["constraint_violations"],
-                "best_dist_to_goal_m": last.get("best_dist_to_goal_m", None),
-                "source_error_m": last.get("source_error_m", None),
-                "mass_frac": last.get("mass_frac", None),
-                "target": last.get("target", None),
-                "elapsed_s": float(time.time() - t0),
-                "run_dir": str(run_dir),
+                "success": bool(last.get("success", False)),
+                "time_to_success_s": env.time_to_success_s,
+                "energy_proxy": float(env.energy_proxy),
+                "constraint_violations": int(env.constraint_violations),
+                "final": last,
             }
-        )
+            try:
+                env.rec.write_metrics(metrics)
+            except Exception:
+                (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+
+            if bool(args.validate):
+                vr = validate_run_dir(run_dir)
+                (run_dir / "validation.json").write_text(json.dumps(asdict(vr), indent=2), encoding="utf-8")
+                if not vr.ok:
+                    print(json.dumps({"scenario_index": idx, "run_dir": str(run_dir), "ok": False, "reason": vr.reason}, indent=2))
+                    return 2
+
+            rows.append(
+                {
+                    "task": sc.task,
+                    "difficulty": sc.difficulty,
+                    "controller": sc.controller,
+                    "pollution_model": sc.pollution_model,
+                    "n_agents": int(sc.n_agents),
+                    "seed": int(seed),
+                    "base_seed": int(sc.seed),
+                    "episode_index": int(ep),
+                    "success": bool(metrics["success"]),
+                    "time_to_success_s": metrics["time_to_success_s"],
+                    "steps": int(steps),
+                    "dt_s": float(args.dt),
+                    "energy_proxy": metrics["energy_proxy"],
+                    "constraint_violations": metrics["constraint_violations"],
+                    "best_dist_to_goal_m": last.get("best_dist_to_goal_m", None),
+                    "source_error_m": last.get("source_error_m", None),
+                    "mass_frac": last.get("mass_frac", None),
+                    "target": last.get("target", None),
+                    "waypoint_index": last.get("waypoint_index", None),
+                    "formation_err_m": last.get("formation_err_m", None),
+                    "coverage": last.get("coverage", None),
+                    "leaks_detected": last.get("leaks_detected", None),
+                    "fish_progress": last.get("fish_progress", None),
+                    "lift_phase": last.get("lift_phase", None),
+                    "elapsed_s": float(time.time() - t0),
+                    "run_dir": str(run_dir),
+                }
+            )
 
         if (idx + 1) % 25 == 0 or (idx + 1) == len(scenarios):
             print(json.dumps({"done": int(idx + 1), "total": int(len(scenarios))}, indent=2))
 
-    # Write CSV.
-    out_csv = root / "matrix_results.csv"
+    # Write summary.csv (paper-facing contract) and keep matrix_results.csv for backward compat.
+    out_csv = root / "summary.csv"
     cols = list(rows[0].keys()) if rows else []
     with out_csv.open("w", encoding="utf-8", newline="") as fp:
         w = csv.DictWriter(fp, fieldnames=cols)
         w.writeheader()
         for r in rows:
             w.writerow(r)
+    (root / "matrix_results.csv").write_text(out_csv.read_text(encoding="utf-8"), encoding="utf-8")
 
     # Aggregate summary (success rate by task/difficulty/model).
     # Use nested dicts so JSON serialization stays valid (tuple keys are not JSON-serializable).
@@ -300,6 +355,23 @@ def main() -> int:
                     v["mean_steps"] = float(v["mean_steps"]) / float(c)
 
     (root / "matrix_summary.json").write_text(json.dumps({"summary": summary, "elapsed_s": float(time.time() - t_all)}, indent=2), encoding="utf-8")
+    (root / "results_manifest.json").write_text(
+        json.dumps(
+            {
+                "track": "h1_headless_matrix",
+                "out_dir": str(root),
+                "meta_json": str((root / "meta.json").resolve()),
+                "matrix_config_json": str((root / "matrix_config.json").resolve()),
+                "summary_csv": str(out_csv.resolve()),
+                "matrix_summary_json": str((root / "matrix_summary.json").resolve()),
+                "scenario_count": int(len(scenarios)),
+                "rows": int(len(rows)),
+                "elapsed_s": float(time.time() - t_all),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     _append_run_index(root=root, meta=meta)
     print(json.dumps({"out_dir": str(root), "csv": str(out_csv), "elapsed_s": float(time.time() - t_all)}, indent=2))
     return 0

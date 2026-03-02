@@ -15,7 +15,7 @@ from .controllers import ControllerConfig, compute_actions
 from .drift_cache import DriftCacheInfo, load_drift_cache
 from .pollution import PollutionModelKind, build_pollution_field
 from .recorder import HeadlessRecorder, RecorderConfig
-from .tasks import TaskConfig, TaskState, compute_success, reset_task
+from .tasks import TaskConfig, TaskState, compute_success, required_n_agents, reset_task
 
 
 @dataclass(frozen=True)
@@ -172,7 +172,10 @@ class HeadlessOceanEnv:
     def reset(self, *, task: TaskConfig, controller: ControllerConfig) -> dict[str, Any]:
         self.task_cfg = task
         self.controller_cfg = controller
-        self.task_state = reset_task(self.rng, self.bounds_xyz, task)
+        req_n = required_n_agents(task.kind)
+        if req_n is not None and int(self.n_agents) != int(req_n):
+            raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
+        self.task_state = reset_task(self.rng, self.bounds_xyz, task, n_agents=int(self.n_agents))
 
         if str(self.cfg.constraint_mode) != "off" and not bool(self.drift_info.has_land_mask):
             raise ValueError(
@@ -224,6 +227,48 @@ class HeadlessOceanEnv:
                     break
         elif task.kind == "pollution_containment_multiagent":
             self.task_state.goal_xyz = 0.5 * (lo + hi)
+        elif task.kind == "formation_transit_multiagent":
+            # Formation center goal is a reachable offset from the initial centroid.
+            center = np.mean(self._positions, axis=0)
+            dist = 120.0 if task.difficulty == "easy" else 200.0 if task.difficulty == "medium" else 280.0
+            for _ in range(200):
+                ang = float(self.rng.uniform(0, 2 * math.pi))
+                off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
+                goal = np.minimum(np.maximum(center + off, lo), hi)
+                if not self._violates_constraints(goal):
+                    self.task_state.goal_xyz = goal
+                    break
+        elif task.kind == "fish_herding_8uuv":
+            # Deep corner target (XZ); keep depth near shallow for goal semantics.
+            self.task_state.goal_xyz = np.array([hi[0] - 20.0, lo[1] + 0.8, hi[2] - 20.0], dtype=np.float64)
+        elif task.kind == "area_scan_terrain_recon":
+            # Precompute a lawnmower scan path over the scan grid.
+            if self.task_state.scan_grid_origin_xz is not None and self.task_state.scan_grid_hw is not None:
+                ox, oz = [float(x) for x in np.asarray(self.task_state.scan_grid_origin_xz, dtype=np.float64).reshape(2)]
+                h, w = self.task_state.scan_grid_hw
+                cell = float(task.scan_cell_size_m)
+                pts = []
+                y = float(np.mean(self._positions[:, 1]))
+                for i in range(h):
+                    xs = range(w) if (i % 2 == 0) else range(w - 1, -1, -1)
+                    for j in xs:
+                        x = ox + (float(j) + 0.5) * cell
+                        z = oz + (float(i) + 0.5) * cell
+                        pts.append([float(np.clip(x, lo[0], hi[0])), y, float(np.clip(z, lo[2], hi[2]))])
+                self.task_state.waypoints_xyz = np.asarray(pts, dtype=np.float64)
+                self.task_state.waypoint_index = 0
+                if self.task_state.waypoints_xyz.size:
+                    self.task_state.goal_xyz = np.asarray(self.task_state.waypoints_xyz[0], dtype=np.float64)
+        elif task.kind == "depth_profile_tracking":
+            # If waypoints exist, encode a depth profile into waypoint y (depth positive down).
+            if self.task_state.waypoints_xyz is not None:
+                wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+                amp = 2.0 if task.difficulty == "easy" else 3.5 if task.difficulty == "medium" else 5.0
+                base = float(np.clip(np.mean(self._positions[:, 1]), lo[1] + 0.5, hi[1] - 0.5))
+                for i in range(wps.shape[0]):
+                    wps[i, 1] = float(np.clip(base + amp * math.sin(2.0 * math.pi * (i / max(1, wps.shape[0] - 1))), lo[1] + 0.2, hi[1] - 0.2))
+                self.task_state.waypoints_xyz = wps
+                self.task_state.goal_xyz = wps[int(np.clip(self.task_state.waypoint_index, 0, wps.shape[0] - 1))].copy()
 
         self._t = 0.0
         self._energy = 0.0
@@ -265,6 +310,8 @@ class HeadlessOceanEnv:
 
         # Observations for controller.
         probe = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
+        step_i = int(round(self._t / max(1e-9, float(self.cfg.dt_s))))
+
         if self.task_cfg.kind == "pollution_containment_multiagent":
             # Estimate plume center from probes (weighted centroid). If probes are near-flat, keep last goal.
             w = np.maximum(probe, 0.0)
@@ -272,11 +319,87 @@ class HeadlessOceanEnv:
             if s > 1e-12:
                 est = np.sum(self._positions * (w[:, None] / s), axis=0)
                 self.task_state.goal_xyz = est.astype(np.float64)
-        goal = self.task_state.goal_xyz
+        # Default goal is broadcast; some tasks override with per-agent targets.
+        goal: np.ndarray
+        goal = np.asarray(self.task_state.goal_xyz, dtype=np.float64)
+        if self.task_cfg.kind == "formation_transit_multiagent" and self.task_state.formation_offsets_xyz is not None:
+            offsets = np.asarray(self.task_state.formation_offsets_xyz, dtype=np.float64).reshape(self.n_agents, 3)
+            goal = goal.reshape(1, 3) + offsets
+        elif self.task_cfg.kind == "surface_pollution_cleanup_multiagent" and self.task_state.cleanup_sources_xyz is not None and self.task_state.cleanup_done is not None:
+            srcs = np.asarray(self.task_state.cleanup_sources_xyz, dtype=np.float64)
+            done = np.asarray(self.task_state.cleanup_done, dtype=bool)
+            if self.task_state.cleanup_assigned_source is None:
+                self.task_state.cleanup_assigned_source = np.full((self.n_agents,), -1, dtype=np.int64)
+            # Pick nearest unfinished per agent.
+            for ai in range(self.n_agents):
+                cur = int(self.task_state.cleanup_assigned_source[ai])
+                if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
+                    continue
+                if np.all(done):
+                    self.task_state.cleanup_assigned_source[ai] = -1
+                    continue
+                cand = np.where(~done)[0]
+                dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
+                self.task_state.cleanup_assigned_source[ai] = int(cand[int(np.argmin(dists))])
+            goals = np.repeat(goal.reshape(1, 3), self.n_agents, axis=0)
+            for ai in range(self.n_agents):
+                si = int(self.task_state.cleanup_assigned_source[ai])
+                if si >= 0:
+                    goals[ai] = srcs[si]
+            goal = goals
+        elif self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+            barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+            goals = np.repeat(barrel.reshape(1, 3), self.n_agents, axis=0)
+            # Side attachments for the first 4 agents; the 5th aims from below.
+            r = 5.0
+            offsets = [
+                np.array([+r, 0.0, 0.0], dtype=np.float64),
+                np.array([-r, 0.0, 0.0], dtype=np.float64),
+                np.array([0.0, 0.0, +r], dtype=np.float64),
+                np.array([0.0, 0.0, -r], dtype=np.float64),
+                np.array([0.0, +r, 0.0], dtype=np.float64),
+            ]
+            for i in range(min(self.n_agents, len(offsets))):
+                goals[i] = barrel + offsets[i]
+            # During lift phases, bias upward to approach surface.
+            if str(self.task_state.lift_phase) in {"lift_off", "join5", "to_surface"}:
+                goals[:, 1] = max(float(self.bounds_xyz[0][1]) + 0.6, float(barrel[1]) - 0.9)
+            goal = goals
+        elif self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            cen = np.mean(fish, axis=0)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            push = tgt - cen
+            push[1] = 0.0
+            nrm = float(np.linalg.norm(push))
+            if not np.isfinite(nrm) or nrm < 1e-9:
+                push = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+            else:
+                push = push / nrm
+            # Place agents on a ring "behind" the fish (opposite push direction).
+            back = -push
+            ring_center = cen + 12.0 * back
+            rr = 10.0
+            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+            for i in range(self.n_agents):
+                ang = 2.0 * math.pi * (i / max(1, self.n_agents))
+                off = np.array([rr * math.cos(ang), 0.0, rr * math.sin(ang)], dtype=np.float64)
+                goals[i] = ring_center + off
+                goals[i, 1] = float(cen[1])
+            goal = goals
+        elif self.task_cfg.kind == "area_scan_terrain_recon" and self.task_state.waypoints_xyz is not None:
+            wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(self.task_state.waypoint_index), 0, wps.shape[0] - 1))
+            # Advance lawnmower target when agent0 reaches the current cell center.
+            if i < (wps.shape[0] - 1):
+                if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
+                    self.task_state.waypoint_index = i + 1
+                    i = int(self.task_state.waypoint_index)
+            goal = wps[i]
 
         act = compute_actions(
             self.controller_cfg,
-            step_index=int(round(self._t / max(1e-9, float(self.cfg.dt_s)))),
+            step_index=step_i,
             positions_xyz=self._positions,
             goal_xyz=goal,
             pollution_probe=probe,
@@ -338,12 +461,44 @@ class HeadlessOceanEnv:
                 cx, cz = self._sample_current(float(cpos[0]), float(cpos[2]))
                 self.pollution.advect_center(np.array([cx, cz], dtype=np.float64), float(self.cfg.dt_s))
         self.pollution.step(float(self.cfg.dt_s))
-        if hasattr(self.pollution, "apply_agent_sink") and self.task_cfg.kind == "pollution_containment_multiagent":
+        if hasattr(self.pollution, "apply_agent_sink") and self.task_cfg.kind in ("pollution_containment_multiagent",):
             # both Gaussian and OCPNet expose this method (signature differs; use kwargs best-effort)
             try:
                 self.pollution.apply_agent_sink(self._positions, dt_s=float(self.cfg.dt_s))
             except TypeError:
                 self.pollution.apply_agent_sink(self._positions)
+
+        # Update task-side semantics (fish/barrel) after the physics step.
+        if self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            # Drift fish with a small current at their centroid and repulsion from agents.
+            cen = np.mean(fish, axis=0)
+            cx, cz = self._sample_current(float(cen[0]), float(cen[2]))
+            drift = np.array([cx, 0.0, cz], dtype=np.float64) * float(self.cfg.dt_s)
+            noise = self.rng.normal(scale=0.35, size=fish.shape).astype(np.float64)
+            noise[:, 1] = 0.0
+            fish = fish + 0.25 * drift[None, :] + 0.15 * noise
+            # Repel from agents (simple herding proxy).
+            for p in self._positions:
+                d = fish - p[None, :]
+                d[:, 1] = 0.0
+                r2 = np.sum(d[:, [0, 2]] ** 2, axis=1)
+                w = np.exp(-r2 / (2.0 * (18.0**2)))
+                fish[:, 0] += 0.6 * w * (d[:, 0] / (np.sqrt(r2) + 1e-6))
+                fish[:, 2] += 0.6 * w * (d[:, 2] / (np.sqrt(r2) + 1e-6))
+            lo, hi = self.bounds_xyz
+            fish = np.minimum(np.maximum(fish, lo[None, :]), hi[None, :])
+            self.task_state.fish_xyz = fish
+
+        if self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None and self.task_state.lift_attached is not None:
+            attached = np.asarray(self.task_state.lift_attached, dtype=bool).reshape(self.n_agents)
+            if np.any(attached):
+                barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+                mean = np.mean(self._positions[attached], axis=0)
+                barrel[0] = float(mean[0])
+                barrel[2] = float(mean[2])
+                barrel[1] = float(mean[1])
+                self.task_state.lift_barrel_xyz = barrel
 
         # Recompute probes for logging/metrics.
         probe2 = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
@@ -361,6 +516,28 @@ class HeadlessOceanEnv:
         )
         self.rec.write_environment_sample(self._t, dataset_time_index=self.dataset_time_index, dataset_depth_index=self.dataset_depth_index)
 
+        # Optional semantic stream (downsample to reduce file size).
+        if step_i % 5 == 0:
+            payload: dict[str, Any] = {"task": str(self.task_cfg.kind)}
+            if self.task_cfg.kind == "surface_pollution_cleanup_multiagent" and self.task_state.cleanup_sources_xyz is not None and self.task_state.cleanup_done is not None:
+                payload["cleanup_sources_xyz"] = np.asarray(self.task_state.cleanup_sources_xyz, dtype=np.float64).tolist()
+                payload["cleanup_done"] = np.asarray(self.task_state.cleanup_done, dtype=bool).astype(int).tolist()
+                if self.task_state.cleanup_assigned_source is not None:
+                    payload["cleanup_assigned_source"] = np.asarray(self.task_state.cleanup_assigned_source, dtype=np.int64).tolist()
+            if self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+                payload["barrel_xyz"] = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).tolist()
+                payload["lift_phase"] = str(self.task_state.lift_phase)
+                if self.task_state.lift_attached is not None:
+                    payload["lift_attached"] = np.asarray(self.task_state.lift_attached, dtype=bool).astype(int).tolist()
+            if self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+                fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+                payload["fish_centroid_xyz"] = np.mean(fish, axis=0).tolist()
+                payload["fish_stage"] = int(self.task_state.fish_stage)
+            if self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.leak_xyz is not None and self.task_state.leak_detected is not None:
+                payload["leak_xyz"] = np.asarray(self.task_state.leak_xyz, dtype=np.float64).tolist()
+                payload["leak_detected"] = np.asarray(self.task_state.leak_detected, dtype=bool).astype(int).tolist()
+            self.rec.write_semantics(self._t, payload)
+
         # Success checks.
         pollution_src = np.array(self.pollution_meta.get("source_xyz"), dtype=np.float64) if "source_xyz" in self.pollution_meta else None
         mass_frac = None
@@ -376,6 +553,7 @@ class HeadlessOceanEnv:
         success, extra = compute_success(
             self.task_cfg,
             step_index=int(round(self._t / max(1e-9, float(self.cfg.dt_s)))),
+            dt_s=float(self.cfg.dt_s),
             positions_xyz=self._positions,
             task_state=self.task_state,
             pollution_source_xyz=pollution_src,

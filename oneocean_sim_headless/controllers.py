@@ -51,13 +51,21 @@ def compute_actions(
 ) -> np.ndarray:
     pos = np.asarray(positions_xyz, dtype=np.float64).reshape(-1, 3)
     n = pos.shape[0]
-    goal = np.asarray(goal_xyz, dtype=np.float64).reshape(3)
+    goal_arr = np.asarray(goal_xyz, dtype=np.float64)
+    if goal_arr.shape == (3,):
+        goal = np.repeat(goal_arr.reshape(1, 3), n, axis=0)
+        goal_center = goal_arr.reshape(3)
+    elif goal_arr.shape == (n, 3):
+        goal = goal_arr
+        goal_center = np.mean(goal_arr, axis=0)
+    else:
+        raise ValueError(f"goal_xyz must be shape (3,) or (N,3); got {goal_arr.shape} (N={n})")
     probe = np.asarray(pollution_probe, dtype=np.float64).reshape(n)
 
     actions = np.zeros((n, 3), dtype=np.float64)
     if cfg.kind in ("go_to_goal", "station_keep"):
         for i in range(n):
-            d = goal - pos[i]
+            d = goal[i] - pos[i]
             actions[i] = _clip_speed(float(cfg.kp) * d, cfg.max_speed_mps)
         return actions
 
@@ -100,7 +108,7 @@ def compute_actions(
 
     if cfg.kind == "containment_ring":
         # Ring around goal (interpreted as plume center estimate).
-        center = goal
+        center = goal_center
         spin = 0.25 * float(step_index)
         for i in range(n):
             ang = 2.0 * math.pi * (i / max(1, n)) + spin

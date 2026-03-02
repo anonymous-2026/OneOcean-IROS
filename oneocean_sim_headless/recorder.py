@@ -51,6 +51,7 @@ class HeadlessRecorder:
         self._latlon: list[_CsvStream] = []
         self._bathy: list[_CsvStream] = []
         self._run_meta: dict[str, Any] = {}
+        self._semantics_path = self.root / "environment_samples" / "semantics.jsonl"
 
         for i in range(self.n_agents):
             agent_dir = self.root / "agents" / f"agent_{i:03d}"
@@ -89,6 +90,16 @@ class HeadlessRecorder:
             if not exists:
                 w.writerow(["t", "time_index", "depth_index"])
             w.writerow([float(t), dataset_time_index, dataset_depth_index])
+
+    def write_semantics(self, t: float, payload: dict[str, Any]) -> None:
+        """Write per-step semantic objects/events in an append-only JSONL stream.
+
+        This is optional (not all tasks populate it), but it enables replay export and auditing
+        without inflating per-agent CSV streams.
+        """
+        entry = {"t": float(t), **payload}
+        with self._semantics_path.open("a", encoding="utf-8") as fp:
+            fp.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def step(
         self,

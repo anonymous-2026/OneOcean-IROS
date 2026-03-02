@@ -1,26 +1,56 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
+import platform
+import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 from ..controllers import ControllerConfig, preset_controller
 from ..env import EnvConfig, HeadlessOceanEnv
-from ..tasks import TaskConfig, preset_task
+from ..tasks import CANONICAL_TASKS_10, TaskConfig, preset_task
 from ..validators import validate_run_dir
+
+
+def _shlex_quote(s: str) -> str:
+    if not s:
+        return "''"
+    safe = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_@%+=:,./-")
+    if all(c in safe for c in s):
+        return s
+    return "'" + s.replace("'", "'\"'\"'") + "'"
+
+
+def _git_state() -> dict[str, object]:
+    try:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True).strip()
+    except Exception:
+        sha = ""
+    try:
+        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, text=True).strip())
+    except Exception:
+        dirty = None
+    return {"sha": sha, "dirty": dirty}
 
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="H1 headless runner (no UI): simulate + record MIMIR-inspired streams.")
     ap.add_argument("--drift-npz", type=str, required=True, help="Drift cache .npz exported from combined_environment.nc variants")
-    ap.add_argument("--task", type=str, required=True, choices=[
-        "go_to_goal_current",
-        "station_keeping",
-        "pollution_localization",
-        "pollution_containment_multiagent",
-    ])
+    ap.add_argument(
+        "--task",
+        type=str,
+        required=True,
+        choices=[
+            *CANONICAL_TASKS_10,
+            # legacy/internal
+            "pollution_localization",
+            "pollution_containment_multiagent",
+        ],
+    )
     ap.add_argument("--difficulty", type=str, default="medium", choices=["easy", "medium", "hard"])
     ap.add_argument("--controller", type=str, required=True, choices=["go_to_goal", "station_keep", "plume_gradient", "containment_ring"])
     ap.add_argument("--pollution-model", type=str, default="gaussian", choices=["gaussian", "ocpnet_3d"])
@@ -36,6 +66,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--success-radius", type=float, default=-1.0, help="Override success radius (meters); -1 uses task preset.")
     ap.add_argument("--out-dir", type=str, default="")
     ap.add_argument("--validate", action="store_true", help="Validate recording integrity after run.")
+    ap.add_argument("--render", action="store_true", help="Write a tiny top-down MP4 + keyframe PNG into each episode dir.")
+    ap.add_argument("--render-stride", type=int, default=2, help="Frame stride when rendering (2 => every 2nd step).")
     return ap.parse_args()
 
 
@@ -45,6 +77,17 @@ def main() -> int:
     batch_id = f"h1_headless_{args.task}_{stamp}_seed{int(args.seed)}_n{int(args.n_agents)}"
     base_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else (Path("runs") / "headless" / batch_id).resolve()
     base_dir.mkdir(parents=True, exist_ok=True)
+
+    meta = {
+        "time_local": datetime.now().isoformat(timespec="seconds"),
+        "argv": list(sys.argv),
+        "cmd": " ".join([_shlex_quote(a) for a in sys.argv]),
+        "python_executable": sys.executable,
+        "python_version": sys.version.replace("\n", " "),
+        "platform": platform.platform(),
+        "cwd": str(Path.cwd().resolve()),
+        "git": _git_state(),
+    }
 
     env_cfg = EnvConfig(
         drift_cache_npz=str(Path(args.drift_npz).expanduser()),
@@ -113,7 +156,41 @@ def main() -> int:
 
         batch_metrics.append(metrics)
 
+        if bool(args.render):
+            try:
+                from ..render import render_topdown_rollout  # local import (optional dep: imageio)
+
+                render_topdown_rollout(run_dir=out_dir, out_mp4=out_dir / "rollout.mp4", out_keyframe=out_dir / "keyframe.png", stride=int(args.render_stride))
+            except Exception as e:
+                (out_dir / "render_error.txt").write_text(f"{type(e).__name__}: {e}\n", encoding="utf-8")
+
+    # Root-level artifacts for paper-ready aggregation.
+    (base_dir / "run_meta_root.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     (base_dir / "batch_metrics.json").write_text(json.dumps(batch_metrics, indent=2), encoding="utf-8")
+    # summary.csv (row = episode)
+    cols = sorted({k for m in batch_metrics for k in m.keys()})
+    with (base_dir / "summary.csv").open("w", encoding="utf-8", newline="") as fp:
+        w = csv.DictWriter(fp, fieldnames=cols)
+        w.writeheader()
+        for m in batch_metrics:
+            w.writerow({k: m.get(k) for k in cols})
+    # results_manifest.json (root index)
+    manifest = {
+        "track": "h1_headless",
+        "out_dir": str(base_dir),
+        "created_at_local": meta["time_local"],
+        "git": meta["git"],
+        "cmd": meta["cmd"],
+        "task": str(args.task),
+        "difficulty": str(args.difficulty),
+        "controller": str(args.controller),
+        "pollution_model": str(args.pollution_model),
+        "n_agents": int(args.n_agents),
+        "episodes": int(len(batch_metrics)),
+        "episode_dirs": [str((base_dir if int(args.episodes) == 1 else (base_dir / f"episode_{i:03d}")).resolve()) for i in range(int(max(1, args.episodes)))],
+        "summary_csv": str((base_dir / "summary.csv").resolve()),
+    }
+    (base_dir / "results_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps({"out_dir": str(base_dir), "episodes": int(len(batch_metrics))}, indent=2))
     return 0
 
