@@ -37,7 +37,9 @@ def _draw_disk(img: np.ndarray, *, cx: int, cy: int, r: int, color: tuple[int, i
         return
     yy, xx = np.ogrid[y0 : y1 + 1, x0 : x1 + 1]
     mask = (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r
-    img[yy, xx][mask] = np.array(color, dtype=np.uint8)
+    # Important: avoid chained advanced indexing (it writes into a temporary copy).
+    sub = img[y0 : y1 + 1, x0 : x1 + 1]
+    sub[mask] = np.array(color, dtype=np.uint8)
 
 
 def _map_xz_to_px(x: float, z: float, *, lo: np.ndarray, hi: np.ndarray, width: int, height: int) -> tuple[int, int]:
@@ -153,4 +155,3 @@ def render_topdown_rollout(*, run_dir: str | Path, out_mp4: str | Path, out_keyf
     out_keyframe.parent.mkdir(parents=True, exist_ok=True)
     mid = frames[len(frames) // 2] if frames else np.zeros((height, width, 3), dtype=np.uint8)
     imageio.imwrite(out_keyframe, mid)
-
