@@ -248,6 +248,20 @@ class HeadlessOceanEnv:
                 if not self._violates_constraints(p):
                     self._positions[i] = p
 
+        if task.kind == "formation_transit_multiagent" and self.task_state.formation_offsets_xyz is not None:
+            # Spawn agents already in a formation around the episode start centroid.
+            offsets = np.asarray(self.task_state.formation_offsets_xyz, dtype=np.float64).reshape(self.n_agents, 3)
+            center = np.mean(self._positions, axis=0).astype(np.float64)
+            lo, hi = self.bounds_xyz
+            for i in range(self.n_agents):
+                jitter = self.rng.normal(scale=0.75, size=(3,))
+                jitter[1] = 0.0
+                p = center + offsets[i] + jitter
+                p[1] = float(center[1])
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+
         # Waypoint-family tasks: re-sample a *reachable* polyline around the initial centroid.
         # The default reset_task() samples endpoints uniformly over the full tile, which can be unreachable
         # within max_steps at the capped max_speed. This makes smoke runs look "broken" even when logic is fine.
