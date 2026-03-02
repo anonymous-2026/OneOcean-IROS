@@ -226,7 +226,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             max_steps=900 if d == "easy" else 1400 if d == "medium" else 2800,
             scan_cell_size_m=30.0 if d == "easy" else 22.0 if d == "medium" else 16.0,
             scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.85,
-            scan_radius_m=35.0 if d == "easy" else 30.0 if d == "medium" else 24.0,
+            scan_radius_m=35.0 if d == "easy" else 30.0 if d == "medium" else 28.0,
         )
     if kind == "pipeline_inspection_leak_detection":
         return TaskConfig(
