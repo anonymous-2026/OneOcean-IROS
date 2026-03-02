@@ -85,6 +85,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--tasks", type=str, default="go_to_goal_current,station_keeping,pollution_localization,pollution_containment_multiagent")
     ap.add_argument("--difficulties", type=str, default="easy,medium,hard")
     ap.add_argument("--pollution-models", type=str, default="gaussian", help="Comma list: gaussian,ocpnet_3d")
+    ap.add_argument("--n-agents", type=int, default=-1, help="Override n_agents for all scenarios (useful for scaling sweeps).")
     ap.add_argument("--validate", action="store_true")
     ap.add_argument("--dt", type=float, default=1.0)
     ap.add_argument("--tile-x", type=float, default=600.0)
@@ -183,6 +184,10 @@ def main() -> int:
         for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
             if k in defaults:
                 defaults[k]["n_agents"] = 8
+    # Global override (e.g., scaling sweeps). Tasks with required_n_agents will fail fast in env.reset.
+    if int(args.n_agents) > 0:
+        for v in defaults.values():
+            v["n_agents"] = int(args.n_agents)
 
     scenarios: list[Scenario] = []
     for task in tasks:
