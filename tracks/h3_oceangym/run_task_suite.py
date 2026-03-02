@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import math
 import os
+import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, replace
@@ -236,26 +238,160 @@ def _summarize_task(task_name: str, episodes: list[dict]) -> dict:
         "episodes": int(len(episodes)),
         "success_rate": float(sum(succ) / float(len(succ))) if succ else 0.0,
     }
-    for k in (
-        "time_s",
-        "steps",
-        "collisions",
-        "energy_proxy",
-        "error_m",
-        "leaked_particles",
-        "removed_particles",
-        "leaked_mass_kg",
-        "removed_mass_kg",
-    ):
-        vals = []
+    # Auto-summarize any numeric per-episode fields so new tasks don't require manual schema updates.
+    exclude = {
+        "task",
+        "task_id",
+        "task_alias",
+        "task_variant",
+        "seed",
+        "goal_xyz",
+        "source_xy",
+        "source_xyz",
+        "estimate_xy",
+        "argmax_xy",
+        "media",
+        "difficulty",
+        "pollution_model",
+    }
+    keys: set[str] = set()
+    for ep in episodes:
+        if isinstance(ep, dict):
+            keys.update(str(k) for k in ep.keys())
+    for k in sorted(keys):
+        if k in exclude:
+            continue
+        vals: list[float] = []
         for ep in episodes:
+            if not isinstance(ep, dict):
+                continue
             v = ep.get(k)
+            if isinstance(v, bool):
+                continue
             if isinstance(v, (int, float)):
                 vals.append(float(v))
         m = _mean(vals)
         if m is not None:
             out[f"mean_{k}"] = m
     return out
+
+
+def _git_info(repo_root: Path) -> dict[str, object]:
+    """
+    Best-effort git metadata for reproducibility (works even if git is unavailable).
+    """
+    repo_root = Path(repo_root).resolve()
+    info: dict[str, object] = {"repo_root": str(repo_root)}
+    try:
+        sha = (
+            subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
+        dirty = (
+            subprocess.check_output(["git", "-C", str(repo_root), "status", "--porcelain"], stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
+        info["git_sha"] = sha
+        info["git_dirty"] = bool(dirty)
+    except Exception:
+        pass
+    return info
+
+
+def _write_summary_csv(out_root: Path, suite_manifest: dict) -> Path:
+    """
+    Flatten per-episode results into a table-ready CSV (row = task×difficulty×scenario×N×seed).
+    """
+    out_root = Path(out_root).resolve()
+    rows: list[dict[str, object]] = []
+    cfg = suite_manifest.get("cfg", {})
+    track = suite_manifest.get("track", "h3_oceangym")
+    data_grounding = suite_manifest.get("data_grounding", {}) if isinstance(suite_manifest, dict) else {}
+    dg_src = data_grounding.get("source_dataset") if isinstance(data_grounding, dict) else None
+    dg_lat = data_grounding.get("lat") if isinstance(data_grounding, dict) else None
+    dg_lon = data_grounding.get("lon") if isinstance(data_grounding, dict) else None
+    dg_depth = data_grounding.get("depth_selected_m") if isinstance(data_grounding, dict) else None
+
+    scenarios = suite_manifest.get("scenarios", {})
+    if not isinstance(scenarios, dict):
+        scenarios = {}
+    for scenario_name, per in scenarios.items():
+        if not isinstance(per, dict):
+            continue
+        for per_task in per.get("episodes", []):
+            if not isinstance(per_task, dict):
+                continue
+            for ep in per_task.get("episodes", []):
+                if not isinstance(ep, dict):
+                    continue
+                row: dict[str, object] = {
+                    "track": track,
+                    "scenario": scenario_name,
+                    "task_id": ep.get("task_id", per_task.get("task_id", per_task.get("task"))),
+                    "task_variant": ep.get("task_variant", per_task.get("task_variant", "")),
+                    "task_alias": ep.get("task_alias", per_task.get("task_alias", per_task.get("task"))),
+                    "difficulty": ep.get("difficulty", cfg.get("difficulty", "")),
+                    "n_agents": ep.get("n_agents", per_task.get("n_agents", "")),
+                    "seed": ep.get("seed", ""),
+                    "success": ep.get("success", False),
+                    "time_s": ep.get("time_s", ""),
+                    "steps": ep.get("steps", ""),
+                    "collisions": ep.get("collisions", ""),
+                    "energy_proxy": ep.get("energy_proxy", ""),
+                    "data_source_dataset": dg_src or "",
+                    "data_lat": dg_lat if dg_lat is not None else "",
+                    "data_lon": dg_lon if dg_lon is not None else "",
+                    "data_depth_selected_m": dg_depth if dg_depth is not None else "",
+                }
+                # Append all numeric per-episode keys so we don't lose task-specific metrics.
+                for k, v in ep.items():
+                    if k in row:
+                        continue
+                    if isinstance(v, bool):
+                        continue
+                    if isinstance(v, (int, float, str)):
+                        row[k] = v
+                rows.append(row)
+
+    # Stable column order: core columns first, then lexicographic remainder.
+    core_cols = [
+        "track",
+        "scenario",
+        "task_id",
+        "task_variant",
+        "task_alias",
+        "difficulty",
+        "n_agents",
+        "seed",
+        "success",
+        "time_s",
+        "steps",
+        "collisions",
+        "energy_proxy",
+        "data_source_dataset",
+        "data_lat",
+        "data_lon",
+        "data_depth_selected_m",
+    ]
+    extra_cols: list[str] = []
+    seen = set(core_cols)
+    for r in rows:
+        for k in r.keys():
+            if k not in seen:
+                extra_cols.append(k)
+                seen.add(k)
+    cols = core_cols + sorted(extra_cols)
+
+    out_path = out_root / "summary.csv"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8", newline="") as fp:
+        w = csv.DictWriter(fp, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in cols})
+    return out_path
 
 
 def _patch_for_suite(base: dict, *, cfg: SuiteCfg, add_viewport: bool, n_agents: int) -> dict:
@@ -375,6 +511,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
     dt = 1.0 / float(cfg.ticks_per_sec)
     energy = 0.0
     collisions = 0
+    prev_collision = False
 
     rec: _Recorder | None = None
     if record:
@@ -422,8 +559,11 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
             energy += float(v0.dot(v0)) * dt
 
         col = _state_get(state, "auv0", "CollisionSensor", n_agents)
-        if col is not None and bool(np.asarray(col).reshape(-1)[0]):
-            collisions += 1
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
 
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
@@ -480,6 +620,7 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
 
     sq_err = 0.0
     collisions = 0
+    prev_collision = False
     energy = 0.0
 
     rec: _Recorder | None = None
@@ -512,8 +653,11 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
             px, py, pz = _pose_xyz(pose)
             sq_err += float((px - p0[0]) ** 2 + (py - p0[1]) ** 2 + (pz - p0[2]) ** 2)
         col = _state_get(state, "auv0", "CollisionSensor", n_agents)
-        if col is not None and bool(np.asarray(col).reshape(-1)[0]):
-            collisions += 1
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
         vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
         if vel is not None:
             v0 = np.asarray(vel, dtype=np.float32)
@@ -555,6 +699,346 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     return res
 
 
+def _dist_point_to_segment_xy(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+    vx = bx - ax
+    vy = by - ay
+    wx = px - ax
+    wy = py - ay
+    vv = vx * vx + vy * vy
+    if vv <= 1e-12:
+        return math.hypot(px - ax, py - ay)
+    t = (wx * vx + wy * vy) / vv
+    t = 0.0 if t < 0.0 else 1.0 if t > 1.0 else t
+    cx = ax + t * vx
+    cy = ay + t * vy
+    return math.hypot(px - cx, py - cy)
+
+
+def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
+    """
+    Single-agent route following: follow a set of waypoints under drift; report cross-track error and completion.
+    """
+    import numpy as np
+
+    dt = 1.0 / float(cfg.ticks_per_sec)
+    state = env.tick(num_ticks=1, publish=False)
+    start = _pose_xyz(_state_get(state, "auv0", "PoseSensor", n_agents))
+
+    d = str(cfg.difficulty).lower().strip()
+    if d == "easy":
+        r = 25.0
+        wp_radius = 5.0
+    elif d == "hard":
+        r = 60.0
+        wp_radius = 3.0
+    else:
+        r = 40.0
+        wp_radius = 4.0
+
+    wps = [
+        (start[0] + r, start[1] + 0.0),
+        (start[0] + r, start[1] + r),
+        (start[0] + 0.0, start[1] + r),
+        (start[0] - r, start[1] + r),
+        (start[0] - r, start[1] + 0.0),
+    ]
+    seg_prev = (start[0], start[1])
+    wp_idx = 0
+
+    energy = 0.0
+    collisions = 0
+    prev_collision = False
+    xte_sum = 0.0
+    xte_n = 0
+
+    rec: _Recorder | None = None
+    if record:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for _ in range(120):
+            if _state_get(state, "auv0", "ViewportCapture", n_agents) is not None and _state_get(state, "auv0", "LeftCamera", n_agents) is not None:
+                break
+            state = env.tick(num_ticks=1, publish=False)
+        rec = _Recorder(out_dir / "route_viewport.mp4", out_dir / "route_leftcamera.mp4", fps=cfg.fps)
+        rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    success = False
+    steps = 0
+    for step in range(int(cfg.max_steps)):
+        steps = step + 1
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        _apply_constant_current_drift(env, state=state, agent_names=["auv0"], n_agents=n_agents, u=u, v=v, dt=dt)
+
+        tx, ty = wps[min(wp_idx, len(wps) - 1)]
+        env.act("auv0", np.array([tx, ty, start[2], 0.0, 0.0, 0.0], dtype=np.float32))
+        state = env.tick(num_ticks=1, publish=False)
+
+        pose = _state_get(state, "auv0", "PoseSensor", n_agents)
+        if pose is not None:
+            px, py, _pz = _pose_xyz(pose)
+            xte_sum += _dist_point_to_segment_xy(px, py, seg_prev[0], seg_prev[1], tx, ty)
+            xte_n += 1
+            if math.dist((px, py), (tx, ty)) <= float(wp_radius):
+                seg_prev = (tx, ty)
+                wp_idx += 1
+                if wp_idx >= len(wps):
+                    success = True
+                    break
+
+        col = _state_get(state, "auv0", "CollisionSensor", n_agents)
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
+        vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
+        if vel is not None:
+            v0 = np.asarray(vel, dtype=np.float32)
+            energy += float(v0.dot(v0)) * dt
+
+        if rec is not None:
+            rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    if rec is not None:
+        rec.close()
+
+    res = {
+        "task": "route_following_waypoints",
+        "seed": int(seed),
+        "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
+        "success": bool(success),
+        "steps": int(steps),
+        "time_s": float(steps * dt),
+        "waypoints": int(len(wps)),
+        "waypoints_reached": int(min(wp_idx, len(wps))),
+        "mean_cross_track_error_m": float(xte_sum / float(max(1, xte_n))),
+        "collisions": int(collisions),
+        "energy_proxy": float(energy),
+    }
+    if record:
+        res["media"] = {"viewport_mp4": str(out_dir / "route_viewport.mp4"), "leftcamera_mp4": str(out_dir / "route_leftcamera.mp4")}
+    return res
+
+
+def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
+    """
+    Single-agent depth profile tracking: follow a piecewise depth schedule under drift.
+    """
+    import numpy as np
+
+    dt = 1.0 / float(cfg.ticks_per_sec)
+    steps = max(1, int(round(cfg.station_keep_seconds / dt)))
+    state = env.tick(num_ticks=1, publish=False)
+    start = _pose_xyz(_state_get(state, "auv0", "PoseSensor", n_agents))
+
+    d = str(cfg.difficulty).lower().strip()
+    if d == "easy":
+        amp = 6.0
+        rms_thresh = 4.0
+    elif d == "hard":
+        amp = 18.0
+        rms_thresh = 2.0
+    else:
+        amp = 12.0
+        rms_thresh = 3.0
+
+    z0 = float(start[2])
+    schedule = [z0, z0 - amp, z0 - 2.0 * amp, z0 - amp, z0]
+    seg_len = max(1, steps // max(1, len(schedule) - 1))
+
+    sq_depth = 0.0
+    collisions = 0
+    prev_collision = False
+    energy = 0.0
+
+    rec: _Recorder | None = None
+    if record:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for _ in range(120):
+            if _state_get(state, "auv0", "ViewportCapture", n_agents) is not None and _state_get(state, "auv0", "LeftCamera", n_agents) is not None:
+                break
+            state = env.tick(num_ticks=1, publish=False)
+        rec = _Recorder(out_dir / "depth_viewport.mp4", out_dir / "depth_leftcamera.mp4", fps=cfg.fps)
+        rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    for step in range(steps):
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        _apply_constant_current_drift(env, state=state, agent_names=["auv0"], n_agents=n_agents, u=u, v=v, dt=dt)
+
+        seg = min(len(schedule) - 2, step // seg_len)
+        t = (step - seg * seg_len) / float(max(1, seg_len))
+        z_t = float(schedule[seg] * (1.0 - t) + schedule[seg + 1] * t)
+        env.act("auv0", np.array([start[0], start[1], z_t, 0.0, 0.0, 0.0], dtype=np.float32))
+        state = env.tick(num_ticks=1, publish=False)
+
+        pose = _state_get(state, "auv0", "PoseSensor", n_agents)
+        if pose is not None:
+            _x, _y, pz = _pose_xyz(pose)
+            sq_depth += float((pz - z_t) ** 2)
+
+        col = _state_get(state, "auv0", "CollisionSensor", n_agents)
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
+        vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
+        if vel is not None:
+            v0 = np.asarray(vel, dtype=np.float32)
+            energy += float(v0.dot(v0)) * dt
+
+        if rec is not None:
+            rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    if rec is not None:
+        rec.close()
+
+    rms = math.sqrt(sq_depth / float(max(1, steps)))
+    res = {
+        "task": "depth_profile_tracking",
+        "seed": int(seed),
+        "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
+        "success": bool(rms <= float(rms_thresh)),
+        "steps": int(steps),
+        "time_s": float(steps * dt),
+        "rms_depth_error_m": float(rms),
+        "rms_success_threshold_m": float(rms_thresh),
+        "collisions": int(collisions),
+        "energy_proxy": float(energy),
+    }
+    if record:
+        res["media"] = {"viewport_mp4": str(out_dir / "depth_viewport.mp4"), "leftcamera_mp4": str(out_dir / "depth_leftcamera.mp4")}
+    return res
+
+
+def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
+    """
+    Multi-agent formation transit: a leader navigates to a goal while followers maintain a circular formation.
+    """
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    dt = 1.0 / float(cfg.ticks_per_sec)
+    agent_names = [f"auv{i}" for i in range(n_agents)]
+
+    state = env.tick(num_ticks=1, publish=False)
+    p0 = _pose_xyz(_state_get(state, "auv0", "PoseSensor", n_agents))
+    ang = float(rng.uniform(0.0, 2.0 * math.pi))
+    goal = (p0[0] + cfg.nav_goal_dist_m * math.cos(ang), p0[1] + cfg.nav_goal_dist_m * math.sin(ang), p0[2])
+
+    # Formation offsets in leader frame.
+    form_r = 10.0 if str(cfg.difficulty).lower().strip() != "hard" else 14.0
+    offsets = []
+    for i in range(n_agents):
+        if i == 0:
+            offsets.append((0.0, 0.0, 0.0))
+            continue
+        a = 2.0 * math.pi * ((i - 1) / float(max(1, n_agents - 1)))
+        offsets.append((form_r * math.cos(a), form_r * math.sin(a), 0.0))
+
+    energy = 0.0
+    collisions = 0
+    prev_collision = False
+    form_err_sq = 0.0
+    form_err_n = 0
+
+    rec: _Recorder | None = None
+    if record:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for _ in range(240):
+            if _state_get(state, "auv0", "ViewportCapture", n_agents) is not None and _state_get(state, "auv0", "LeftCamera", n_agents) is not None:
+                break
+            state = env.tick(num_ticks=1, publish=False)
+        rec = _Recorder(out_dir / "formation_viewport.mp4", out_dir / "formation_leftcamera.mp4", fps=cfg.fps)
+        rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    success = False
+    steps = 0
+    for step in range(int(cfg.max_steps)):
+        steps = step + 1
+        u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        _apply_constant_current_drift(env, state=state, agent_names=agent_names, n_agents=n_agents, u=u, v=v, dt=dt)
+
+        # Leader drives to goal.
+        env.act("auv0", np.array([goal[0], goal[1], goal[2], 0.0, 0.0, 0.0], dtype=np.float32))
+
+        # Followers maintain formation around leader's *current* position.
+        leader_pose = _state_get(state, "auv0", "PoseSensor", n_agents)
+        if leader_pose is not None:
+            lx, ly, lz = _pose_xyz(leader_pose)
+            for i, name in enumerate(agent_names[1:], start=1):
+                ox, oy, oz = offsets[i]
+                env.act(name, np.array([lx + ox, ly + oy, lz + oz, 0.0, 0.0, 0.0], dtype=np.float32))
+
+        state = env.tick(num_ticks=1, publish=False)
+
+        # Formation error (RMS follower position error vs desired offsets in XY).
+        leader_pose2 = _state_get(state, "auv0", "PoseSensor", n_agents)
+        if leader_pose2 is not None:
+            lx, ly, lz = _pose_xyz(leader_pose2)
+            for i, name in enumerate(agent_names[1:], start=1):
+                pose_i = _state_get(state, name, "PoseSensor", n_agents)
+                if pose_i is None:
+                    continue
+                px, py, pz = _pose_xyz(pose_i)
+                ox, oy, oz = offsets[i]
+                dx = (px - (lx + ox))
+                dy = (py - (ly + oy))
+                dz = (pz - (lz + oz))
+                form_err_sq += float(dx * dx + dy * dy + dz * dz)
+                form_err_n += 1
+
+            d_goal = float(math.dist((lx, ly, lz), goal))
+            if d_goal <= max(6.0, float(cfg.nav_goal_radius_m)):
+                success = True
+                break
+
+        col = _state_get(state, "auv0", "CollisionSensor", n_agents)
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
+        vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
+        if vel is not None:
+            v0 = np.asarray(vel, dtype=np.float32)
+            energy += float(v0.dot(v0)) * dt
+
+        if rec is not None:
+            rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+
+    if rec is not None:
+        rec.close()
+
+    rms_form = math.sqrt(form_err_sq / float(max(1, form_err_n)))
+    d = str(cfg.difficulty).lower().strip()
+    if d == "easy":
+        rms_thresh = 6.0
+    elif d == "hard":
+        rms_thresh = 3.0
+    else:
+        rms_thresh = 4.5
+
+    res = {
+        "task": "formation_transit_multiagent",
+        "seed": int(seed),
+        "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
+        "goal_xyz": [float(goal[0]), float(goal[1]), float(goal[2])],
+        "success": bool(success and rms_form <= rms_thresh),
+        "steps": int(steps),
+        "time_s": float(steps * dt),
+        "rms_formation_error_m": float(rms_form),
+        "rms_success_threshold_m": float(rms_thresh),
+        "collisions": int(collisions),
+        "energy_proxy": float(energy),
+    }
+    if record:
+        res["media"] = {"viewport_mp4": str(out_dir / "formation_viewport.mp4"), "leftcamera_mp4": str(out_dir / "formation_leftcamera.mp4")}
+    return res
+
+
 def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
     """
     Simple plume localization in world XY using an analytic Gaussian concentration field.
@@ -566,6 +1050,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     dt = 1.0 / float(cfg.ticks_per_sec)
 
     state = env.tick(num_ticks=1, publish=False)
+    agent_names = [f"auv{i}" for i in range(n_agents)]
     start = _pose_xyz(_state_get(state, "auv0", "PoseSensor", n_agents))
 
     # Hidden source location (near start, but not identical).
@@ -658,11 +1143,12 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     if not waypoints:
         waypoints = [(start[0], start[1])]
 
-    max_hold_ticks = int(max(int(cfg.ticks_per_sec) * 3, math.ceil(steps / float(len(waypoints)))))
-    wp_idx = 0
-    hold_ticks = 0
-    prev_xy = (start[0], start[1])
-    traveled_m = 0.0
+    max_hold_ticks = int(max(int(cfg.ticks_per_sec) * 3, math.ceil(steps / float(max(1, len(waypoints))))))
+    # Per-agent waypoint cursors: interleave coverage.
+    wp_idx = [i % max(1, len(waypoints)) for i in range(n_agents)]
+    hold_ticks = [0 for _ in range(n_agents)]
+    prev_xy = [(start[0], start[1]) for _ in range(n_agents)]
+    traveled = [0.0 for _ in range(n_agents)]
     max_radius_from_start_m = 0.0
     min_dist_to_source_m = float("inf")
     w_sum = 0.0
@@ -670,13 +1156,11 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     wy_sum = 0.0
 
     for k in range(steps):
-        tx, ty = waypoints[min(wp_idx, len(waypoints) - 1)]
-
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(k) * dt)
         _apply_constant_current_drift(
             env,
             state=state,
-            agent_names=["auv0"],
+            agent_names=agent_names,
             n_agents=n_agents,
             u=u,
             v=v,
@@ -685,35 +1169,43 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         if plume is not None:
             plume.step(u_mps=float(u), v_mps=float(v))
 
-        env.act("auv0", np.array([tx, ty, start[2], 0.0, 0.0, 0.0], dtype=np.float32))
+        # Each agent sweeps a different waypoint stream.
+        for i, name in enumerate(agent_names):
+            tx, ty = waypoints[min(wp_idx[i], len(waypoints) - 1)]
+            env.act(name, np.array([tx, ty, start[2], 0.0, 0.0, 0.0], dtype=np.float32))
+
         state = env.tick(num_ticks=1, publish=False)
 
-        pose = _state_get(state, "auv0", "PoseSensor", n_agents)
-        if pose is None:
-            continue
-        px, py, _pz = _pose_xyz(pose)
-        traveled_m += math.dist(prev_xy, (px, py))
-        prev_xy = (px, py)
-        max_radius_from_start_m = max(max_radius_from_start_m, math.dist((px, py), (start[0], start[1])))
-        min_dist_to_source_m = min(min_dist_to_source_m, math.dist((px, py), (src[0], src[1])))
-        c = conc(px, py, start[2])
-        if c > best_c:
-            best_c = c
-            best_xy = (px, py)
-        w = float(max(0.0, c)) ** 3
-        w_sum += w
-        wx_sum += w * float(px)
-        wy_sum += w * float(py)
+        for i, name in enumerate(agent_names):
+            pose = _state_get(state, name, "PoseSensor", n_agents)
+            if pose is None:
+                continue
+            px, py, _pz = _pose_xyz(pose)
 
-        if wp_idx < len(waypoints) - 1:
-            if math.dist((px, py), (tx, ty)) <= 2.5:
-                wp_idx += 1
-                hold_ticks = 0
-            else:
-                hold_ticks += 1
-                if hold_ticks >= max_hold_ticks:
-                    wp_idx += 1
-                    hold_ticks = 0
+            traveled[i] += math.dist(prev_xy[i], (px, py))
+            prev_xy[i] = (px, py)
+            max_radius_from_start_m = max(max_radius_from_start_m, math.dist((px, py), (start[0], start[1])))
+            min_dist_to_source_m = min(min_dist_to_source_m, math.dist((px, py), (src[0], src[1])))
+
+            c = conc(px, py, start[2])
+            if c > best_c:
+                best_c = c
+                best_xy = (px, py)
+            w = float(max(0.0, c)) ** 3
+            w_sum += w
+            wx_sum += w * float(px)
+            wy_sum += w * float(py)
+
+            tx, ty = waypoints[min(wp_idx[i], len(waypoints) - 1)]
+            if wp_idx[i] < len(waypoints) - 1:
+                if math.dist((px, py), (tx, ty)) <= 2.5:
+                    wp_idx[i] += n_agents
+                    hold_ticks[i] = 0
+                else:
+                    hold_ticks[i] += 1
+                    if hold_ticks[i] >= max_hold_ticks:
+                        wp_idx[i] += n_agents
+                        hold_ticks[i] = 0
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
@@ -740,7 +1232,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         "argmax_xy": [float(best_xy[0]), float(best_xy[1])],
         "best_concentration": float(best_c),
         "error_m": float(err),
-        "traveled_m": float(traveled_m),
+        "mean_traveled_m": float(sum(traveled) / float(max(1, len(traveled)))),
         "max_radius_from_start_m": float(max_radius_from_start_m),
         "min_dist_to_source_m": float(min_dist_to_source_m),
         "success": bool(success),
@@ -981,6 +1473,15 @@ def main() -> int:
         action="store_true",
         help="Reuse existing per-task results under --out_dir and run only missing tasks.",
     )
+    ap.add_argument(
+        "--tasks",
+        nargs="*",
+        default=None,
+        help=(
+            "Optional subset of tasks to run. Match by canonical task_id (e.g., formation_transit_multiagent), "
+            "by backend alias (e.g., plume_containment_multiagent), or by dir name (e.g., surface_pollution_cleanup_multiagent__containment)."
+        ),
+    )
     ap.add_argument("--show_viewport", action="store_true")
     ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
@@ -1026,11 +1527,13 @@ def main() -> int:
     out_root = out_root.resolve()
     out_root.mkdir(parents=True, exist_ok=True)
 
+    git = _git_info(_REPO_ROOT)
     suite_manifest = {
         "track": "h3_oceangym",
         "script": str(Path(__file__).resolve()),
         "python": sys.executable,
         "command": list(sys.argv),
+        "git": git,
         "out_dir": str(out_root),
         "cfg": asdict(cfg),
         "scenarios": {},
@@ -1040,6 +1543,7 @@ def main() -> int:
         "script": str(Path(__file__).resolve()),
         "python": sys.executable,
         "command": list(sys.argv),
+        "git": git,
         "out_dir": str(out_root),
         "cfg": asdict(cfg),
         "scenarios": {},
@@ -1058,12 +1562,45 @@ def main() -> int:
         suite_manifest["data_grounding"] = data_grounding
         root_media_manifest["data_grounding"] = data_grounding
 
-    tasks = [
-        ("go_to_goal_current", 1),
-        ("station_keeping", 1),
-        ("plume_localization", 1),
-        ("plume_containment_multiagent", cfg.n_multiagent),
+    # Canonical task ids (see project/h_track_requirements.md).
+    tasks: list[dict[str, object]] = [
+        {"task_id": "go_to_goal_current", "task_alias": "go_to_goal_current", "task_variant": "", "n_agents": 1},
+        {"task_id": "station_keeping", "task_alias": "station_keeping", "task_variant": "", "n_agents": 1},
+        {"task_id": "route_following_waypoints", "task_alias": "route_following_waypoints", "task_variant": "", "n_agents": 1},
+        {"task_id": "depth_profile_tracking", "task_alias": "depth_profile_tracking", "task_variant": "", "n_agents": 1},
+        {
+            "task_id": "formation_transit_multiagent",
+            "task_alias": "formation_transit_multiagent",
+            "task_variant": "",
+            "n_agents": int(cfg.n_multiagent),
+        },
+        # Pollution family: we normalize to the canonical demo Task 1 id, and record the backend alias as metadata.
+        {
+            "task_id": "surface_pollution_cleanup_multiagent",
+            "task_alias": "plume_localization",
+            "task_variant": "localization",
+            "n_agents": int(cfg.n_multiagent),
+        },
+        {
+            "task_id": "surface_pollution_cleanup_multiagent",
+            "task_alias": "plume_containment_multiagent",
+            "task_variant": "containment",
+            "n_agents": int(cfg.n_multiagent),
+        },
     ]
+    if args.tasks:
+        wanted = {str(x).strip() for x in list(args.tasks) if str(x).strip()}
+
+        def _match(t: dict[str, object]) -> bool:
+            tid = str(t.get("task_id", ""))
+            alias = str(t.get("task_alias", ""))
+            var = str(t.get("task_variant", "") or "")
+            dn = tid if not var else f"{tid}__{var}"
+            return tid in wanted or alias in wanted or dn in wanted
+
+        tasks = [t for t in tasks if _match(t)]
+        if not tasks:
+            raise ValueError(f"--tasks did not match any known tasks: {sorted(wanted)!r}")
 
     for scenario_name in scenarios:
         base = pm.get_scenario(scenario_name)
@@ -1074,9 +1611,15 @@ def main() -> int:
         }
         per_media: dict[str, object] = {}
 
-        for task_name, n_agents in tasks:
+        for t in tasks:
+            task_id = str(t["task_id"])
+            task_alias = str(t["task_alias"])
+            task_variant = str(t.get("task_variant", "") or "")
+            n_agents = int(t["n_agents"])
+
             scenario = _patch_for_suite(base, cfg=cfg, add_viewport=True, n_agents=n_agents)
-            task_dir = out_root / scenario_name.replace("/", "_") / task_name
+            dir_name = task_id if not task_variant else f"{task_id}__{task_variant}"
+            task_dir = out_root / scenario_name.replace("/", "_") / dir_name
             task_dir.mkdir(parents=True, exist_ok=True)
 
             existing_results = task_dir / "results_manifest.json"
@@ -1087,23 +1630,44 @@ def main() -> int:
                     loaded = None
                 if isinstance(loaded, dict) and isinstance(loaded.get("episodes"), list) and len(loaded["episodes"]) == int(cfg.episodes):
                     per["episodes"].append(loaded)
-                    media_task: dict[str, object] = {"task": task_name, "n_agents": int(n_agents), "episodes": {}}
+                    media_task: dict[str, object] = {
+                        "task": task_alias,
+                        "task_id": task_id,
+                        "task_alias": task_alias,
+                        "task_variant": task_variant,
+                        "n_agents": int(n_agents),
+                        "episodes": {},
+                    }
                     episodes_dict = media_task["episodes"]
                     if isinstance(episodes_dict, dict):
                         for i, ep in enumerate(loaded.get("episodes", [])):
                             m = ep.get("media") if isinstance(ep, dict) else None
                             if isinstance(m, dict) and m:
                                 episodes_dict[f"ep{i:03d}"] = dict(m)
-                    per_media[task_name] = media_task
+                    per_media[dir_name] = media_task
                     continue
 
-            per_task = {"task": task_name, "n_agents": int(n_agents), "episodes": []}
+            per_task = {
+                "task": task_alias,
+                "task_id": task_id,
+                "task_alias": task_alias,
+                "task_variant": task_variant,
+                "n_agents": int(n_agents),
+                "episodes": [],
+            }
             per_task_media_manifest: dict[str, str] = {}
-            media_task: dict[str, object] = {"task": task_name, "n_agents": int(n_agents), "episodes": {}}
+            media_task: dict[str, object] = {
+                "task": task_alias,
+                "task_id": task_id,
+                "task_alias": task_alias,
+                "task_variant": task_variant,
+                "n_agents": int(n_agents),
+                "episodes": {},
+            }
 
             record_this = True
             for ep in range(cfg.episodes):
-                seed = _stable_seed(scenario_name, task_name, ep)
+                seed = _stable_seed(scenario_name, task_id, task_variant, task_alias, ep)
                 record = bool(not cfg.record_first_episode_only or ep == 0)
                 record_this = False
 
@@ -1128,7 +1692,7 @@ def main() -> int:
                             break
                         state = env.tick(num_ticks=1, publish=False)
 
-                    if task_name == "go_to_goal_current":
+                    if task_alias == "go_to_goal_current":
                         res = _run_nav_go_to_goal(
                             env,
                             cfg=cfg,
@@ -1138,7 +1702,7 @@ def main() -> int:
                             n_agents=n_agents,
                             current=current_series,
                         )
-                    elif task_name == "station_keeping":
+                    elif task_alias == "station_keeping":
                         res = _run_station_keeping(
                             env,
                             cfg=cfg,
@@ -1148,7 +1712,37 @@ def main() -> int:
                             n_agents=n_agents,
                             current=current_series,
                         )
-                    elif task_name == "plume_localization":
+                    elif task_alias == "route_following_waypoints":
+                        res = _run_route_following_waypoints(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
+                    elif task_alias == "depth_profile_tracking":
+                        res = _run_depth_profile_tracking(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
+                    elif task_alias == "formation_transit_multiagent":
+                        res = _run_formation_transit_multiagent(
+                            env,
+                            cfg=cfg,
+                            seed=seed,
+                            record=record,
+                            out_dir=task_dir / f"ep{ep:03d}",
+                            n_agents=n_agents,
+                            current=current_series,
+                        )
+                    elif task_alias == "plume_localization":
                         res = _run_plume_localization(
                             env,
                             cfg=cfg,
@@ -1158,7 +1752,7 @@ def main() -> int:
                             n_agents=n_agents,
                             current=current_series,
                         )
-                    elif task_name == "plume_containment_multiagent":
+                    elif task_alias == "plume_containment_multiagent":
                         res = _run_plume_containment_multiagent(
                             env,
                             cfg=cfg,
@@ -1169,7 +1763,12 @@ def main() -> int:
                             current=current_series,
                         )
                     else:
-                        raise ValueError(task_name)
+                        raise ValueError(task_alias)
+
+                # Normalize ids for unified paper tables.
+                res["task_id"] = task_id
+                res["task_alias"] = task_alias
+                res["task_variant"] = task_variant
 
                 per_task["episodes"].append(res)
                 if "media" in res:
@@ -1179,7 +1778,7 @@ def main() -> int:
                     if isinstance(episodes_dict, dict):
                         episodes_dict[f"ep{ep:03d}"] = dict(res["media"])
 
-            per_task["summary"] = _summarize_task(task_name, list(per_task["episodes"]))
+            per_task["summary"] = _summarize_task(task_alias, list(per_task["episodes"]))
 
             # Write per-task manifest.
             (task_dir / "media_manifest.json").write_text(
@@ -1188,7 +1787,7 @@ def main() -> int:
             (task_dir / "results_manifest.json").write_text(json.dumps(per_task, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             (task_dir / "metrics.json").write_text(json.dumps(per_task["summary"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
             per["episodes"].append(per_task)
-            per_media[task_name] = media_task
+            per_media[dir_name] = media_task
 
         suite_manifest["scenarios"][scenario_name] = per
         per_media["scenario_name"] = scenario_name
@@ -1198,6 +1797,8 @@ def main() -> int:
     (out_root / "media_manifest.json").write_text(
         json.dumps(root_media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    summary_path = _write_summary_csv(out_root, suite_manifest)
+    print("[h3] wrote:", summary_path)
     print("[h3] wrote:", out_root / "results_manifest.json")
     return 0
 

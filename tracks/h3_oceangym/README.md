@@ -28,6 +28,10 @@ SSL_CERT_FILE=$(.venv_h3_oceangym/bin/python -c "import certifi; print(certifi.w
 
 This produces a top-level `results_manifest.json`, plus per-task `results_manifest.json` files and `metrics.json` summaries.
 
+Task selection (optional):
+- `--tasks formation_transit_multiagent` (by canonical id)
+- `--tasks surface_pollution_cleanup_multiagent__containment` (by canonical id + variant dir name)
+
 Difficulty presets:
 - `--difficulty easy|medium|hard`
 
@@ -90,4 +94,11 @@ This runs:
 ```bash
 cd "oneocean(iros-2026-code)"
 bash tracks/h3_oceangym/run_hero_bundle.sh
+```
+
+This script defaults to the “H3 must-do” subset (including the three new core tasks) plus a single pollution cleanup variant.
+Override tasks with:
+
+```bash
+H3_TASKS="surface_pollution_cleanup_multiagent__localization" bash tracks/h3_oceangym/run_hero_bundle.sh
 ```

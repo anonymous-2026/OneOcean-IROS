@@ -13,10 +13,13 @@ DATASET_NC="${H3_DATASET_NC:-/data/private/user2/workspace/ocean/OceanEnv/Data_p
 CURRENT_NPZ="${H3_CURRENT_NPZ:-${REPO_ROOT}/runs/_cache/data_grounding/currents/cmems_center_uovo.npz}"
 
 DIFFICULTY="${H3_DIFFICULTY:-easy}"
-EPISODES="${H3_EPISODES:-3}"
+EPISODES="${H3_EPISODES:-10}"
 N_MULTIAGENT="${H3_N_MULTIAGENT:-10}"
 POLLUTION_MODEL="${H3_POLLUTION_MODEL:-ocpnet_3d}"
 DATASET_DAYS_PER_SIM_SECOND="${H3_DATASET_DAYS_PER_SIM_SECOND:-0.1}"
+# Default: run the canonical H3 must-do subset + one pollution cleanup variant.
+# Override with e.g. `H3_TASKS="surface_pollution_cleanup_multiagent__localization"`.
+TASKS="${H3_TASKS:-go_to_goal_current station_keeping route_following_waypoints depth_profile_tracking formation_transit_multiagent surface_pollution_cleanup_multiagent__containment}"
 
 TAG="$(date +%Y%m%d_%H%M%S)"
 OUT_DIR="${H3_OUT_DIR:-${REPO_ROOT}/runs/oceangym_h3/hero_bundle_${TAG}}"
@@ -52,8 +55,14 @@ SSL_CERT_FILE="$("${SUITE_PY}" -c "import certifi; print(certifi.where())")"
 export SSL_CERT_FILE
 
 echo "[h3] running suite -> ${OUT_DIR}"
+TASK_ARGS=()
+if [[ -n "${TASKS//[[:space:]]/}" ]]; then
+  # shellcheck disable=SC2206
+  TASK_ARGS=(--tasks ${TASKS})
+fi
 "${SUITE_PY}" tracks/h3_oceangym/run_task_suite.py \
   --preset ocean_worlds_camera \
+  "${TASK_ARGS[@]}" \
   --episodes "${EPISODES}" \
   --difficulty "${DIFFICULTY}" \
   --n_multiagent "${N_MULTIAGENT}" \
