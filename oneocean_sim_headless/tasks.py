@@ -326,6 +326,22 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
         st.scan_grid_hw = (h, w)
         st.scan_grid_origin_xz = np.array([lo[0], lo[2]], dtype=np.float64)
         st.scan_visited = np.zeros((h, w), dtype=bool)
+        # Build a lawnmower waypoint path (cell centers) so the headless controller can traverse coverage
+        # deterministically instead of drifting around a single random goal.
+        y_scan = float(np.clip(0.5 * float(lo[1] + hi[1]), float(lo[1]), float(hi[1])))
+        wps = []
+        for i in range(h):
+            cols = range(w) if (i % 2 == 0) else range(w - 1, -1, -1)
+            z = float(lo[2] + (float(i) + 0.5) * cell)
+            z = float(np.clip(z, float(lo[2]), float(hi[2])))
+            for j in cols:
+                x = float(lo[0] + (float(j) + 0.5) * cell)
+                x = float(np.clip(x, float(lo[0]), float(hi[0])))
+                wps.append([x, y_scan, z])
+        st.waypoints_xyz = np.asarray(wps, dtype=np.float64)
+        st.waypoint_index = 0
+        if st.waypoints_xyz.shape[0] > 0:
+            st.goal_xyz = st.waypoints_xyz[0].copy()
 
     return st
 
