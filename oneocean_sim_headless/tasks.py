@@ -499,6 +499,24 @@ def compute_success(
         leak = np.asarray(task_state.leak_xyz, dtype=np.float64).reshape(-1, 3)
         det = np.asarray(task_state.leak_detected, dtype=bool).reshape(-1)
         first_t = np.asarray(task_state.leak_first_detect_t, dtype=np.float64).reshape(-1)
+
+        # Navigation: follow the pipeline polyline (waypoints) if available.
+        wp_info: dict[str, Any] = {}
+        if task_state.waypoints_xyz is not None:
+            wps = np.asarray(task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(task_state.waypoint_index), 0, wps.shape[0] - 1))
+            wp = wps[i]
+            d_wp = np.linalg.norm(pos - wp[None, :], axis=1)
+            best_wp = float(np.min(d_wp))
+            if best_wp <= float(cfg.success_radius_m) and i < (wps.shape[0] - 1):
+                task_state.waypoint_index = i + 1
+                task_state.goal_xyz = wps[task_state.waypoint_index].copy()
+            wp_info = {
+                "waypoint_index": int(task_state.waypoint_index),
+                "waypoints_total": int(wps.shape[0]),
+                "best_dist_to_waypoint_m": best_wp,
+            }
+
         r = float(cfg.pipeline_detect_radius_m)
         for li in range(int(leak.shape[0])):
             if bool(det[li]):
@@ -511,7 +529,6 @@ def compute_success(
         task_state.leak_first_detect_t = first_t
         count = int(np.count_nonzero(det))
         t_first = float(np.nanmin(first_t)) if np.any(np.isfinite(first_t)) else None
-        return count == int(det.size), {"leaks_detected": count, "leaks_total": int(det.size), "time_to_first_detection_s": t_first}
+        return count == int(det.size), {"leaks_detected": count, "leaks_total": int(det.size), "time_to_first_detection_s": t_first, **wp_info}
 
     raise ValueError(f"Unknown task kind: {cfg.kind}")
-

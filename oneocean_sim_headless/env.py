@@ -396,6 +396,15 @@ class HeadlessOceanEnv:
                     self.task_state.waypoint_index = i + 1
                     i = int(self.task_state.waypoint_index)
             goal = wps[i]
+        elif self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.waypoints_xyz is not None:
+            wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(self.task_state.waypoint_index), 0, wps.shape[0] - 1))
+            if i < (wps.shape[0] - 1):
+                if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
+                    self.task_state.waypoint_index = i + 1
+                    i = int(self.task_state.waypoint_index)
+            self.task_state.goal_xyz = wps[i].copy()
+            goal = self.task_state.goal_xyz
 
         act = compute_actions(
             self.controller_cfg,
