@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+# NOTE: This file is used by the H2 suite runner; keep CLI/metrics stable.
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     # HoloOcean may change CWD at runtime; make sure local packages remain importable.
@@ -70,6 +72,7 @@ class RunnerCfg:
     cleanup_mass_decay_per_s: float = 1.15
     cleanup_success_mass_frac: float = 0.97
     leakage_success_threshold: float = 0.15
+    coverage_success_min: float = 0.6
 
     # controller gains (rough, but stable)
     kp_xy: float = 6.0
@@ -910,7 +913,8 @@ def run_localize_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_dir: Pat
         "steps": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
-        "time_to_success_s": (float(success_step) * dt) if success_step is not None else None,
+        "success_step": int(success_step) if success_step is not None else None,
+        "time_to_success_s": (float(success_step + 1) * dt) if success_step is not None else None,
         "localization_error_m": err,
         "collisions": int(collisions),
         "energy_proxy": float(energy),
@@ -999,8 +1003,14 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     leakage_max = 0.0
     mass_min: float | None = None
 
-    n_clean = max(2, int(round(cfg.cleanup_fraction * cfg.num_agents)))
-    clean_agents = {f"auv{i}" for i in range(n_clean)}
+    # Ensure at least one "ring" agent when possible; otherwise containment coverage is undefined.
+    if cfg.num_agents <= 1:
+        n_clean = int(cfg.num_agents)
+    else:
+        n_clean = int(round(float(cfg.cleanup_fraction) * float(cfg.num_agents)))
+        n_clean = max(1, min(int(cfg.num_agents) - 1, n_clean))
+    clean_agents = {f"auv{i}" for i in range(int(n_clean))}
+    ring_agents = {f"auv{i}" for i in range(cfg.num_agents)} - set(clean_agents)
     sink_every = max(1, int(round(float(cfg.pollution_update_period_s) / max(1e-9, float(dt)))))
 
     gif_frames = []
@@ -1041,7 +1051,7 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                     target = [center[0] + cfg.contain_radius_m * math.cos(ang), center[1] + cfg.contain_radius_m * math.sin(ang), center[2]]
 
                 d_ring = abs(math.hypot(x - center[0], y - center[1]) - cfg.contain_radius_m)
-                if d_ring <= cfg.contain_tolerance_m and name not in clean_agents:
+                if (name in ring_agents) and (d_ring <= cfg.contain_tolerance_m):
                     in_ring += 1
 
                 ex = target[0] - x
@@ -1059,11 +1069,11 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
                 energy += float(np.sum(act * act)) * dt
                 env.act(name, act)
 
-                # Approximate "contain+cleanup" by applying a sink near all agents (skimmer swarm).
-                # (Cleanup-role agents are tasked to stay near the source; ring-role agents spread sink along the perimeter.)
-                sink_world_positions.append([float(x), float(y), float(z)])
+                # Approximate "cleanup" by applying a sink near cleanup-role agents only.
+                if name in clean_agents:
+                    sink_world_positions.append([float(x), float(y), float(z)])
 
-            coverage = float(in_ring) / float(max(1, cfg.num_agents - len(clean_agents)))
+            coverage = float(in_ring) / float(max(1, len(ring_agents)))
             # Leakage proxy: mean concentration at an "outer ring" probe, scaled by missing coverage.
             leakage_r = float(cfg.contain_radius_m) + 14.0
             probe_angles = [2.0 * math.pi * (k / 16.0) for k in range(16)]
@@ -1077,7 +1087,8 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
             leakage_sum += float(leakage)
             leakage_max = float(max(float(leakage_max), float(leakage)))
 
-            if sink_world_positions and (t % sink_every == 0):
+            # Avoid immediately zeroing the pollution at t=0; also keeps time-to-success meaningful.
+            if sink_world_positions and (t > 0) and (t % sink_every == 0):
                 pollution.apply_sink(sink_world_positions)
 
             st = _safe_tick(env, publish=False)
@@ -1105,7 +1116,13 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
             mass_frac = pollution.mass_fraction()
             if mass_frac is not None:
                 mass_min = float(mass_frac) if mass_min is None else float(min(float(mass_min), float(mass_frac)))
-            if success_step is None and (mass_frac is not None) and (mass_frac <= cfg.cleanup_success_mass_frac) and (leakage <= cfg.leakage_success_threshold):
+            if (
+                success_step is None
+                and (mass_frac is not None)
+                and (mass_frac <= cfg.cleanup_success_mass_frac)
+                and (leakage <= cfg.leakage_success_threshold)
+                and (coverage >= float(cfg.coverage_success_min))
+            ):
                 success_step = t
 
         if frame is not None:
@@ -1116,7 +1133,8 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
     _write_gif(gif_path, gif_frames, fps=8)
     _write_gif(fpv_gif_path, fpv_gif_frames, fps=8)
 
-    mass_frac_final = pollution.mass_fraction()
+    mass_frac_final_raw = pollution.mass_fraction()
+    mass_frac_final = None if mass_frac_final_raw is None else float(max(0.0, min(1.0, float(mass_frac_final_raw))))
     mean_coverage = float(coverage_sum / float(max(1, steps)))
     mean_leakage = float(leakage_sum / float(max(1, steps)))
     metrics = {
@@ -1126,9 +1144,11 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         "steps": int(steps),
         "dt_s": float(dt),
         "success": success_step is not None,
-        "time_to_success_s": (float(success_step) * dt) if success_step is not None else None,
+        "success_step": int(success_step) if success_step is not None else None,
+        "time_to_success_s": (float(success_step + 1) * dt) if success_step is not None else None,
         "pollution_meta": pollution_meta,
         "center_kind": center_kind,
+        "remaining_mass_frac_raw": None if mass_frac_final_raw is None else float(mass_frac_final_raw),
         "remaining_mass_frac": None if mass_frac_final is None else float(mass_frac_final),
         "min_mass_frac": None if mass_min is None else float(mass_min),
         "mean_contain_coverage_frac": float(mean_coverage),
@@ -1137,6 +1157,8 @@ def run_contain_cleanup_task(env, cfg: RunnerCfg, current: DatasetCurrent, out_d
         "collisions": int(collisions),
         "energy_proxy": float(energy),
         "cleanup_agents": sorted(clean_agents),
+        "coverage_success_min": float(cfg.coverage_success_min),
+        "cleanup_success_mass_frac": float(cfg.cleanup_success_mass_frac),
         "leakage_success_threshold": float(cfg.leakage_success_threshold),
     }
     _write_json(metrics_path, metrics)
@@ -1194,6 +1216,11 @@ def main() -> int:
     ap.add_argument("--localize-seconds", type=float, default=float(os.environ.get("LOCALIZE_SECONDS", str(RunnerCfg.localize_seconds))))
     ap.add_argument("--contain-seconds", type=float, default=float(os.environ.get("CONTAIN_SECONDS", str(RunnerCfg.contain_seconds))))
     ap.add_argument("--contain-radius-m", type=float, default=float(os.environ.get("CONTAIN_RADIUS_M", str(RunnerCfg.contain_radius_m))))
+    ap.add_argument("--contain-tolerance-m", type=float, default=float(os.environ.get("CONTAIN_TOLERANCE_M", str(RunnerCfg.contain_tolerance_m))))
+    ap.add_argument("--cleanup-fraction", type=float, default=float(os.environ.get("CLEANUP_FRACTION", str(RunnerCfg.cleanup_fraction))))
+    ap.add_argument("--cleanup-success-mass-frac", type=float, default=float(os.environ.get("CLEANUP_SUCCESS_MASS_FRAC", str(RunnerCfg.cleanup_success_mass_frac))))
+    ap.add_argument("--leakage-success-threshold", type=float, default=float(os.environ.get("LEAKAGE_SUCCESS_THRESHOLD", str(RunnerCfg.leakage_success_threshold))))
+    ap.add_argument("--coverage-success-min", type=float, default=float(os.environ.get("COVERAGE_SUCCESS_MIN", str(RunnerCfg.coverage_success_min))))
     ap.add_argument("--viewport-exposure", type=float, default=float(os.environ.get("VIEWPORT_EXPOSURE", str(RunnerCfg.viewport_exposure))))
     ap.add_argument("--fpv-exposure", type=float, default=float(os.environ.get("FPV_EXPOSURE", str(RunnerCfg.fpv_exposure))))
     ap.add_argument("--debug-draw", action=argparse.BooleanOptionalAction, default=bool(int(os.environ.get("DEBUG_DRAW", "1"))))
@@ -1227,6 +1254,11 @@ def main() -> int:
         localize_seconds=float(args.localize_seconds),
         contain_seconds=float(args.contain_seconds),
         contain_radius_m=float(args.contain_radius_m),
+        contain_tolerance_m=float(args.contain_tolerance_m),
+        cleanup_fraction=float(args.cleanup_fraction),
+        cleanup_success_mass_frac=float(args.cleanup_success_mass_frac),
+        leakage_success_threshold=float(args.leakage_success_threshold),
+        coverage_success_min=float(args.coverage_success_min),
         viewport_exposure=float(args.viewport_exposure),
         fpv_exposure=float(args.fpv_exposure),
         debug_draw=bool(args.debug_draw),
