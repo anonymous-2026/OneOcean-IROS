@@ -503,21 +503,26 @@ class HeadlessOceanEnv:
                 if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
                     self.task_state.waypoint_index = i + 1
                     i = int(self.task_state.waypoint_index)
-            base = wps[i]
             lo, hi = self.bounds_xyz
-            # Spread agents around the base scan waypoint to increase coverage without adding per-agent waypoint state.
-            goals = np.repeat(base.reshape(1, 3), self.n_agents, axis=0)
+            # Multi-agent scan: assign agents to different points along the lawnmower path (phase offsets),
+            # so coverage scales with N instead of all agents clustering at the same waypoint.
+            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+            k = int(wps.shape[0])
+            delta = int(max(1, round(0.5 * float(k) / max(1.0, float(self.n_agents)))))
             grid_n = int(max(1, math.ceil(math.sqrt(self.n_agents))))
             spacing = float(max(2.0, 0.55 * float(self.task_cfg.scan_cell_size_m)))
             for ai in range(self.n_agents):
+                ii = int((i + ai * delta) % k)
+                base = wps[ii]
                 r = int(ai // grid_n)
                 c = int(ai % grid_n)
                 dx = (float(c) - 0.5 * float(grid_n - 1)) * spacing
                 dz = (float(r) - 0.5 * float(grid_n - 1)) * spacing
                 p = base + np.array([dx, 0.0, dz], dtype=np.float64)
                 p = np.minimum(np.maximum(p, lo), hi)
-                if not self._violates_constraints(p):
-                    goals[ai] = p
+                if self._violates_constraints(p):
+                    p = base
+                goals[ai] = p
             goal = goals
         elif self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.waypoints_xyz is not None:
             wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
