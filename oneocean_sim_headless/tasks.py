@@ -172,7 +172,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             kind=kind,
             difficulty=difficulty,
             success_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
-            max_steps=220 if d == "easy" else 320 if d == "medium" else 420,
+            max_steps=220 if d == "easy" else 320 if d == "medium" else 560,
             waypoints_n=5 if d == "easy" else 7 if d == "medium" else 9,
         )
     if kind == "depth_profile_tracking":
@@ -223,9 +223,9 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=8.0,
             # Needs to be large enough to traverse a lawnmower grid; keep generous for headless replay.
-            max_steps=900 if d == "easy" else 1400 if d == "medium" else 2200,
+            max_steps=900 if d == "easy" else 1400 if d == "medium" else 2800,
             scan_cell_size_m=30.0 if d == "easy" else 22.0 if d == "medium" else 16.0,
-            scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.92,
+            scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.90,
             scan_radius_m=35.0 if d == "easy" else 30.0 if d == "medium" else 24.0,
         )
     if kind == "pipeline_inspection_leak_detection":

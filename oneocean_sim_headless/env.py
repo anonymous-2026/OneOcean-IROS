@@ -301,7 +301,7 @@ class HeadlessOceanEnv:
         elif task.kind == "area_scan_terrain_recon":
             # Define a region-of-interest grid around the initial centroid (instead of scanning the full tile).
             center = np.mean(self._positions, axis=0)
-            roi = 220.0 if task.difficulty == "easy" else 340.0 if task.difficulty == "medium" else 480.0
+            roi = 220.0 if task.difficulty == "easy" else 340.0 if task.difficulty == "medium" else 420.0
             cell = float(task.scan_cell_size_m)
             w = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
             h = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
