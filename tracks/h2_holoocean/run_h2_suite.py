@@ -104,7 +104,8 @@ def _difficulty_presets(task_id: str, difficulty: str) -> dict:
                 "coverage_success_min": 0.6,
                 "kp_xy": 10.0,
                 "kd_xy": 4.5,
-                "max_planar_force": 35.0,
+                "max_planar_force": 90.0,
+                "max_vertical_force": 60.0,
             }
         elif d == "medium":
             base |= {
@@ -132,7 +133,8 @@ def _difficulty_presets(task_id: str, difficulty: str) -> dict:
             }
 
     if d == "easy" and task_id in {"go_to_goal_current", "route_following_waypoints", "formation_transit_multiagent"}:
-        base |= {"kp_xy": 10.0, "kd_xy": 4.5, "max_planar_force": 30.0}
+        # Easy should succeed reliably; raise thrust limits for faster motion.
+        base |= {"kp_xy": 12.0, "kd_xy": 5.0, "max_planar_force": 90.0, "max_vertical_force": 60.0}
 
     return dict(base)
 
