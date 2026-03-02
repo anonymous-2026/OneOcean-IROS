@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,7 +76,10 @@ class LLMPlanner:
             return
         p = self.cache_dir / f"{key}.json"
         try:
-            p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+            # Best-effort atomic write to avoid corrupting the cache under multi-process runs.
+            tmp = self.cache_dir / f"{key}.tmp.{os.getpid()}"
+            tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(p)
         except Exception:
             return
 

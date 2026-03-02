@@ -82,6 +82,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--seeds", type=str, default="0-9", help="Seed range like '0-9' or list like '0,1,2'")
     ap.add_argument("--episodes", type=int, default=1, help="Episodes per seed (writes episode subfolders when >1).")
     ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode within a base seed.")
+    ap.add_argument("--shard-index", type=int, default=0, help="Optional sharding for parallel runs (0 <= shard_index < shard_count).")
+    ap.add_argument("--shard-count", type=int, default=1, help="Optional sharding for parallel runs (number of shards).")
     ap.add_argument("--tasks", type=str, default="go_to_goal_current,station_keeping,pollution_localization,pollution_containment_multiagent")
     ap.add_argument("--difficulties", type=str, default="easy,medium,hard")
     ap.add_argument("--pollution-models", type=str, default="gaussian", help="Comma list: gaussian,ocpnet_3d")
@@ -123,6 +125,13 @@ def main() -> int:
     root = Path(args.out_dir).expanduser().resolve() if args.out_dir else (Path("runs") / "headless" / f"matrix_{stamp}").resolve()
     root.mkdir(parents=True, exist_ok=True)
 
+    shard_index = int(args.shard_index)
+    shard_count = int(args.shard_count)
+    if shard_count < 1:
+        raise SystemExit("--shard-count must be >= 1")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise SystemExit(f"--shard-index must satisfy 0 <= shard_index < shard_count (got {shard_index} / {shard_count})")
+
     meta: dict[str, Any] = {
         "time_local": datetime.now().isoformat(timespec="seconds"),
         "argv": list(sys.argv),
@@ -132,6 +141,7 @@ def main() -> int:
         "platform": platform.platform(),
         "cwd": str(Path.cwd().resolve()),
         "out_dir": str(root),
+        "shard": {"index": int(shard_index), "count": int(shard_count)},
     }
     meta["git"] = _git_state()
     (root / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -247,6 +257,8 @@ def main() -> int:
                 "seeds": seeds,
                 "episodes": int(episodes),
                 "seed_step": int(seed_step),
+                "shard_index": int(shard_index),
+                "shard_count": int(shard_count),
                 "scenario_count": int(len(scenarios)),
             },
             indent=2,
@@ -257,6 +269,8 @@ def main() -> int:
     rows = []
     t_all = time.time()
     for idx, sc in enumerate(scenarios):
+        if int(shard_count) > 1 and (int(idx) % int(shard_count)) != int(shard_index):
+            continue
         base_run_dir = root / f"{sc.task}" / f"{sc.difficulty}" / f"{sc.pollution_model}" / f"n{int(sc.n_agents)}" / f"seed_{sc.seed:03d}"
         base_run_dir.mkdir(parents=True, exist_ok=True)
 
