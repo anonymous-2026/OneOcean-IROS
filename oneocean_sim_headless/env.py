@@ -762,6 +762,16 @@ class HeadlessOceanEnv:
         # Optional semantic stream (downsample to reduce file size).
         if step_i % 5 == 0:
             payload: dict[str, Any] = {"task": str(self.task_cfg.kind)}
+            payload["controller"] = str(self.controller_cfg.kind)
+            # Goal used for action computation (helps downstream BC / audits).
+            try:
+                g = np.asarray(goal, dtype=np.float64)
+                if g.shape == (3,):
+                    payload["goal_for_action_xyz"] = g.tolist()
+                else:
+                    payload["goal_for_action_xyz"] = g.reshape(-1, 3).tolist()
+            except Exception:
+                payload["goal_for_action_xyz"] = None
             if self.task_cfg.kind == "surface_pollution_cleanup_multiagent" and self.task_state.cleanup_sources_xyz is not None and self.task_state.cleanup_done is not None:
                 payload["cleanup_sources_xyz"] = np.asarray(self.task_state.cleanup_sources_xyz, dtype=np.float64).tolist()
                 payload["cleanup_done"] = np.asarray(self.task_state.cleanup_done, dtype=bool).astype(int).tolist()
