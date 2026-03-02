@@ -254,6 +254,10 @@ def _thrusters_for_planar_force(fx: float, fy: float) -> tuple[float, float, flo
 def _action_from_force(fx: float, fy: float, fz: float, cfg: RunnerCfg) -> "np.ndarray":
     import numpy as np
 
+    # HoloOcean's thruster-force sign convention is opposite of the intuitive "push along +thruster_d".
+    # Empirically, using the raw PD output causes vehicles to move away from targets; negating fixes it.
+    fx, fy, fz = -float(fx), -float(fy), -float(fz)
+
     fx, fy = _clip_norm2(float(fx), float(fy), float(cfg.max_planar_force))
     fz = float(max(-cfg.max_vertical_force, min(cfg.max_vertical_force, float(fz))))
     t4, t5, t6, t7 = _thrusters_for_planar_force(fx, fy)
