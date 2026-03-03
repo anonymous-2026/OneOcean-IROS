@@ -13,8 +13,8 @@ class HoloCfg:
     window_height: int = 720
     render_quality: int = 3
     show_viewport: bool = False
-    camera_width: int = 768
-    camera_height: int = 768
+    camera_width: int = 896
+    camera_height: int = 896
 
 
 def patch_scenario_for_recording(base: dict, cfg: HoloCfg, *, add_viewport_capture: bool) -> dict:
@@ -42,6 +42,16 @@ def patch_scenario_for_recording(base: dict, cfg: HoloCfg, *, add_viewport_captu
 
     for s in sensors:
         _clamp_hz(s)
+
+    # IMPORTANT: PoseSensor operates in the sensor's socket frame:
+    # - IMUSocket -> NED
+    # - COMSocket -> NWU
+    # H3 controllers and task geometry assume NWU, so force Pose/Velocity to COMSocket.
+    for s in sensors:
+        st = str(s.get("sensor_type", "")).strip()
+        if st in {"PoseSensor", "VelocitySensor"}:
+            if s.get("socket") == "IMUSocket" or ("socket" not in s):
+                s["socket"] = "COMSocket"
 
     # Some scenarios (e.g., SimpleUnderwater-Hovering) ship without cameras.
     # Add a minimal LeftCamera so every world can export an on-vehicle view.
@@ -107,6 +117,10 @@ def add_hovering_auv_agents(base_scenario: dict, *, n_agents: int) -> dict:
         sensors = [s for s in a.get("sensors", []) if s.get("sensor_type") in keep_types]
         if not sensors:
             raise ValueError("Non-main agent would have zero sensors after minimization.")
+        for s in sensors:
+            if s.get("sensor_type") == "PoseSensor":
+                if s.get("socket") == "IMUSocket" or ("socket" not in s):
+                    s["socket"] = "COMSocket"
         a["sensors"] = sensors
         return a
 

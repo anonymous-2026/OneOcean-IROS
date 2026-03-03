@@ -256,10 +256,8 @@ def _act_thruster_pd_to_target(
     )
 
     omega = None
-    if imu is not None:
-        imu_arr = np.asarray(imu, dtype=np.float32)
-        if imu_arr.ndim == 2 and imu_arr.shape[0] >= 2 and imu_arr.shape[1] >= 3:
-            omega = imu_arr[1, :3].astype(np.float32)  # rad/s
+    # NOTE: IMUSensor reports in IMUSocket frame (NED). H3 forces PoseSensor to COMSocket (NWU) for consistent control.
+    # To avoid mixing frames in the attitude damping term, estimate angular rates from PoseSensor deltas instead of IMU.
 
     if omega is None:
         if ctrl.prev_rpy is None or float(dt) <= 0.0:
@@ -298,6 +296,20 @@ def _look_at_rpy(camera_xyz: tuple[float, float, float], target_xyz: tuple[float
     return [0.0, pitch, yaw]
 
 
+def _look_at_x_axis(camera_xyz: tuple[float, float, float], target_xyz: tuple[float, float, float]) -> list[float]:
+    """
+    HoloOcean 2.0.1 `env.move_viewport(location, rotation)` expects `rotation` as the camera x-axis direction vector.
+    """
+    dx = float(target_xyz[0] - camera_xyz[0])
+    dy = float(target_xyz[1] - camera_xyz[1])
+    dz = float(target_xyz[2] - camera_xyz[2])
+    n = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if n < 1e-6:
+        return [1.0, 0.0, 0.0]
+    inv = 1.0 / n
+    return [dx * inv, dy * inv, dz * inv]
+
+
 @dataclass(frozen=True)
 class SuiteCfg:
     preset: str = "ocean_worlds_camera"
@@ -311,9 +323,9 @@ class SuiteCfg:
     show_viewport: bool = False
     window_width: int = 1600
     window_height: int = 900
-    camera_width: int = 768
-    camera_height: int = 768
-    fog_density: float = 0.02
+    camera_width: int = 896
+    camera_height: int = 896
+    fog_density: float = 0.01
     record_first_episode_only: bool = True
 
     # Task params (difficulty ladder lives in code; these are defaults).
@@ -395,6 +407,36 @@ def _mean(xs: list[float]) -> float | None:
     if not xs:
         return None
     return float(sum(xs) / float(len(xs)))
+
+
+def _att_stats_init() -> dict[str, float]:
+    return {"count": 0.0, "sum_abs_roll": 0.0, "sum_abs_pitch": 0.0, "max_abs_roll": 0.0, "max_abs_pitch": 0.0}
+
+
+def _att_stats_update(stats: dict[str, float], pose) -> None:
+    if pose is None:
+        return
+    r, p, _ = _pose_rpy_rad(pose)
+    ar = abs(float(r))
+    ap = abs(float(p))
+    stats["count"] += 1.0
+    stats["sum_abs_roll"] += ar
+    stats["sum_abs_pitch"] += ap
+    stats["max_abs_roll"] = max(float(stats["max_abs_roll"]), ar)
+    stats["max_abs_pitch"] = max(float(stats["max_abs_pitch"]), ap)
+
+
+def _att_stats_finalize(stats: dict[str, float]) -> dict[str, float]:
+    c = float(stats.get("count", 0.0))
+    if c <= 0.0:
+        return {}
+    rad2deg = 180.0 / math.pi
+    return {
+        "mean_abs_roll_deg": float(stats["sum_abs_roll"] / c * rad2deg),
+        "mean_abs_pitch_deg": float(stats["sum_abs_pitch"] / c * rad2deg),
+        "max_abs_roll_deg": float(stats["max_abs_roll"] * rad2deg),
+        "max_abs_pitch_deg": float(stats["max_abs_pitch"] * rad2deg),
+    }
 
 
 def _summarize_task(task_name: str, episodes: list[dict]) -> dict:
@@ -699,6 +741,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
     steps = 0
     min_dist = float("inf")
     final_dist = float("inf")
+    att = _att_stats_init()
     ctrl: dict[str, _ThrusterCtrlState | None] = {name: None for name in agent_names}
     for step in range(cfg.max_steps):
         steps = step + 1
@@ -753,6 +796,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
 
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
+            _att_stats_update(att, pose)
             px, py, pz = _pose_xyz(pose)
             d_goal = float(math.dist((px, py, pz), goal))
             min_dist = min(min_dist, d_goal)
@@ -767,7 +811,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
             # Keep viewport behind auv0 if pose is available.
             if pose is not None:
                 cx, cy, cz = px - 10.0, py - 10.0, pz + 3.5
-                env.move_viewport([cx, cy, cz], _look_at_rpy((cx, cy, cz), (px, py, pz)))
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (px, py, pz)))
 
     if rec is not None:
         rec.close()
@@ -786,6 +830,7 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {
             "viewport_mp4": str(out_dir / "nav_viewport.mp4"),
@@ -808,6 +853,7 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     collisions = 0
     prev_collision = False
     energy = 0.0
+    att = _att_stats_init()
 
     rec: _Recorder | None = None
     if record:
@@ -855,6 +901,7 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
         state = env.tick(num_ticks=1, publish=False)
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
+            _att_stats_update(att, pose)
             px, py, pz = _pose_xyz(pose)
             sq_err += float((px - p0[0]) ** 2 + (py - p0[1]) ** 2 + (pz - p0[2]) ** 2)
         col = _state_get(state, "auv0", "CollisionSensor", n_agents)
@@ -870,6 +917,9 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+            if pose is not None:
+                cx, cy, cz = px - 12.0, py - 12.0, pz + 4.0
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (px, py, pz)))
 
     rms = math.sqrt(sq_err / float(steps))
     if rec is not None:
@@ -896,6 +946,7 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {
             "viewport_mp4": str(out_dir / "station_viewport.mp4"),
@@ -955,6 +1006,7 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
     prev_collision = False
     xte_sum = 0.0
     xte_n = 0
+    att = _att_stats_init()
 
     rec: _Recorder | None = None
     if record:
@@ -999,6 +1051,7 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
 
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
+            _att_stats_update(att, pose)
             px, py, _pz = _pose_xyz(pose)
             xte_sum += _dist_point_to_segment_xy(px, py, seg_prev[0], seg_prev[1], tx, ty)
             xte_n += 1
@@ -1022,6 +1075,9 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+            if pose is not None:
+                cx, cy, cz = px - 12.0, py - 12.0, float(start[2]) + 4.0
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (px, py, float(start[2]))))
 
     if rec is not None:
         rec.close()
@@ -1040,6 +1096,7 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {"viewport_mp4": str(out_dir / "route_viewport.mp4"), "leftcamera_mp4": str(out_dir / "route_leftcamera.mp4")}
     return res
@@ -1076,6 +1133,7 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
     prev_collision = False
     energy = 0.0
     ctrl: _ThrusterCtrlState | None = None
+    att = _att_stats_init()
 
     rec: _Recorder | None = None
     if record:
@@ -1117,6 +1175,7 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
 
         pose = _state_get(state, "auv0", "PoseSensor", n_agents)
         if pose is not None:
+            _att_stats_update(att, pose)
             _x, _y, pz = _pose_xyz(pose)
             sq_depth += float((pz - z_t) ** 2)
 
@@ -1133,6 +1192,10 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+            if pose is not None:
+                px, py, pz = _pose_xyz(pose)
+                cx, cy, cz = px - 12.0, py - 12.0, pz + 4.0
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (px, py, pz)))
 
     if rec is not None:
         rec.close()
@@ -1151,6 +1214,7 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {"viewport_mp4": str(out_dir / "depth_viewport.mp4"), "leftcamera_mp4": str(out_dir / "depth_leftcamera.mp4")}
     return res
@@ -1186,6 +1250,7 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     prev_collision = False
     form_err_sq = 0.0
     form_err_n = 0
+    att = _att_stats_init()
 
     rec: _Recorder | None = None
     if record:
@@ -1266,6 +1331,7 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         # Formation error (RMS follower position error vs desired offsets).
         leader_pose2 = _state_get(state, "auv0", "PoseSensor", n_agents)
         if leader_pose2 is not None:
+            _att_stats_update(att, leader_pose2)
             lx, ly, lz = _pose_xyz(leader_pose2)
             if step >= warmup_steps:
                 for i, name in enumerate(agent_names[1:], start=1):
@@ -1301,6 +1367,10 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+            if leader_pose2 is not None:
+                lx, ly, lz = _pose_xyz(leader_pose2)
+                cx, cy, cz = lx - 18.0, ly - 18.0, lz + 8.0
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (lx, ly, lz)))
 
     if rec is not None:
         rec.close()
@@ -1327,6 +1397,7 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "collisions": int(collisions),
         "energy_proxy": float(energy),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {"viewport_mp4": str(out_dir / "formation_viewport.mp4"), "leftcamera_mp4": str(out_dir / "formation_leftcamera.mp4")}
     return res
@@ -1448,6 +1519,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     w_sum = 0.0
     wx_sum = 0.0
     wy_sum = 0.0
+    att = _att_stats_init()
 
     for k in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(k) * dt)
@@ -1492,6 +1564,8 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
             pose = _state_get(state, name, "PoseSensor", n_agents)
             if pose is None:
                 continue
+            if i == 0:
+                _att_stats_update(att, pose)
             px, py, _pz = _pose_xyz(pose)
 
             traveled[i] += math.dist(prev_xy[i], (px, py))
@@ -1521,6 +1595,11 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
 
         if rec is not None:
             rec.append(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
+            pose0 = _state_get(state, "auv0", "PoseSensor", n_agents)
+            if pose0 is not None:
+                px, py, pz = _pose_xyz(pose0)
+                cx, cy, cz = px - 14.0, py - 14.0, pz + 6.0
+                env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), (px, py, pz)))
 
     if w_sum > 0.0:
         est_xy = (wx_sum / w_sum, wy_sum / w_sum)
@@ -1551,6 +1630,7 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         "steps": int(steps),
         "time_s": float(steps * dt),
     }
+    res.update(_att_stats_finalize(att))
     if record:
         res["media"] = {
             "viewport_mp4": str(out_dir / "plume_viewport.mp4"),
@@ -1633,7 +1713,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         for _ in range(240):
             env.move_viewport(
                 [src[0] + cam_r, src[1], src[2] + cam_h],
-                _look_at_rpy((src[0] + cam_r, src[1], src[2] + cam_h), src),
+                _look_at_x_axis((src[0] + cam_r, src[1], src[2] + cam_h), src),
             )
             state = env.tick(num_ticks=1, publish=False)
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
@@ -1652,13 +1732,14 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 
     steps = min(max(1, int(cfg.plume_containment_steps)), max(1, int(cfg.max_steps)) * 10)
     ctrl = [None for _ in range(n_agents)]
+    att = _att_stats_init()
     for step in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
         theta = 2.0 * math.pi * (step / float(max(1, steps)))
         cx = src[0] + cam_r * math.cos(theta)
         cy = src[1] + cam_r * math.sin(theta)
         cz = src[2] + cam_h
-        env.move_viewport([cx, cy, cz], _look_at_rpy((cx, cy, cz), src))
+        env.move_viewport([cx, cy, cz], _look_at_x_axis((cx, cy, cz), src))
 
         if plume is not None:
             plume.step(u_mps=float(u), v_mps=float(v))
@@ -1699,6 +1780,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             env.act(name, np.asarray(thr, dtype=np.float32))
 
         state = env.tick(num_ticks=1, publish=False)
+        _att_stats_update(att, _state_get(state, "auv0", "PoseSensor", n_agents))
 
         if rec_vp is not None:
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
@@ -1783,6 +1865,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
             "viewport_mp4": str(out_dir / "contain_viewport.mp4"),
             "leftcamera_mp4": str(out_dir / "contain_leftcamera.mp4"),
         }
+    res.update(_att_stats_finalize(att))
     return res
 
 
@@ -1813,6 +1896,7 @@ def main() -> int:
             "by backend alias (e.g., plume_containment_multiagent), or by dir name (e.g., surface_pollution_cleanup_multiagent__containment)."
         ),
     )
+    ap.add_argument("--no_media", action="store_true", help="Disable MP4/GIF/PNG generation during the run (quant-only).")
     ap.add_argument("--show_viewport", action="store_true")
     ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
@@ -2010,7 +2094,7 @@ def main() -> int:
 
                 for ep in range(cfg.episodes):
                     seed = _stable_seed(scenario_name, task_id, task_variant, task_alias, ep)
-                    record = bool(not cfg.record_first_episode_only or ep == 0)
+                    record = bool((not cfg.record_first_episode_only or ep == 0) and (not bool(args.no_media)))
                     record_this = False
 
                     # Reset between episodes to avoid cumulative drift and to reduce resource churn.
@@ -2118,6 +2202,12 @@ def main() -> int:
                     res["task_variant"] = task_variant
 
                     per_task["episodes"].append(res)
+                    ep_dir = task_dir / f"ep{ep:03d}"
+                    ep_dir.mkdir(parents=True, exist_ok=True)
+                    (ep_dir / "metrics.json").write_text(
+                        json.dumps(res, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
                     if "media" in res:
                         for k, v in dict(res["media"]).items():
                             per_task_media_manifest[f"ep{ep:03d}_{k}"] = str(v)
@@ -2145,6 +2235,32 @@ def main() -> int:
     (out_root / "media_manifest.json").write_text(
         json.dumps(root_media_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    root_metrics: dict[str, object] = {
+        "track": "h3_oceangym",
+        "script": str(Path(__file__).resolve()),
+        "python": sys.executable,
+        "command": list(sys.argv),
+        "git": git,
+        "out_dir": str(out_root),
+        "cfg": asdict(cfg),
+        "scenarios": {},
+    }
+    for scenario_name, per in dict(suite_manifest.get("scenarios") or {}).items():
+        if not isinstance(per, dict):
+            continue
+        entries = per.get("episodes")
+        if not isinstance(entries, list):
+            continue
+        sc: dict[str, object] = {}
+        for t in entries:
+            if not isinstance(t, dict):
+                continue
+            tid = str(t.get("task_id") or t.get("task") or "")
+            variant = str(t.get("task_variant") or "")
+            key = tid if not variant else f"{tid}__{variant}"
+            sc[key] = t.get("summary") if isinstance(t.get("summary"), dict) else {}
+        root_metrics["scenarios"][scenario_name] = sc
+    (out_root / "metrics.json").write_text(json.dumps(root_metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     summary_path = _write_summary_csv(out_root, suite_manifest)
     print("[h3] wrote:", summary_path)
     print("[h3] wrote:", out_root / "results_manifest.json")

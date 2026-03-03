@@ -54,6 +54,7 @@ def main() -> int:
     ap.add_argument("--pollution_model", default="ocpnet_3d", choices=("analytic", "ocpnet_3d"))
     ap.add_argument("--out_dir", default=None)
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--no_media", action="store_true", help="Disable MP4 generation in child suites (recommended for sweeps).")
     args = ap.parse_args()
 
     _ensure_ssl_cert_file()
@@ -94,6 +95,8 @@ def main() -> int:
             cmd += ["--current_npz", str(args.current_npz)]
         if args.resume:
             cmd += ["--resume"]
+        if args.no_media:
+            cmd += ["--no_media"]
 
         subprocess.run(cmd, check=True, env=env)
 
@@ -119,6 +122,7 @@ def main() -> int:
         "difficulty": str(args.difficulty),
         "episodes": int(args.episodes),
         "ns": [int(x) for x in list(args.ns)],
+        "no_media": bool(args.no_media),
         "children": children,
     }
     (out_root / "results_manifest.json").write_text(json.dumps(root_manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -128,4 +132,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
