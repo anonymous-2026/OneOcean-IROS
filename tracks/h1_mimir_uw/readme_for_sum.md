@@ -41,6 +41,74 @@ Notes:
 
 ---
 
+## 2.5) Design + constraints (paper-facing; implemented + recorded)
+
+This section captures the **device/constraint contract** that is actually implemented in H1 and recorded in each episode’s `spec_snapshot.json`.
+
+### Coordinate / state convention
+
+- World frame: `x=east`, `z=north`, `y=depth` (**positive down**).
+- Pose per agent: position `p=[x,y,z]` plus attitude `(roll,pitch,yaw)` (stored as quaternion stream in `agents/*/pose_groundtruth/data.csv`).
+- Currents: sampled from the drift cache as a world-frame horizontal velocity `c(p)=[u(x,z), 0, v(x,z)]`.
+
+### Action interface + energy proxy
+
+- Action space (recorded in `spec_snapshot.json`): `desired_relative_velocity_world_xyz`.
+- Speed limit: action is clipped to `max_speed_mps` before integration.
+- Energy proxy used in summaries:
+  ```tex
+  E := \\sum_t \\lVert a_t \\rVert_2^2 \\; \\Delta t
+  ```
+
+### Hard constraints (land/bathymetry)
+
+Constraints are controlled by the two config flags (and recorded in `spec_snapshot.json`):
+- `constraint_mode ∈ {off, hard}` (land-mask constraint)
+- `bathy_mode ∈ {off, hard}` (seafloor clearance constraint)
+
+The hard constraint check is:
+- land-mask: reject if `land_mask(x,z) ≥ land_mask_threshold`
+- bathymetry: reject if elevation is missing / non-finite, or if
+  ```tex
+  y + \\text{seafloor_clearance_m} > \\text{water_depth}(x,z), \\quad \\text{where } \\text{water_depth}(x,z) := -\\text{elevation}(x,z)
+  ```
+  (elevation is expected negative underwater; `elevation ≥ 0` is treated as invalid).
+
+Hard-mode handling:
+- if a step proposes an invalid next state, the position update is **rejected** (agent stays in place) and `constraint_violations += 1`.
+- in dynamics modes, rejecting a step also zeros the **linear** relative body velocity (`nu[:3]=0`) as a stabilizing “stop” behavior.
+
+Recorded violation metric:
+- `constraint_violations` is a **count of rejected steps** (aggregated over all agents and timesteps), not seconds.
+
+### 6DoF dynamics model (official runs)
+
+Official runs use `dynamics_model=\"6dof\"` (see `dynamics_spec` in `spec_snapshot.json`).
+Implementation is a **minimal diagonal** relative-velocity model (engineering-stable; paper-defensible) with a deterministic velocity-tracking controller:
+
+```tex
+\\nu := [u,v,w,p,q,r]^\\top \\quad (\\text{body-frame relative linear + angular velocity})
+```
+
+World integration (relative velocity + current):
+```tex
+\\dot{p} = R(\\eta)\\,\\nu_{lin} + c(p)
+```
+
+Diagonal “PID-lite” tracking in body frame:
+```tex
+\\tau_{lin} = K_p^{lin}(\\nu^{cmd}_{lin} - \\nu_{lin}),\\qquad
+\\tau_{ang} = K_p^{ang}(\\nu^{cmd}_{ang} - \\nu_{ang}) - K_d^{ang}\\nu_{ang}
+```
+```tex
+\\dot{\\nu}_{lin} = (\\tau_{lin} - D_{lin}\\nu_{lin}) / M_{lin},\\qquad
+\\dot{\\nu}_{ang} = (\\tau_{ang} - D_{ang}\\nu_{ang}) / M_{ang}
+```
+
+All parameters (`M_*`, `D_*`, gains, angular-rate limits, angle convention) are recorded per episode in `spec_snapshot.json` under `dynamics_spec`.
+
+---
+
 ## 3) Tasks covered (canonical 10-task list)
 
 Canonical task ids (as required by the unified contract):
