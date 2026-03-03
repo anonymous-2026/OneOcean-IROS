@@ -76,6 +76,9 @@ Multi-agent scaling policy:
 
 - Run root: `runs/headless/FINAL_6dof_hero_full10_mh_20260303_farm/`
 - Summary CSV: `runs/headless/FINAL_6dof_hero_full10_mh_20260303_farm/summary.csv`
+- Per-episode artifacts (for audit/replay; path pattern):
+  - `runs/headless/FINAL_6dof_hero_full10_mh_20260303_farm/shard_XX/<task>/<diff>/<pollution_model>/nN/seed_SSS/episode_EEE/`
+  - Contains: `run_meta.json`, `metrics.json`, `metrics.csv`, `spec_snapshot.json`, `validation.json`, and recorded streams under `agents/`.
 - Seeds/episodes:
   - `seeds=0..9`, `episodes=2` (total 20 episodes per task×difficulty group)
 - Settings (fixed):
