@@ -7,6 +7,16 @@ Scope: H3 OceanGym integration + data-grounded runs + curated media pointers for
 > This file is intended to be **committable** (text-only). It references **local run outputs** under
 > `oneocean(iros-2026-code)/runs/oceangym_h3/` which are not meant to be committed.
 
+## 0) Quick evidence (underwater sanity check)
+
+These are the fastest “open and verify it’s truly underwater” pointers.
+
+- SCREENSHOT (PNG):
+  - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/orbit_keyframe.png`
+- VIDEO (MP4):
+  - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/orbit_viewport.mp4`
+  - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/move_viewport.mp4`
+
 ---
 
 ## 1) What H3 delivered
@@ -16,7 +26,7 @@ H3 provides a structured “benchmark harness” on top of HoloOcean 2.0.1 Ocean
 - **Scenario patching for recording + multi-agent**:
   - ensures consistent camera capture (viewport + FPV),
   - supports `N=2–10` by cloning the base HoveringAUV agent config,
-  - forces `PoseSensor/VelocitySensor` to the correct frame for control (see §6).
+  - forces `PoseSensor/VelocitySensor` to the correct frame for control (see §7).
 - **Task ladder (v1)** implemented in `tracks/h3_oceangym/run_task_suite.py`:
   - `go_to_goal_current`
   - `station_keeping`
@@ -43,13 +53,24 @@ Official runs below use:
 
 - Currents NPZ: `oneocean(iros-2026-code)/runs/_cache/data_grounding/currents/cmems_center_uovo.npz`
   - Produced from our combined dataset (see `tracks/h3_oceangym/export_current_series_npz.py`).
-  - The run manifests also record `lat/lon/depth_selected_m` embedded in the NPZ.
+  - NPZ schema (verified on this machine): `time_ns` (T), `depth_m` (Z), `uo`/`vo` (T×Z), and scalar `latitude`/`longitude`.
+  - Example metadata in the bundled NPZ:
+    - `latitude=32.50209205020921`, `longitude=-65.9979079497908`
+    - `depth_m` has 26 levels (surface→~186 m)
+    - `source_dataset=/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc`
 - Dataset clock: `--dataset_days_per_sim_second 0.1`
   - advances the current index as simulation time runs.
 
 Notes:
 - H3 currently applies currents as a **drift/teleport-style hook** (engineering approximation), not full hydrodynamics.
-- Tide is **not** included in H3 official runs (see §6).
+- Tide is **not** included in H3 official runs (see §7).
+
+## 2.1 Scene provenance / licensing notes
+
+See `oneocean(iros-2026-code)/tracks/h3_oceangym/scene_provenance.md` for:
+- which packaged HoloOcean worlds we used,
+- what external zips exist in the local cache,
+- and redistribution / EULA constraints.
 
 ---
 
@@ -132,6 +153,16 @@ Paper-table exports (generated from the hero suite `summary.csv`):
 - `project/results/h3_FINALFIX_hero_easy_ep10_N8_20260303_103437__paper_table.csv`
 - `project/results/h3_FINALFIX_hero_easy_ep10_N8_20260303_103437__paper_table.tex`
 
+### 4.1b Minimal “scene-only” media bundle (fastest underwater check)
+
+Run root:
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/`
+
+Key artifacts:
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/orbit_keyframe.png`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/orbit_viewport.mp4`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/PierHarbor-HoveringCamera/move_viewport.mp4`
+
 ### 4.2 Official FINALFIX scaling sweep (formation; N in {2,4,8,10})
 
 Run root:
@@ -166,12 +197,35 @@ Paper-table exports:
 - `project/results/h3_FINALFIX_scaling_formation_easy_ep10_20260303_114936__paper_table.csv`
 - `project/results/h3_FINALFIX_scaling_formation_easy_ep10_20260303_114936__paper_table.tex`
 
+### 4.3 Lean alternative final suite (PierHarbor-only; smaller/faster)
+
+This suite is useful when you want a smaller “single-world” table/manifest, but still with all key tasks.
+
+Run root:
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_suite_multidiff_pierharbor_N8_ocpnet_20260303_062633/`
+
+Key artifacts:
+- Easy (full coverage):
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_suite_multidiff_pierharbor_N8_ocpnet_20260303_062633/easy/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_suite_multidiff_pierharbor_N8_ocpnet_20260303_062633/easy/results_manifest.json`
+- Medium/hard partial (best-effort; see IPC caveat in §7):
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_suite_multidiff_pierharbor_N8_ocpnet_20260303_062633/summary.csv`
+
 ---
 
 ## 5) Curated media index (use these first)
 
 All media below come from:
 `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/`
+
+### Paper-selected screenshots (confirmed)
+
+These two screenshots are selected for the paper (user-confirmed as **[Image #1]** and **[Image #2]**):
+
+- [Image #1] (viewport keyframe; pollution containment/cleanup context):
+  - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport_keyframe_000.png`
+- [Image #2] (viewport keyframe; multi-agent formation context):
+  - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport_keyframe_000.png`
 
 ### PierHarbor (ep000; easy; N=8 where applicable)
 
@@ -249,10 +303,12 @@ rm -f /dev/shm/HOLODECK_MEM* /dev/shm/sem.HOLODECK_* 2>/dev/null || true
 
 ### Postprocess media (GIF + keyframes)
 
-Run with any Python that has `opencv-python`, `imageio`, and `Pillow`:
+Run with a Python that has `opencv-python`, `imageio`, and `Pillow`.
+
+On this machine, the H3 venv works:
 
 ```bash
-python tracks/h3_oceangym/postprocess_media.py --roots "${OUT}"
+./.venv_h3_oceangym/bin/python tracks/h3_oceangym/postprocess_media.py --roots "${OUT}"
 ```
 
 ### Scaling sweep (quant-only)
