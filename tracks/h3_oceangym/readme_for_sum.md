@@ -444,3 +444,54 @@ rm -f /dev/shm/HOLODECK_MEM* /dev/shm/sem.HOLODECK_* 2>/dev/null || true
   - `summary.csv` includes strong pollution metrics (error/mass/leakage), but not all episodes expose `energy_proxy` / `collisions` for the plume tasks (v1 harness limitation).
 - **Task coverage is a subset of the canonical 10-task list**:
   - tasks requiring scene-native fish/pipeline assets are intentionally not attempted here due to asset/EULA constraints; only procedural tasks are allowed as future optional work.
+
+---
+
+## Appendix A) Additional validated run roots (H3 / H3-2; not in main table)
+
+Purpose: keep a lightweight index of **more** completed (non-debug) runs for traceability, without flooding the main sections.
+
+Selection rule (to avoid “wrong” results):
+- Included items have a `results_manifest.json` and a `summary.csv` at the run root.
+- Excluded items include debugging/diagnostic runs (name prefix like `_viz_*`, `_spinfix_*`, `_ctrlcheck_*`, `_smoke_*`, `_trash_*`), and incomplete folders without a root summary.
+
+### A.1 Scaling sweeps (formation; PierHarbor; CMEMS currents)
+
+- `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scaling_formation_easy_ep3_cmems_20260303_070756/`
+  - type: `FINAL_scaling_sweep`, task=`formation_transit_multiagent`, difficulty=`easy`, episodes=`3`, `N in {2,4,8,10}`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scaling_formation_easy_ep3_cmems_20260303_070756/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scaling_formation_easy_ep3_cmems_20260303_070756/results_manifest.json`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/scaling_sweep_formation_easy_cmems_20260302_172227/`
+  - type: `scaling_sweep`, task=`formation_transit_multiagent`, difficulty=`easy`, episodes=`10`, `N in {2,4,8,10}`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/scaling_sweep_formation_easy_cmems_20260302_172227/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/scaling_sweep_formation_easy_cmems_20260302_172227/results_manifest.json`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_scaling_sweep_form_ep5_easy_cmems_20260303_013916/`
+  - type: `scaling_sweep_manual_merge`, task=`formation_transit_multiagent`, difficulty=`easy`, episodes=`5`, `N in {2,4,8,10}`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_scaling_sweep_form_ep5_easy_cmems_20260303_013916/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_scaling_sweep_form_ep5_easy_cmems_20260303_013916/results_manifest.json`
+
+### A.2 H3-2 task suites (PierHarbor; small episode counts)
+
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_hero_core_ep10_N8_easy_20260303_010316/`
+  - scenario: `PierHarbor-HoveringCamera`, episodes=`10`, multi-agent `N=8` for multi-agent tasks
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_hero_core_ep10_N8_easy_20260303_010316/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_hero_core_ep10_N8_easy_20260303_010316/results_manifest.json`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_plume_suite_ep3_N8_analytic_20260303_013626/`
+  - scenario: `PierHarbor-HoveringCamera`, episodes=`3`, plume tasks; (analytic baseline variant used in this run family)
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_plume_suite_ep3_N8_analytic_20260303_013626/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_plume_suite_ep3_N8_analytic_20260303_013626/results_manifest.json`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_depth_ep2_20260303_004044/`
+  - scenario: `PierHarbor-HoveringCamera`, episodes=`2`, depth-profile focus
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_depth_ep2_20260303_004044/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_depth_ep2_20260303_004044/results_manifest.json`
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_route_ep2_20260303_003746/`
+  - scenario: `PierHarbor-HoveringCamera`, episodes=`2`, route-following focus
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_route_ep2_20260303_003746/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_2_route_ep2_20260303_003746/results_manifest.json`
+
+### A.3 Broad “bundle” (multi-scenario; exploratory coverage)
+
+- `oneocean(iros-2026-code)/runs/oceangym_h3/hero_bundle_20260302_150011/`
+  - scenarios: `Dam-HoveringCamera`, `OpenWater-HoveringCamera`, `PierHarbor-HoveringCamera`, `SimpleUnderwater-Hovering`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/hero_bundle_20260302_150011/summary.csv`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/hero_bundle_20260302_150011/results_manifest.json`
