@@ -135,6 +135,7 @@ def main() -> int:
     user_set_pollution_models = "--pollution-models" in argv
     user_set_seeds = "--seeds" in argv
     user_set_episodes = "--episodes" in argv
+    user_set_seed_step = "--seed-step" in argv
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     root = Path(args.out_dir).expanduser().resolve() if args.out_dir else (Path("runs") / "headless" / f"matrix_{stamp}").resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -196,6 +197,8 @@ def main() -> int:
             args.seeds = "0-4"
         if not user_set_episodes:
             args.episodes = 2
+        if not user_set_seed_step:
+            args.seed_step = 1000
     elif str(args.preset).strip() == "hero_full10":
         # Full canonical 10-task suite for paper-scale reporting.
         if not user_set_tasks:
@@ -208,6 +211,8 @@ def main() -> int:
             args.seeds = "0-9"
         if not user_set_episodes:
             args.episodes = 2
+        if not user_set_seed_step:
+            args.seed_step = 1000
     elif str(args.preset).strip() == "paper_v1":
         # Paper-facing preset: avoid artificial success inflation from multi-agent "min distance" success
         # definitions by running canonical single-agent tasks with N=1.
@@ -221,6 +226,8 @@ def main() -> int:
             args.seeds = "0-9"
         if not user_set_episodes:
             args.episodes = 2
+        if not user_set_seed_step:
+            args.seed_step = 1000
 
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     diffs = [d.strip() for d in args.difficulties.split(",") if d.strip()]
