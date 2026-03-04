@@ -167,7 +167,7 @@ class LLMPlanner:
         sys_txt = (
             "You are a planner for multi-agent underwater cleanup. "
             "Your job is to assign each agent to a cleanup source index.\n"
-            "Return ONLY valid JSON with keys: assign (list[int]), rationale (string).\n"
+            "Return ONLY valid JSON with key: assign (list[int]). Do NOT include code fences.\n"
             "Rules: length(assign)=N; each value is -1 or an integer in [0,S-1]; do not assign DONE sources."
         )
         user_txt = (
@@ -200,7 +200,7 @@ class LLMPlanner:
         if valid is None:
             self._cached_put(key, {"error": "schema_failed", "raw": decoded, "parsed": parsed})
             return None
-        out_obj = {"assign": valid, "rationale": str(parsed.get("rationale", ""))}
+        out_obj = {"assign": valid}
         self._cached_put(key, out_obj)
         return valid
 
@@ -252,7 +252,7 @@ class LLMPlanner:
         sys_txt = (
             "You are a planner for multi-agent underwater search.\n"
             "Assign each agent a waypoint index along a path so agents spread out to cover the path.\n"
-            "Return ONLY valid JSON with keys: assign_wp (list[int]), rationale (string).\n"
+            "Return ONLY valid JSON with key: assign_wp (list[int]). Do NOT include code fences.\n"
             "Rules: length(assign_wp)=N; each value is an integer in [0,K-1]."
         )
         user_txt = (
@@ -285,7 +285,7 @@ class LLMPlanner:
         if valid is None:
             self._cached_put(key, {"error": "schema_failed", "raw": decoded, "parsed": parsed})
             return None
-        out_obj = {"assign_wp": valid, "rationale": str(parsed.get("rationale", ""))}
+        out_obj = {"assign_wp": valid}
         self._cached_put(key, out_obj)
         return valid
 
