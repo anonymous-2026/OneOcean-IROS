@@ -188,19 +188,48 @@ Legend:
 - `E`: mean energy proxy
 - `Viol`: mean constraint violations (per-episode)
 
-**Pollution-related metrics (selected tasks; from per-episode `metrics.json` → `final.*`):**
+**Task-specific metrics (official FINAL 6DoF suite; aggregated from per-episode `metrics.json` → `final.*`):**
 
-| task | diff | N | eps | SR | Tsucc | sources_done_frac | leaks_detected_mean | probe_mean_final |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| surface_pollution_cleanup_multiagent | medium | 10 | 20 | 100.0% | 168.3 | 1.00 |  | 0.020918 |
-| surface_pollution_cleanup_multiagent | hard | 10 | 20 | 85.0% | 256.2 | 0.97 |  | 0.037470 |
-| pipeline_inspection_leak_detection | medium | 8 | 20 | 100.0% | 261.1 |  | 3.00 | 0.004606 |
-| pipeline_inspection_leak_detection | hard | 8 | 20 | 100.0% | 303.3 |  | 4.00 | 0.053023 |
+Navigation / tracking:
+
+| task | diff | N | eps | SR | Tsucc_mean | Tsucc_std | best_dist_goal_m_mean | best_dist_goal_m_std | best_dist_wp_m_mean | best_dist_wp_m_std | wp_idx_mean | wp_total | depth_abs_err_m_mean | depth_abs_err_m_std | hold_counter_mean |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| go_to_goal_current | medium | 8 | 20 | 100.0% | 97.3 | 43.1 | 5.676 | 0.336 |  |  |  |  |  |  |  |
+| go_to_goal_current | hard | 8 | 20 | 100.0% | 114.5 | 66.4 | 3.205 | 0.187 |  |  |  |  |  |  |  |
+| station_keeping | medium | 8 | 20 | 100.0% | 129.2 | 32.8 | 0.646 | 0.167 |  |  |  |  |  |  | 40.0 |
+| station_keeping | hard | 8 | 20 | 100.0% | 151.6 | 33.3 | 0.644 | 0.184 |  |  |  |  |  |  | 60.0 |
+| route_following_waypoints | medium | 8 | 20 | 100.0% | 192.2 | 48.2 |  |  | 5.507 | 0.205 | 6.00 | 7 |  |  |  |
+| route_following_waypoints | hard | 8 | 20 | 100.0% | 340.4 | 61.1 |  |  | 3.184 | 0.181 | 8.00 | 9 |  |  |  |
+| depth_profile_tracking | medium | 8 | 20 | 100.0% | 199.6 | 54.2 |  |  | 6.544 | 0.286 | 6.00 | 7 | 2.243 | 0.635 |  |
+| depth_profile_tracking | hard | 8 | 20 | 100.0% | 311.3 | 49.3 |  |  | 4.692 | 0.149 | 8.00 | 9 | 1.218 | 0.397 |  |
+
+Multi-agent semantics:
+
+| task | diff | N | eps | SR | coverage_mean | coverage_std | cells_visited_mean | cells_total | formation_err_m_mean | formation_err_m_std | formation_max_err_m_mean | fish_progress_mean | fish_progress_std | fish_dist_goal_xz_m_mean | lift_attached_count_mean |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| area_scan_terrain_recon | medium | 8 | 20 | 100.0% | 0.808 | 0.006 | 206.8 | 256 |  |  |  |  |  |  |  |
+| area_scan_terrain_recon | hard | 8 | 20 | 5.0% | 0.752 | 0.048 | 548.6 | 729 |  |  |  |  |  |  |  |
+| formation_transit_multiagent | medium | 10 | 20 | 95.0% |  |  |  |  | 8.708 | 1.802 | 9.793 |  |  |  |  |
+| formation_transit_multiagent | hard | 10 | 20 | 50.0% |  |  |  |  | 8.684 | 5.090 | 17.946 |  |  |  |  |
+| fish_herding_8uuv | medium | 8 | 20 | 100.0% |  |  |  |  |  |  |  | 0.822 | 0.100 | 23.63 |  |
+| fish_herding_8uuv | hard | 8 | 20 | 100.0% |  |  |  |  |  |  |  | 0.870 | 0.085 | 17.51 |  |
+| underwater_pollution_lift_5uuv | medium | 5 | 20 | 75.0% |  |  |  |  |  |  |  |  |  |  | 5.00 |
+| underwater_pollution_lift_5uuv | hard | 5 | 20 | 75.0% |  |  |  |  |  |  |  |  |  |  | 5.00 |
+
+Pollution / detection:
+
+| task | diff | N | eps | SR | Tsucc_mean | sources_done_frac_mean | sources_done_frac_std | mean_source_progress_s_mean | leaks_detected_mean | leaks_total | t_first_detect_s_mean | t_first_detect_s_std | probe_mean_final_mean |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| surface_pollution_cleanup_multiagent | medium | 10 | 20 | 100.0% | 168.3 | 1.000 | 0.000 | 4.00 |  |  |  |  | 0.020918 |
+| surface_pollution_cleanup_multiagent | hard | 10 | 20 | 85.0% | 256.2 | 0.970 | 0.073 | 3.88 |  |  |  |  | 0.037470 |
+| pipeline_inspection_leak_detection | medium | 8 | 20 | 100.0% | 261.1 |  |  |  | 3.00 | 3 | 136.4 | 46.7 | 0.004606 |
+| pipeline_inspection_leak_detection | hard | 8 | 20 | 100.0% | 303.3 |  |  |  | 4.00 | 4 | 115.3 | 63.7 | 0.053023 |
 
 Notes:
-- `probe_mean_final` is the **final-step** pollution probe mean recorded in `metrics.json` (lower is better; units inherit from the pollution model configuration).
-- `sources_done_frac` is `sources_done / sources_total` at the end of the episode (cleanup task).
-- `leaks_detected_mean` is the mean number of detected leaks at episode end (pipeline task).
+- `Tsucc_*` is computed over successful episodes only; other stats above are over all episodes.
+- `probe_mean_final_*` is the final-step pollution probe mean recorded in `metrics.json` (units inherit from the pollution model configuration).
+- For `area_scan_terrain_recon`, coverage is `cells_visited / cells_total` at termination (success threshold is implemented in the task config; hard here often hits time limit with coverage ≈0.75).
+- For `underwater_pollution_lift_5uuv`, `lift_attached_count_mean` reflects attachments only; success depends on the task’s surface proxy condition (see task definition), so attached=5 does not imply success.
 
 ### 4.2 Official FINAL scaling sweep (6DoF; multi-agent scaling evidence)
 
