@@ -74,6 +74,7 @@ def compute_actions(
     positions_xyz: np.ndarray,
     goal_xyz: np.ndarray,
     pollution_probe: np.ndarray,
+    local_currents_xyz: np.ndarray | None = None,
     rng: np.random.Generator,
     task_kind: str | None = None,
 ) -> np.ndarray:
@@ -89,6 +90,12 @@ def compute_actions(
     else:
         raise ValueError(f"goal_xyz must be shape (3,) or (N,3); got {goal_arr.shape} (N={n})")
     probe = np.asarray(pollution_probe, dtype=np.float64).reshape(n)
+    cur = np.zeros((n, 3), dtype=np.float64)
+    if local_currents_xyz is not None:
+        try:
+            cur = np.asarray(local_currents_xyz, dtype=np.float64).reshape(n, 3)
+        except Exception:
+            cur = np.zeros((n, 3), dtype=np.float64)
 
     actions = np.zeros((n, 3), dtype=np.float64)
     if cfg.kind in ("go_to_goal", "station_keep"):
@@ -166,14 +173,16 @@ def compute_actions(
         if kind in task_vocab:
             onehot[task_vocab.index(kind)] = 1.0
 
-        # Build features per agent: [goal_delta(3), depth_y(1), probe(1), task_onehot]
-        feats = np.zeros((n, 5 + len(task_vocab)), dtype=np.float32)
+        # Build features per agent: [goal_delta(3), depth_y(1), probe(1), local_current_xz(2), task_onehot]
+        feats = np.zeros((n, 7 + len(task_vocab)), dtype=np.float32)
         for i in range(n):
             d = goal[i] - pos[i]
             feats[i, 0:3] = d.astype(np.float32)
             feats[i, 3] = float(pos[i, 1])
             feats[i, 4] = float(probe[i])
-            feats[i, 5:] = onehot
+            feats[i, 5] = float(cur[i, 0])
+            feats[i, 6] = float(cur[i, 2])
+            feats[i, 7:] = onehot
         pred = _bc_forward(w, feats)
         for i in range(n):
             actions[i] = _clip_speed(pred[i].astype(np.float64), cfg.max_speed_mps)

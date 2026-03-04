@@ -784,12 +784,20 @@ class HeadlessOceanEnv:
                         goals[ai] = wps[ii]
                     goal = goals
 
+        # Currents are part of the environment state; sample them before computing actions so learned controllers
+        # (e.g., BC) can condition on local flow.
+        currents = np.zeros((self.n_agents, 3), dtype=np.float64)
+        for i in range(self.n_agents):
+            cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
+            currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
+
         act = compute_actions(
             self.controller_cfg,
             step_index=step_i,
             positions_xyz=self._positions,
             goal_xyz=goal,
             pollution_probe=probe,
+            local_currents_xyz=currents,
             rng=self.rng,
             task_kind=str(self.task_cfg.kind),
         )
@@ -799,8 +807,7 @@ class HeadlessOceanEnv:
             if sp > float(self.cfg.max_speed_mps):
                 act[i] = act[i] * (float(self.cfg.max_speed_mps) / sp)
 
-        # Currents and state update.
-        currents = np.zeros((self.n_agents, 3), dtype=np.float64)
+        # State update.
         lat_arr = np.zeros((self.n_agents,), dtype=np.float64)
         lon_arr = np.zeros((self.n_agents,), dtype=np.float64)
         elev_arr = np.zeros((self.n_agents,), dtype=np.float64)
@@ -808,10 +815,6 @@ class HeadlessOceanEnv:
         lo, hi = self.bounds_xyz
         dt = float(self.cfg.dt_s)
         mode = str(self.cfg.dynamics_model)
-
-        for i in range(self.n_agents):
-            cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
-            currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
 
         if mode == "kinematic":
             for i in range(self.n_agents):

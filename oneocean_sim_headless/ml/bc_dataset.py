@@ -132,7 +132,7 @@ def build_bc_dataset(
                 dx, dy, dz = (gx - x), (gy - y), (gz - z)
                 feat = np.concatenate(
                     [
-                        np.array([dx, dy, dz, y, probe], dtype=np.float32),
+                        np.array([dx, dy, dz, y, probe, cx, cz], dtype=np.float32),
                         task_oh.astype(np.float32),
                     ],
                     axis=0,
@@ -149,14 +149,14 @@ def build_bc_dataset(
         if max_samples and used_rows >= int(max_samples):
             break
 
-    x = np.stack(xs, axis=0) if xs else np.zeros((0, 5 + len(task_vocab)), dtype=np.float32)
+    x = np.stack(xs, axis=0) if xs else np.zeros((0, 7 + len(task_vocab)), dtype=np.float32)
     y = np.stack(ys, axis=0) if ys else np.zeros((0, 3), dtype=np.float32)
     meta_out = {
         "schema": "bc_dataset_v1",
         "run_dirs": used_runs,
         "task_vocab": task_vocab,
         "n_samples": int(x.shape[0]),
-        "note": "Features=[goal_delta(3) from PRE-step pose, depth_y(1), probe(1), task_onehot]; Targets=[action_xyz].",
+        "note": "Features=[goal_delta(3) from PRE-step pose, depth_y(1), probe(1), local_current_xz(2), task_onehot]; Targets=[action_xyz].",
         "semantics_goal_source": "environment_samples/semantics.jsonl:goal_for_action_xyz",
         "max_samples": int(max_samples),
     }
