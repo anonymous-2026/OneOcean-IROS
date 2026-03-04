@@ -150,9 +150,9 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=6.0 if d == "easy" else 3.5 if d == "medium" else 2.0,
-            max_steps=240 if d == "easy" else 320 if d == "medium" else 420,
-            hold_steps=30 if d == "easy" else 60 if d == "medium" else 90,
+            success_radius_m=6.0 if d == "easy" else 3.0 if d == "medium" else 1.5,
+            max_steps=260 if d == "easy" else 360 if d == "medium" else 520,
+            hold_steps=35 if d == "easy" else 90 if d == "medium" else 160,
         )
     if kind == "pollution_localization":
         return TaskConfig(
@@ -227,19 +227,21 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=8.0,
             # Needs to be large enough to traverse a lawnmower grid; keep generous for headless replay.
-            max_steps=1200 if d == "easy" else 1600 if d == "medium" else 2200,
-            scan_cell_size_m=120.0 if d == "easy" else 100.0 if d == "medium" else 80.0,
-            scan_target_coverage=0.55 if d == "easy" else 0.65 if d == "medium" else 0.75,
-            scan_radius_m=100.0 if d == "easy" else 80.0 if d == "medium" else 60.0,
+            max_steps=1100 if d == "easy" else 1400 if d == "medium" else 1600,
+            scan_cell_size_m=110.0 if d == "easy" else 80.0 if d == "medium" else 60.0,
+            scan_target_coverage=0.55 if d == "easy" else 0.70 if d == "medium" else 0.52,
+            # With rr computed via floor(scan_radius/cell), keeping radius < cell yields rr=0 (one-cell footprint).
+            scan_radius_m=40.0 if d == "easy" else 35.0 if d == "medium" else 30.0,
         )
     if kind == "pipeline_inspection_leak_detection":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
             success_radius_m=7.0 if d == "easy" else 5.0 if d == "medium" else 4.0,
-            max_steps=900 if d == "easy" else 1500 if d == "medium" else 2400,
-            pipeline_leaks_n=3 if d == "easy" else 5 if d == "medium" else 7,
-            pipeline_detect_radius_m=12.0 if d == "easy" else 9.0 if d == "medium" else 6.0,
+            max_steps=900 if d == "easy" else 1400 if d == "medium" else 1600,
+            waypoints_n=8 if d == "easy" else 12 if d == "medium" else 16,
+            pipeline_leaks_n=3 if d == "easy" else 6 if d == "medium" else 6,
+            pipeline_detect_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
         )
     raise ValueError(f"Unknown task kind: {kind}")
 
@@ -548,7 +550,7 @@ def compute_success(
         h, w = task_state.scan_grid_hw
         cell = float(cfg.scan_cell_size_m)
         # A scan covers an area around each vehicle (proxy for a sonar/FOV footprint).
-        rr = int(max(0, math.ceil(float(cfg.scan_radius_m) / max(1e-9, cell))))
+        rr = int(max(0, math.floor(float(cfg.scan_radius_m) / max(1e-9, cell))))
         for ai in range(n_agents):
             x = float(pos[ai, 0])
             z = float(pos[ai, 2])
