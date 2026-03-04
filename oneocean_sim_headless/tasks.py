@@ -219,7 +219,7 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             success_radius_m=20.0 if d == "easy" else 12.0 if d == "medium" else 7.0,
             max_steps=600 if d == "easy" else 900 if d == "medium" else 1200,
             fish_count=80 if d == "easy" else 140 if d == "medium" else 160,
-            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.936,
+            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.9384,
         )
     if kind == "area_scan_terrain_recon":
         return TaskConfig(
