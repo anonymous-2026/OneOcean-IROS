@@ -92,109 +92,109 @@ Table conventions:
 
 ## 5) Selected paper-ready numeric evidence
 
-### 5.1 Baseline controller (paper_v1; 6DoF; medium+hard)
+### 5.1 Baseline controller (paper_v1; 6DoF; medium+hard) — **current**
 
-- Run root: `runs/headless/V15PAPER_paper_v1_6dof_baseline_mh_bathyhard_20260305_060047_farm/`
-- Summary CSV: `runs/headless/V15PAPER_paper_v1_6dof_baseline_mh_bathyhard_20260305_060047_farm/summary.csv`
-- Seeds/episodes: `seeds=0..9`, `episodes=1` (10 episodes per task×difficulty)
+This supersedes older V15/V17 tables: task knobs were retuned to avoid saturated hard results and to better reflect multi-agent difficulty.
+
+- Run root: `runs/headless/V24PAPER_paper_v1_6dof_heuristic_mh_bathyhard_20260305_065933_farm/`
+- Summary CSV: `runs/headless/V24PAPER_paper_v1_6dof_heuristic_mh_bathyhard_20260305_065933_farm/summary.csv`
+- Seeds/episodes: `seeds=0..9`, `episodes=2` (20 episodes per task×difficulty)
 
 | task | diff | N | eps | SR | Tsucc_s (succ only) | E_mean | Viol_mean |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| area_scan_terrain_recon | hard | 1 | 10 | 40.0% | 2499.8 | 3643.1 | 0.0 |
-| area_scan_terrain_recon | medium | 1 | 10 | 90.0% | 1702.7 | 2523.5 | 0.0 |
-| depth_profile_tracking | hard | 1 | 10 | 100.0% | 634.6 | 913.8 | 0.0 |
-| depth_profile_tracking | medium | 1 | 10 | 100.0% | 293.7 | 422.9 | 0.0 |
-| fish_herding_8uuv | hard | 8 | 10 | 0.0% |  | 6673.3 | 0.0 |
-| fish_herding_8uuv | medium | 8 | 10 | 100.0% | 190.7 | 1813.3 | 0.0 |
-| formation_transit_multiagent | hard | 10 | 10 | 20.0% | 365.0 | 6263.8 | 0.0 |
-| formation_transit_multiagent | medium | 10 | 10 | 100.0% | 218.5 | 3146.4 | 0.0 |
-| go_to_goal_current | hard | 1 | 10 | 90.0% | 218.7 | 335.2 | 0.0 |
-| go_to_goal_current | medium | 1 | 10 | 90.0% | 154.0 | 239.9 | 0.0 |
-| pipeline_inspection_leak_detection | hard | 1 | 10 | 10.0% | 585.0 | 1677.0 | 0.0 |
-| pipeline_inspection_leak_detection | medium | 1 | 10 | 100.0% | 549.2 | 790.8 | 0.0 |
-| route_following_waypoints | hard | 1 | 10 | 90.0% | 490.6 | 727.9 | 0.0 |
-| route_following_waypoints | medium | 1 | 10 | 100.0% | 251.8 | 362.6 | 0.0 |
-| station_keeping | hard | 1 | 10 | 70.0% | 163.3 | 185.8 | 0.0 |
-| station_keeping | medium | 1 | 10 | 100.0% | 90.0 | 55.7 | 0.0 |
-| surface_pollution_cleanup_multiagent | hard | 10 | 10 | 30.0% | 365.7 | 5571.0 | 0.0 |
-| surface_pollution_cleanup_multiagent | medium | 10 | 10 | 80.0% | 344.9 | 6016.2 | 0.0 |
-| underwater_pollution_lift_5uuv | hard | 5 | 10 | 90.0% | 96.2 | 600.4 | 0.0 |
-| underwater_pollution_lift_5uuv | medium | 5 | 10 | 90.0% | 96.2 | 530.2 | 0.0 |
+| area_scan_terrain_recon | hard | 1 | 20 | 15.0% | 1619.7 | 2430.6 | 0.00 |
+| area_scan_terrain_recon | medium | 1 | 20 | 90.0% | 1731.7 | 2532.2 | 0.00 |
+| depth_profile_tracking | hard | 1 | 20 | 50.0% | 606.3 | 954.9 | 0.00 |
+| depth_profile_tracking | medium | 1 | 20 | 85.0% | 379.9 | 586.0 | 0.00 |
+| fish_herding_8uuv | hard | 8 | 20 | 0.0% |  | 6487.4 | 0.00 |
+| fish_herding_8uuv | medium | 8 | 20 | 95.0% | 240.0 | 2441.1 | 0.00 |
+| formation_transit_multiagent | hard | 10 | 20 | 20.0% | 379.5 | 6338.9 | 0.00 |
+| formation_transit_multiagent | medium | 10 | 20 | 100.0% | 225.1 | 3241.4 | 0.00 |
+| go_to_goal_current | hard | 1 | 20 | 75.0% | 193.5 | 317.0 | 0.00 |
+| go_to_goal_current | medium | 1 | 20 | 95.0% | 159.2 | 238.0 | 0.00 |
+| pipeline_inspection_leak_detection | hard | 1 | 20 | 30.0% | 781.7 | 1628.0 | 0.00 |
+| pipeline_inspection_leak_detection | medium | 1 | 20 | 100.0% | 499.6 | 719.4 | 0.00 |
+| route_following_waypoints | hard | 1 | 20 | 55.0% | 504.4 | 762.3 | 0.00 |
+| route_following_waypoints | medium | 1 | 20 | 85.0% | 313.8 | 483.5 | 0.00 |
+| station_keeping | hard | 1 | 20 | 15.0% | 300.7 | 339.6 | 0.00 |
+| station_keeping | medium | 1 | 20 | 100.0% | 110.0 | 70.4 | 0.00 |
+| surface_pollution_cleanup_multiagent | hard | 10 | 20 | 10.0% | 840.5 | 12314.3 | 0.00 |
+| surface_pollution_cleanup_multiagent | medium | 10 | 20 | 85.0% | 388.9 | 6289.4 | 0.00 |
+| underwater_pollution_lift_5uuv | hard | 5 | 20 | 20.0% | 496.8 | 1973.1 | 0.00 |
+| underwater_pollution_lift_5uuv | medium | 5 | 20 | 20.0% | 439.2 | 1840.4 | 0.00 |
 
-### 5.2 Option A (MLP BC) learned baseline (end-to-end; 6DoF; medium+hard)
+### 5.2 Option A (MLP BC) learned baseline (end-to-end; 6DoF; medium+hard) — **current**
 
 Dense demos (for BC dataset):
-- `runs/headless/V16PAPER_paper_v1_6dof_demos_rec5_20260305_060125_farm/`
+- `runs/headless/V26DEMOS_paper_v1_6dof_heuristic_rec5_20260305_070150_farm/`
 
 BC dataset:
-- `runs/headless/_models/bc_dataset_paper_v1_20260305_060141/bc_dataset_v1.npz`
-- `runs/headless/_models/bc_dataset_paper_v1_20260305_060141/bc_dataset_v1_meta.json`
+- `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/bc_dataset_v1.npz`
+- `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/bc_dataset_v1_meta.json`
 
 BC weights:
-- `runs/headless/_models/bc_mlp_paper_v1_20260305_060151/bc_mlp_v1_weights.npz`
+- `runs/headless/_models/bc_mlp_paper_v1_curfeat_20260305_073510/bc_mlp_v1_weights.npz`
 
 BC evaluation suite:
-- Run root: `runs/headless/V17PAPER_paper_v1_6dof_mlp_bc_mh_20260305_060234_farm/`
-- Summary CSV: `runs/headless/V17PAPER_paper_v1_6dof_mlp_bc_mh_20260305_060234_farm/summary.csv`
+- Run root: `runs/headless/V34PAPER_paper_v1_6dof_mlp_bc_curfeat_mh_bathyhard_20260305_073530_farm/`
+- Summary CSV: `runs/headless/V34PAPER_paper_v1_6dof_mlp_bc_curfeat_mh_bathyhard_20260305_073530_farm/summary.csv`
 
 | task | diff | N | eps | SR | Tsucc_s (succ only) | E_mean | Viol_mean |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| area_scan_terrain_recon | hard | 1 | 10 | 0.0% |  | 1501.1 | 0.0 |
-| area_scan_terrain_recon | medium | 1 | 10 | 60.0% | 1922.2 | 1421.5 | 0.0 |
-| depth_profile_tracking | hard | 1 | 10 | 0.0% |  | 71.8 | 0.0 |
-| depth_profile_tracking | medium | 1 | 10 | 0.0% |  | 48.6 | 0.0 |
-| fish_herding_8uuv | hard | 8 | 10 | 10.0% | 542.0 | 1452.5 | 0.0 |
-| fish_herding_8uuv | medium | 8 | 10 | 100.0% | 221.2 | 196.6 | 0.0 |
-| formation_transit_multiagent | hard | 10 | 10 | 0.0% |  | 3847.3 | 0.0 |
-| formation_transit_multiagent | medium | 10 | 10 | 40.0% | 217.8 | 2288.1 | 0.0 |
-| go_to_goal_current | hard | 1 | 10 | 20.0% | 243.5 | 221.8 | 0.0 |
-| go_to_goal_current | medium | 1 | 10 | 20.0% | 199.5 | 130.0 | 0.0 |
-| pipeline_inspection_leak_detection | hard | 1 | 10 | 0.0% |  | 304.0 | 0.0 |
-| pipeline_inspection_leak_detection | medium | 1 | 10 | 40.0% | 973.0 | 291.7 | 0.0 |
-| route_following_waypoints | hard | 1 | 10 | 0.0% |  | 37.1 | 0.0 |
-| route_following_waypoints | medium | 1 | 10 | 0.0% |  | 26.8 | 0.0 |
-| station_keeping | hard | 1 | 10 | 0.0% |  | 6.0 | 0.0 |
-| station_keeping | medium | 1 | 10 | 0.0% |  | 4.6 | 0.0 |
-| surface_pollution_cleanup_multiagent | hard | 10 | 10 | 0.0% |  | 1304.6 | 0.0 |
-| surface_pollution_cleanup_multiagent | medium | 10 | 10 | 0.0% |  | 1025.2 | 0.0 |
-| underwater_pollution_lift_5uuv | hard | 5 | 10 | 100.0% | 27.0 | 58.1 | 0.0 |
-| underwater_pollution_lift_5uuv | medium | 5 | 10 | 100.0% | 27.0 | 58.1 | 0.0 |
+| area_scan_terrain_recon | hard | 1 | 20 | 5.0% | 1681.0 | 2037.5 | 0.00 |
+| area_scan_terrain_recon | medium | 1 | 20 | 85.0% | 1797.4 | 1988.8 | 0.00 |
+| depth_profile_tracking | hard | 1 | 20 | 0.0% |  | 260.5 | 0.00 |
+| depth_profile_tracking | medium | 1 | 20 | 55.0% | 465.0 | 302.1 | 0.00 |
+| fish_herding_8uuv | hard | 8 | 20 | 5.0% | 381.0 | 1644.5 | 0.00 |
+| fish_herding_8uuv | medium | 8 | 20 | 100.0% | 258.1 | 544.6 | 0.00 |
+| formation_transit_multiagent | hard | 10 | 20 | 0.0% |  | 4670.3 | 0.00 |
+| formation_transit_multiagent | medium | 10 | 20 | 40.0% | 230.2 | 2963.9 | 0.00 |
+| go_to_goal_current | hard | 1 | 20 | 35.0% | 207.6 | 214.3 | 0.00 |
+| go_to_goal_current | medium | 1 | 20 | 45.0% | 160.2 | 140.6 | 0.00 |
+| pipeline_inspection_leak_detection | hard | 1 | 20 | 10.0% | 1109.0 | 760.4 | 0.00 |
+| pipeline_inspection_leak_detection | medium | 1 | 20 | 100.0% | 629.8 | 429.5 | 0.00 |
+| route_following_waypoints | hard | 1 | 20 | 0.0% |  | 142.5 | 0.00 |
+| route_following_waypoints | medium | 1 | 20 | 20.0% | 383.0 | 176.0 | 0.00 |
+| station_keeping | hard | 1 | 20 | 0.0% |  | 10.7 | 0.00 |
+| station_keeping | medium | 1 | 20 | 0.0% |  | 9.4 | 0.00 |
+| surface_pollution_cleanup_multiagent | hard | 10 | 20 | 0.0% |  | 6136.1 | 0.00 |
+| surface_pollution_cleanup_multiagent | medium | 10 | 20 | 45.0% | 507.1 | 6241.6 | 0.00 |
+| underwater_pollution_lift_5uuv | hard | 5 | 20 | 5.0% | 146.0 | 75.0 | 0.00 |
+| underwater_pollution_lift_5uuv | medium | 5 | 20 | 90.0% | 83.1 | 58.8 | 0.00 |
 
-### 5.3 LLM high-level planner pilot (pool triage; seeds 0–1; 14B excluded)
+### 5.3 LLM high-level planner pilot (pipeline-only; hard; seeds 0–2; 14B + OLMo excluded)
 
-This is a pilot to ensure the “LLM-as-high-level planner” wiring is runnable on local open-source models.
-LLM calls are **schema-validated + cached**, and failures fall back to deterministic non-LLM assignments
-so runs still finish and produce `summary.csv`.
+Pilot goal: demonstrate that the benchmark can differentiate an LLM high-level planner on a planning-sensitive multi-agent task.
 
-Run roots (each contains `summary.csv`):
-- `runs/headless/V10PAPER_paper_v1_llm_pool_s0-1_20260305_051331/` (llama3/mistral/qwen2/qwen2.5)
-- `runs/headless/V12PAPER_paper_v1_llm_pending_s0-1_20260305_053838/` (chatglm3/olmo)
-- `runs/headless/V14PAPER_paper_v1_llm_glm4_llama2_strideHuge_s0-1_20260305_054913/` (glm4/llama2)
+- Run root: `runs/headless/V32PILOT_paper_v1_llm_pipelineOnly_hard_s0-2_20260305_072659/`
+- Preset: `paper_v1_llm` (pipeline runs with `N=8`)
+- Task: `pipeline_inspection_leak_detection` (hard)
+- Seeds/episodes: seeds 0–2, episodes=1 (3 episodes per model)
 
-Hard-SR snapshot (per model; seeds 0–1; **not** a paper main table, just triage signal):
+Table: SR + mean leaks detected (final state) + time-to-success (successful eps only).
 
-| model | cleanup_hard | formation_hard | fish_hard | scan_hard | pipeline_hard |
-| --- | --- | --- | --- | --- | --- |
-| llama3_8b | 50% | 50% | 0% | 0% | 0% |
-| mistral7b | 50% | 50% | 0% | 0% | 0% |
-| qwen2_7b | 0% | 50% | 0% | 0% | 0% |
-| qwen2p5_7b | 0% | 50% | 0% | 0% | 0% |
-| chatglm3_6b | 50% | 50% | 0% | 0% | 0% |
-| olmo7b | 50% | 50% | 0% | 0% | 0% |
-| glm4_9b | 50% | 50% | 0% | 0% | 0% |
-| llama2_7b | 50% | 50% | 0% | 0% | 0% |
+| model | eps | SR | leaks_detected_mean | Tsucc_s (succ only) |
+| --- | --- | --- | --- | --- |
+| heuristic | 3 | 0.0% | 5.67 |  |
+| llm_chatglm3_6b | 3 | 0.0% | 5.67 |  |
+| llm_glm4_9b | 3 | 0.0% | 1.33 |  |
+| llm_llama2_7b | 3 | 0.0% | 1.33 |  |
+| llm_llama3_8b | 3 | 0.0% | 3.33 |  |
+| llm_mistral7b | 3 | 0.0% | 5.00 |  |
+| llm_qwen2_7b | 3 | 0.0% | 6.00 |  |
+| llm_qwen2p5_7b | 3 | 33.3% | 6.67 | 1448.0 |
 
 ---
 
 ## 6) Cleanup guidance (post-verification)
 
 Keep (paper-relevant):
-- `runs/headless/V15PAPER_paper_v1_6dof_baseline_mh_bathyhard_20260305_060047_farm/`
-- `runs/headless/V16PAPER_paper_v1_6dof_demos_rec5_20260305_060125_farm/`
-- `runs/headless/_models/bc_dataset_paper_v1_20260305_060141/`
-- `runs/headless/_models/bc_mlp_paper_v1_20260305_060151/`
-- `runs/headless/V17PAPER_paper_v1_6dof_mlp_bc_mh_20260305_060234_farm/`
-- LLM triage roots: `V10PAPER_*`, `V12PAPER_*`, `V14PAPER_*`
+- Baseline: `runs/headless/V24PAPER_paper_v1_6dof_heuristic_mh_bathyhard_20260305_065933_farm/`
+- Dense demos: `runs/headless/V26DEMOS_paper_v1_6dof_heuristic_rec5_20260305_070150_farm/`
+- BC dataset: `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/`
+- BC weights: `runs/headless/_models/bc_mlp_paper_v1_curfeat_20260305_073510/`
+- BC eval: `runs/headless/V34PAPER_paper_v1_6dof_mlp_bc_curfeat_mh_bathyhard_20260305_073530_farm/`
+- LLM pilot: `runs/headless/V32PILOT_paper_v1_llm_pipelineOnly_hard_s0-2_20260305_072659/`
 
 Safe to delete after verification:
 - calibration-only roots under `runs/headless/_calib_*`
