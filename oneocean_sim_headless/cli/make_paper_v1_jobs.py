@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--llm-max-new-tokens", type=int, default=192)
     ap.add_argument("--no-llm", action="store_true", help="Skip LLM jobs (heuristic/BC only).")
     ap.add_argument("--skip-14b", action="store_true", help="Skip Qwen2.5-14B (often too large for concurrent GPUs).")
+    ap.add_argument("--skip-olmo", action="store_true", help="Skip OLMo (requires extra hf_olmo package).")
     return ap.parse_args()
 
 
@@ -122,6 +123,8 @@ def main() -> int:
             ("qwen2p5_14b", "/data/shared/user2/models/Qwen2.5-14B-Instruct"),
         ]
         for mid, mpath in models:
+            if bool(args.skip_olmo) and str(mid) == "olmo7b":
+                continue
             if bool(args.skip_14b) and str(mid) == "qwen2p5_14b":
                 continue
             cache_dir = ""
