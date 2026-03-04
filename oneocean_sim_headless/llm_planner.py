@@ -56,6 +56,49 @@ class LLMPlanner:
         self._model = model
         _GLOBAL_MODEL_CACHE[mp] = (tok, model)
 
+    def _generate_text(self, prompt: str) -> str:
+        """Best-effort deterministic text generation across heterogeneous HF/remote-code chat models."""
+        self._ensure_model()
+        assert self._tok is not None and self._model is not None
+
+        tok = self._tok
+        model = self._model
+
+        # Some remote-code chat models (notably ChatGLM variants) implement a custom `.chat` interface and
+        # can be incompatible with transformers' generation cache helpers. Prefer `.chat` when available.
+        if hasattr(model, "chat"):
+            try:
+                # Common signature: chat(tokenizer, query, history=[])
+                out = model.chat(tok, str(prompt), history=[])  # type: ignore[attr-defined]
+                if isinstance(out, tuple) and out:
+                    return str(out[0])
+                return str(out)
+            except Exception:
+                try:
+                    out = model.chat(tok, str(prompt))  # type: ignore[attr-defined]
+                    if isinstance(out, tuple) and out:
+                        return str(out[0])
+                    return str(out)
+                except Exception:
+                    # Fall through to .generate()
+                    pass
+
+        import torch
+
+        inputs = tok(str(prompt), return_tensors="pt")
+        if torch.cuda.is_available():
+            inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        with torch.inference_mode():
+            out = model.generate(
+                **inputs,
+                max_new_tokens=int(self.cfg.max_new_tokens),
+                do_sample=False,
+                top_p=1.0,
+                top_k=0,
+                use_cache=False,
+            )
+        return tok.decode(out[0], skip_special_tokens=True)
+
     def _cache_key(self, payload: dict[str, Any]) -> str:
         b = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         return hashlib.sha256(b).hexdigest()
@@ -136,31 +179,14 @@ class LLMPlanner:
             "Output JSON now."
         )
 
-        tok = self._tok
-        if hasattr(tok, "apply_chat_template"):
-            messages = [{"role": "system", "content": sys_txt}, {"role": "user", "content": user_txt}]
-            text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
-        else:
-            text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
-
-        import torch
-
         try:
-            inputs = tok(text, return_tensors="pt")
-            if torch.cuda.is_available():
-                inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
-            with torch.inference_mode():
-                # use_cache=False is a robustness switch for some remote-code models (e.g., ChatGLM variants)
-                # that can be incompatible with the installed transformers generation cache helpers.
-                out = self._model.generate(
-                    **inputs,
-                    max_new_tokens=int(self.cfg.max_new_tokens),
-                    do_sample=False,
-                    top_p=1.0,
-                    top_k=0,
-                    use_cache=False,
-                )
-            decoded = tok.decode(out[0], skip_special_tokens=True)
+            tok = self._tok
+            if hasattr(tok, "apply_chat_template"):
+                messages = [{"role": "system", "content": sys_txt}, {"role": "user", "content": user_txt}]
+                text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
+            else:
+                text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
+            decoded = self._generate_text(text)
         except Exception as e:
             self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
             return None
@@ -238,29 +264,14 @@ class LLMPlanner:
             "Output JSON now."
         )
 
-        tok = self._tok
-        if hasattr(tok, "apply_chat_template"):
-            messages = [{"role": "system", "content": sys_txt}, {"role": "user", "content": user_txt}]
-            text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
-        else:
-            text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
-
-        import torch
-
         try:
-            inputs = tok(text, return_tensors="pt")
-            if torch.cuda.is_available():
-                inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
-            with torch.inference_mode():
-                out = self._model.generate(
-                    **inputs,
-                    max_new_tokens=int(self.cfg.max_new_tokens),
-                    do_sample=False,
-                    top_p=1.0,
-                    top_k=0,
-                    use_cache=False,
-                )
-            decoded = tok.decode(out[0], skip_special_tokens=True)
+            tok = self._tok
+            if hasattr(tok, "apply_chat_template"):
+                messages = [{"role": "system", "content": sys_txt}, {"role": "user", "content": user_txt}]
+                text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
+            else:
+                text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
+            decoded = self._generate_text(text)
         except Exception as e:
             self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
             return None
@@ -316,15 +327,27 @@ class LLMPlanner:
 
 def _extract_json(text: str) -> Any:
     s = str(text)
-    i = s.find("{")
-    j = s.rfind("}")
-    if i < 0 or j < 0 or j <= i:
-        return None
-    frag = s[i : j + 1]
-    try:
-        return json.loads(frag)
-    except Exception:
-        return None
+    # Scan for balanced {...} blocks and return the last successfully parsed JSON object.
+    last = None
+    depth = 0
+    start = None
+    for i, ch in enumerate(s):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth <= 0:
+                continue
+            depth -= 1
+            if depth == 0 and start is not None:
+                frag = s[start : i + 1]
+                try:
+                    last = json.loads(frag)
+                except Exception:
+                    pass
+                start = None
+    return last
 
 
 _GLOBAL_MODEL_CACHE: dict[str, tuple[Any, Any]] = {}
