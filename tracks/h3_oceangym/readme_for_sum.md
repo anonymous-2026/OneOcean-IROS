@@ -235,27 +235,93 @@ These two screenshots are selected for the paper (user-confirmed as **[Image #1]
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/go_to_goal_current/ep000/nav_viewport_keyframe_040.png`
   - MP4 (same view):
     - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/go_to_goal_current/ep000/nav_viewport.mp4`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/go_to_goal_current/ep000/nav_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/go_to_goal_current/ep000/nav_leftcamera_keyframe_040.png`
 - Pollution localization (third-person GIF + keyframe):
   - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`PierHarbor-HoveringCamera`, task=`surface_pollution_cleanup_multiagent`, variant=`localization`, diff=`easy`, N=`8`, episode=`ep000`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_viewport.gif`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_viewport_keyframe_200.png`
   - MP4 (same view):
     - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_viewport.mp4`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_leftcamera_keyframe_200.png`
 - Pollution containment/cleanup (third-person GIF + keyframe):
   - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`PierHarbor-HoveringCamera`, task=`surface_pollution_cleanup_multiagent`, variant=`containment`, diff=`easy`, N=`8`, episode=`ep000`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport.gif`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport_keyframe_100.png`
   - MP4 (same view):
     - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport.mp4`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_leftcamera_keyframe_100.png`
+- Formation transit (dynamic; third-person GIF + FPV GIF):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`PierHarbor-HoveringCamera`, task=`formation_transit_multiagent`, diff=`easy`, N=`8`, episode=`ep000`
+  - Third-person:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport.mp4`
+  - FPV:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/formation_leftcamera.gif`
 
 ### OpenWater (ep000; easy; N=8 where applicable)
 
 - Navigation (third-person GIF + keyframe):
   - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`go_to_goal_current`, diff=`easy`, N=`1`, episode=`ep000`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_viewport.gif`
-  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_viewport_keyframe_040.png`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_viewport_keyframe_043.png`
   - MP4 (same view):
     - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_viewport.mp4`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/go_to_goal_current/ep000/nav_leftcamera_keyframe_043.png`
+
+- Pollution localization (third-person GIF + keyframe):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`surface_pollution_cleanup_multiagent`, variant=`localization`, diff=`easy`, N=`8`, episode=`ep000`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_viewport.gif`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_viewport_keyframe_200.png`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__localization/ep000/plume_leftcamera_keyframe_200.png`
+- Pollution containment/cleanup (third-person GIF + keyframe):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`surface_pollution_cleanup_multiagent`, variant=`containment`, diff=`easy`, N=`8`, episode=`ep000`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport.gif`
+  - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport_keyframe_100.png`
+  - FPV (LeftCamera; GIF + keyframe):
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_leftcamera_keyframe_100.png`
+
+- Station keeping (third-person GIF + FPV GIF):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`station_keeping`, diff=`easy`, N=`1`, episode=`ep000`
+  - Third-person:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/station_keeping/ep000/station_viewport.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/station_keeping/ep000/station_viewport_keyframe_080.png`
+  - FPV:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/station_keeping/ep000/station_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/station_keeping/ep000/station_leftcamera_keyframe_080.png`
+- Route following (third-person GIF + FPV GIF):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`route_following_waypoints`, diff=`easy`, N=`1`, episode=`ep000`
+  - Third-person:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/route_following_waypoints/ep000/route_viewport.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/route_following_waypoints/ep000/route_viewport_keyframe_119.png`
+  - FPV:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/route_following_waypoints/ep000/route_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/route_following_waypoints/ep000/route_leftcamera_keyframe_119.png`
+- Depth profile tracking (third-person GIF + FPV GIF):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`depth_profile_tracking`, diff=`easy`, N=`1`, episode=`ep000`
+  - Third-person:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/depth_profile_tracking/ep000/depth_viewport.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/depth_profile_tracking/ep000/depth_viewport_keyframe_080.png`
+  - FPV:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/depth_profile_tracking/ep000/depth_leftcamera.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/depth_profile_tracking/ep000/depth_leftcamera_keyframe_080.png`
+- Formation transit (dynamic; third-person GIF + FPV GIF):
+  - Context: run=`h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437`, scenario=`OpenWater-HoveringCamera`, task=`formation_transit_multiagent`, diff=`easy`, N=`8`, episode=`ep000`
+  - Third-person:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport.gif`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport.mp4`
+  - FPV:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/OpenWater-HoveringCamera/formation_transit_multiagent/ep000/formation_leftcamera.gif`
 
 Notes:
 - For every selected item, there is also a matching FPV (`*_leftcamera.*`) in the same folder.
@@ -268,6 +334,25 @@ Notes:
 ## 6) Repro commands (minimal)
 
 All commands assume you are at the repo root: `oneocean(iros-2026-code)/`.
+
+### 6.0 Repro capsule (versions + hashes; for supplement sanity)
+
+- Code:
+  - repo: `oneocean(iros-2026-code)/`
+  - git commit (local): `eea30a92a30c3304238c0868d8e66f7504f51e2a`
+- Runtime (H3 venv):
+  - python: `3.9.25`
+  - `holoocean==2.0.1`
+  - `numpy==2.0.2`
+- Data grounding artifact used by official H3 runs:
+  - file: `oneocean(iros-2026-code)/runs/_cache/data_grounding/currents/cmems_center_uovo.npz`
+  - size: `7.4K`
+  - sha256: `1fe8ca53b2d42ed547af4b4b4819474724c032b07429d2cd1e80586e65482d7f`
+- Storage (run dir sizes on this machine):
+  - hero suite: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/` ≈ `627M`
+  - scaling sweep: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_scaling_formation_easy_ep10_20260303_114936/` ≈ `572K`
+  - PierHarbor-only suite: `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_suite_multidiff_pierharbor_N8_ocpnet_20260303_062633/` ≈ `203M`
+  - scene-only bundle: `oneocean(iros-2026-code)/runs/oceangym_h3/FINAL_scene_media_pierharbor_20260303_062633/` ≈ `103M`
 
 ### Re-run a small smoke (1 task, 1 episode)
 
