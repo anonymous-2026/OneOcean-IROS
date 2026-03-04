@@ -75,6 +75,7 @@ class TaskConfig:
     # surface cleanup
     cleanup_sources_n: int = 4
     cleanup_dwell_s: float = 3.5
+    cleanup_required_agents: int = 1
 
     # pipeline inspection
     pipeline_leaks_n: int = 3
@@ -82,6 +83,7 @@ class TaskConfig:
 
     # fish herding
     fish_count: int = 60
+    fish_target_progress: float = 1.0
 
     # lift
     lift_attach_radius_m: float = 6.0
@@ -141,16 +143,16 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
-            max_steps=160 if d == "easy" else 240 if d == "medium" else 320,
+            success_radius_m=8.0 if d == "easy" else 4.5 if d == "medium" else 2.2,
+            max_steps=220 if d == "easy" else 280 if d == "medium" else 360,
         )
     if kind == "station_keeping":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=8.0 if d == "easy" else 5.0 if d == "medium" else 3.0,
-            max_steps=200 if d == "easy" else 260 if d == "medium" else 340,
-            hold_steps=20 if d == "easy" else 40 if d == "medium" else 60,
+            success_radius_m=6.0 if d == "easy" else 3.5 if d == "medium" else 2.0,
+            max_steps=240 if d == "easy" else 320 if d == "medium" else 420,
+            hold_steps=30 if d == "easy" else 60 if d == "medium" else 90,
         )
     if kind == "pollution_localization":
         return TaskConfig(
@@ -171,51 +173,53 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
-            max_steps=220 if d == "easy" else 320 if d == "medium" else 560,
-            waypoints_n=5 if d == "easy" else 7 if d == "medium" else 9,
+            success_radius_m=7.0 if d == "easy" else 4.0 if d == "medium" else 2.8,
+            max_steps=320 if d == "easy" else 440 if d == "medium" else 640,
+            waypoints_n=6 if d == "easy" else 9 if d == "medium" else 13,
         )
     if kind == "depth_profile_tracking":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=10.0 if d == "easy" else 7.0 if d == "medium" else 5.0,
-            max_steps=240 if d == "easy" else 360 if d == "medium" else 520,
-            waypoints_n=5 if d == "easy" else 7 if d == "medium" else 9,
+            success_radius_m=7.0 if d == "easy" else 4.5 if d == "medium" else 3.2,
+            max_steps=360 if d == "easy" else 520 if d == "medium" else 820,
+            waypoints_n=6 if d == "easy" else 9 if d == "medium" else 13,
         )
     if kind == "formation_transit_multiagent":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=14.0 if d == "easy" else 10.0 if d == "medium" else 7.0,
-            max_steps=260 if d == "easy" else 380 if d == "medium" else 520,
-            formation_radius_m=16.0 if d == "easy" else 22.0 if d == "medium" else 28.0,
+            success_radius_m=8.0 if d == "easy" else 4.0 if d == "medium" else 1.0,
+            max_steps=420 if d == "easy" else 600 if d == "medium" else 550,
+            formation_radius_m=18.0 if d == "easy" else 36.0 if d == "medium" else 70.0,
         )
     if kind == "surface_pollution_cleanup_multiagent":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=8.0 if d == "easy" else 6.0 if d == "medium" else 4.0,
-            max_steps=260 if d == "easy" else 380 if d == "medium" else 520,
-            cleanup_sources_n=3 if d == "easy" else 4 if d == "medium" else 5,
-            cleanup_dwell_s=3.0 if d == "easy" else 3.5 if d == "medium" else 4.0,
+            success_radius_m=5.0 if d == "easy" else 3.8 if d == "medium" else 2.0,
+            max_steps=520 if d == "easy" else 720 if d == "medium" else 420,
+            cleanup_sources_n=6 if d == "easy" else 12 if d == "medium" else 36,
+            cleanup_dwell_s=5.0 if d == "easy" else 8.0 if d == "medium" else 12.0,
+            cleanup_required_agents=1,
         )
     if kind == "underwater_pollution_lift_5uuv":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
             success_radius_m=6.0,
-            max_steps=360 if d == "easy" else 460 if d == "medium" else 620,
-            lift_attach_radius_m=8.0 if d == "easy" else 7.0 if d == "medium" else 6.0,
-            lift_hold_s=1.5 if d == "easy" else 2.0 if d == "medium" else 2.5,
+            max_steps=480 if d == "easy" else 640 if d == "medium" else 880,
+            lift_attach_radius_m=7.0 if d == "easy" else 5.0 if d == "medium" else 4.0,
+            lift_hold_s=1.8 if d == "easy" else 2.5 if d == "medium" else 3.2,
         )
     if kind == "fish_herding_8uuv":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=28.0 if d == "easy" else 24.0 if d == "medium" else 18.0,
-            max_steps=360 if d == "easy" else 520 if d == "medium" else 760,
-            fish_count=50 if d == "easy" else 70 if d == "medium" else 90,
+            success_radius_m=20.0 if d == "easy" else 12.0 if d == "medium" else 7.0,
+            max_steps=600 if d == "easy" else 900 if d == "medium" else 1200,
+            fish_count=80 if d == "easy" else 140 if d == "medium" else 160,
+            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.925,
         )
     if kind == "area_scan_terrain_recon":
         return TaskConfig(
@@ -223,19 +227,19 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=8.0,
             # Needs to be large enough to traverse a lawnmower grid; keep generous for headless replay.
-            max_steps=900 if d == "easy" else 1400 if d == "medium" else 4200,
-            scan_cell_size_m=30.0 if d == "easy" else 22.0 if d == "medium" else 16.0,
-            scan_target_coverage=0.65 if d == "easy" else 0.8 if d == "medium" else 0.83,
-            scan_radius_m=35.0 if d == "easy" else 30.0 if d == "medium" else 28.0,
+            max_steps=1200 if d == "easy" else 1600 if d == "medium" else 2200,
+            scan_cell_size_m=120.0 if d == "easy" else 100.0 if d == "medium" else 80.0,
+            scan_target_coverage=0.55 if d == "easy" else 0.65 if d == "medium" else 0.75,
+            scan_radius_m=100.0 if d == "easy" else 80.0 if d == "medium" else 60.0,
         )
     if kind == "pipeline_inspection_leak_detection":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=9.0 if d == "easy" else 7.0 if d == "medium" else 5.0,
-            max_steps=520 if d == "easy" else 880 if d == "medium" else 1400,
-            pipeline_leaks_n=2 if d == "easy" else 3 if d == "medium" else 4,
-            pipeline_detect_radius_m=16.0 if d == "easy" else 12.0 if d == "medium" else 9.0,
+            success_radius_m=7.0 if d == "easy" else 5.0 if d == "medium" else 4.0,
+            max_steps=900 if d == "easy" else 1500 if d == "medium" else 2400,
+            pipeline_leaks_n=3 if d == "easy" else 5 if d == "medium" else 7,
+            pipeline_detect_radius_m=12.0 if d == "easy" else 9.0 if d == "medium" else 6.0,
         )
     raise ValueError(f"Unknown task kind: {kind}")
 
@@ -291,6 +295,20 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
     if cfg.kind == "surface_pollution_cleanup_multiagent":
         s = int(max(1, cfg.cleanup_sources_n))
         sources = rng.uniform(lo, hi, size=(s, 3)).astype(np.float64)
+        # For hard difficulty, spread sources toward tile corners to increase travel/coordination demand.
+        if str(cfg.difficulty) == "hard":
+            dx = float(hi[0] - lo[0])
+            dz = float(hi[2] - lo[2])
+            corners = [
+                (float(lo[0] + 0.12 * dx), float(lo[2] + 0.12 * dz)),
+                (float(lo[0] + 0.88 * dx), float(lo[2] + 0.12 * dz)),
+                (float(lo[0] + 0.12 * dx), float(lo[2] + 0.88 * dz)),
+                (float(lo[0] + 0.88 * dx), float(lo[2] + 0.88 * dz)),
+            ]
+            for si in range(s):
+                cx, cz = corners[int(si % len(corners))]
+                sources[si, 0] = float(np.clip(cx + float(rng.normal(scale=18.0)), float(lo[0]), float(hi[0])))
+                sources[si, 2] = float(np.clip(cz + float(rng.normal(scale=18.0)), float(lo[2]), float(hi[2])))
         sources[:, 1] = lo[1] + 0.6  # near-surface
         st.cleanup_sources_xyz = sources
         st.cleanup_done = np.zeros((s,), dtype=bool)
@@ -316,6 +334,13 @@ def reset_task(rng: np.random.Generator, bounds_xyz: tuple[np.ndarray, np.ndarra
         fish[:, 1] = lo[1] + 0.8
         st.fish_xyz = fish
         st.fish_stage = 0
+        # Make the goal placement deterministic by difficulty to enforce a real difficulty gradient.
+        # easy: random goal (may be close); medium/hard: opposite corner (farther).
+        if str(cfg.difficulty) in ("medium", "hard"):
+            gx = float(lo[0] + (0.80 if str(cfg.difficulty) == "medium" else 0.90) * float(hi[0] - lo[0]))
+            gz = float(lo[2] + (0.80 if str(cfg.difficulty) == "medium" else 0.90) * float(hi[2] - lo[2]))
+            gy = float(lo[1] + 0.8)
+            st.goal_xyz = np.array([gx, gy, gz], dtype=np.float64)
 
     if cfg.kind == "area_scan_terrain_recon":
         width = float(hi[0] - lo[0])
@@ -437,17 +462,19 @@ def compute_success(
             task_state.cleanup_assigned_source[ai] = int(cand[int(np.argmin(dists))])
 
         radius = float(cfg.success_radius_m)
+        req = int(max(1, int(cfg.cleanup_required_agents)))
         for si in range(int(srcs.shape[0])):
             if bool(done[si]):
                 continue
-            near = False
+            count_near = 0
             for ai in range(n_agents):
                 if int(task_state.cleanup_assigned_source[ai]) != int(si):
                     continue
                 if float(np.linalg.norm(pos[ai] - srcs[si])) <= radius:
-                    near = True
-                    break
-            if near:
+                    count_near += 1
+                    if int(count_near) >= int(req):
+                        break
+            if int(count_near) >= int(req):
                 prog[si] += dt_s
             if float(prog[si]) >= float(cfg.cleanup_dwell_s):
                 done[si] = True
@@ -504,11 +531,13 @@ def compute_success(
         prog = float(np.clip(1.0 - dist / init, 0.0, 1.0))
         stage = int(np.clip(int(math.floor(prog * 4.0)), 0, 3))
         task_state.fish_stage = stage
-        return dist <= float(cfg.success_radius_m), {
+        success = (prog >= float(cfg.fish_target_progress)) or (dist <= float(cfg.success_radius_m))
+        return bool(success), {
             "fish_progress": prog,
             "fish_stage": int(stage),
             "fish_dist_to_goal_xz_m": dist,
             "fish_init_dist_to_goal_xz_m": float(init),
+            "fish_target_progress": float(cfg.fish_target_progress),
         }
 
     if cfg.kind == "area_scan_terrain_recon":
@@ -532,10 +561,27 @@ def compute_success(
             visited[i_lo:i_hi, j_lo:j_hi] = True
         task_state.scan_visited = visited
         coverage = float(np.count_nonzero(visited) / float(visited.size))
+        wp_info: dict[str, Any] = {}
+        # Navigation: follow the precomputed lawnmower waypoints (generated in reset_task).
+        if task_state.waypoints_xyz is not None:
+            wps = np.asarray(task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(task_state.waypoint_index), 0, wps.shape[0] - 1))
+            wp = wps[i]
+            d = np.linalg.norm(pos - wp[None, :], axis=1)
+            best = float(np.min(d))
+            if best <= float(cfg.success_radius_m) and i < (wps.shape[0] - 1):
+                task_state.waypoint_index = i + 1
+                task_state.goal_xyz = wps[task_state.waypoint_index].copy()
+            wp_info = {
+                "waypoint_index": int(task_state.waypoint_index),
+                "waypoints_total": int(wps.shape[0]),
+                "best_dist_to_waypoint_m": best,
+            }
         return coverage >= float(cfg.scan_target_coverage), {
             "coverage": coverage,
             "cells_visited": int(np.count_nonzero(visited)),
             "cells_total": int(visited.size),
+            **wp_info,
         }
 
     if cfg.kind == "pipeline_inspection_leak_detection":

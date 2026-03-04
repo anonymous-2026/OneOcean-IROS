@@ -38,6 +38,10 @@ class EnvConfig:
     # Dynamics model selection (v2+).
     dynamics_model: Literal["kinematic", "3dof", "6dof"] = "kinematic"
 
+    # Recording controls (for scalability in large sweeps).
+    rec_write_csv: bool = True
+    rec_step_stride: int = 1
+
     # Minimal diagonal 6DoF-ish model parameters (used for 3dof/6dof modes).
     # These are engineering parameters for a stable, paper-defensible relative-velocity model.
     dyn_mass_linear: tuple[float, float, float] = (12.0, 12.0, 12.0)  # u,v,w
@@ -133,7 +137,11 @@ class HeadlessOceanEnv:
         self._llm_last_wp_call_step: int = -10**9
         self._llm_last_wp_assign: np.ndarray | None = None
 
-        self.rec = HeadlessRecorder(self.out_dir, n_agents=self.n_agents, config=RecorderConfig())
+        self.rec = HeadlessRecorder(
+            self.out_dir,
+            n_agents=self.n_agents,
+            config=RecorderConfig(write_csv=bool(cfg.rec_write_csv), step_stride=int(max(1, int(cfg.rec_step_stride)))),
+        )
         self._initial_pollution_mass: float | None = None
 
     @property
@@ -318,6 +326,27 @@ class HeadlessOceanEnv:
                 p = np.minimum(np.maximum(p, lo), hi)
                 if not self._violates_constraints(p):
                     self._positions[i] = p
+            # Make the transit target distance scale with difficulty so the task isn't trivially
+            # solved at t=0. Keep the goal reachable within the time budget.
+            diff = str(task.difficulty)
+            if diff == "easy":
+                frac = 0.35
+            elif diff == "medium":
+                frac = 0.75
+            else:
+                frac = 1.00
+            travel_budget = float(task.max_steps) * float(self.cfg.dt_s) * float(self.cfg.max_speed_mps) * 0.55
+            tile_scale = 0.9 * float(min(self.tile_size_x_m, self.tile_size_z_m))
+            dist = float(np.clip(frac * travel_budget, 50.0, max(80.0, tile_scale)))
+            for _ in range(40):
+                ang = float(self.rng.uniform(0.0, 2.0 * math.pi))
+                dir_xz = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
+                g = center + dist * dir_xz
+                g[1] = float(center[1])
+                g = np.minimum(np.maximum(g, lo), hi)
+                if not self._violates_constraints(g):
+                    self.task_state.goal_xyz = g.astype(np.float64)
+                    break
 
         # Waypoint-family tasks: re-sample a *reachable* polyline around the initial centroid.
         # The default reset_task() samples endpoints uniformly over the full tile, which can be unreachable
@@ -603,16 +632,28 @@ class HeadlessOceanEnv:
 
             if assigned is None:
                 assigned = np.asarray(self.task_state.cleanup_assigned_source, dtype=np.int64).reshape(self.n_agents)
-                for ai in range(self.n_agents):
-                    cur = int(assigned[ai])
-                    if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
-                        continue
-                    if np.all(done):
-                        assigned[ai] = -1
-                        continue
+                req = int(max(1, int(getattr(self.task_cfg, "cleanup_required_agents", 1))))
+                if req > 1:
                     cand = np.where(~done)[0]
-                    dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
-                    assigned[ai] = int(cand[int(np.argmin(dists))])
+                    if cand.size == 0:
+                        assigned[:] = -1
+                    else:
+                        # Deterministic team grouping: agents are partitioned into teams of size `req`,
+                        # each team targets one unfinished source.
+                        for ai in range(self.n_agents):
+                            team = int(ai // req)
+                            assigned[ai] = int(cand[team % int(cand.size)])
+                else:
+                    for ai in range(self.n_agents):
+                        cur = int(assigned[ai])
+                        if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
+                            continue
+                        if np.all(done):
+                            assigned[ai] = -1
+                            continue
+                        cand = np.where(~done)[0]
+                        dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
+                        assigned[ai] = int(cand[int(np.argmin(dists))])
             self.task_state.cleanup_assigned_source = assigned.astype(np.int64)
             goals = np.repeat(goal.reshape(1, 3), self.n_agents, axis=0)
             for ai in range(self.n_agents):
@@ -933,44 +974,70 @@ class HeadlessOceanEnv:
             cen = np.mean(fish, axis=0)
             cx, cz = self._sample_current(float(cen[0]), float(cen[2]))
             drift = np.array([cx, 0.0, cz], dtype=np.float64) * float(self.cfg.dt_s)
-            noise = self.rng.normal(scale=0.18, size=fish.shape).astype(np.float64)
+            diff = str(self.task_cfg.difficulty)
+            if diff == "easy":
+                noise_scale = 0.12
+                fish_speed = 0.95
+                flee_close = 0.75
+                flee_far = 0.15
+                flee_thresh_m = 40.0
+                drift_scale = 0.06
+            elif diff == "medium":
+                noise_scale = 0.20
+                fish_speed = 1.20
+                flee_close = 0.88
+                flee_far = 0.35
+                flee_thresh_m = 55.0
+                drift_scale = 0.08
+            else:
+                noise_scale = 0.28
+                fish_speed = 1.45
+                flee_close = 0.95
+                flee_far = 0.55
+                flee_thresh_m = 70.0
+                drift_scale = 0.10
+
+            noise = self.rng.normal(scale=float(noise_scale), size=fish.shape).astype(np.float64)
             noise[:, 1] = 0.0
 
             # Nearest-agent repulsion provides the main "herding" motion.
             agents = np.asarray(self._positions, dtype=np.float64).reshape(self.n_agents, 3)
-            fish_next = fish.copy()
-            for fi in range(fish.shape[0]):
-                d = agents - fish[fi][None, :]
-                d[:, 1] = 0.0
-                r2 = np.sum(d[:, [0, 2]] ** 2, axis=1)
-                j = int(np.argmin(r2))
-                v = -(d[j])
-                v[1] = 0.0
-                nrm = float(np.linalg.norm(v[[0, 2]]))
-                tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
-                dir_goal = tgt - fish[fi]
-                dir_goal[1] = 0.0
-                gn = float(np.linalg.norm(dir_goal[[0, 2]]))
-                if gn > 1e-9 and np.isfinite(gn):
-                    dir_goal = dir_goal / gn
-                else:
-                    dir_goal = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            f = int(fish.shape[0])
+            # Vectorized nearest-agent lookup (F,N,3).
+            d = agents[None, :, :] - fish[:, None, :]
+            d[:, :, 1] = 0.0
+            r2 = d[:, :, 0] ** 2 + d[:, :, 2] ** 2
+            j = np.argmin(r2, axis=1)
+            di = d[np.arange(f), j, :]
+            v = -di
+            v[:, 1] = 0.0
+            nrm = np.linalg.norm(v[:, [0, 2]], axis=1)
+            dist = np.sqrt(np.min(r2, axis=1))
 
-                if not np.isfinite(nrm) or nrm < 1e-9:
-                    rep = dir_goal
-                    dist = float("inf")
-                else:
-                    rep = v / nrm
-                    dist = float(math.sqrt(float(r2[j])))
+            dir_goal = tgt[None, :] - fish
+            dir_goal[:, 1] = 0.0
+            gn = np.linalg.norm(dir_goal[:, [0, 2]], axis=1)
+            gn_safe = np.where((gn > 1e-9) & np.isfinite(gn), gn, 1.0)
+            dir_goal = dir_goal / gn_safe[:, None]
+            bad_goal = ~((gn > 1e-9) & np.isfinite(gn))
+            if np.any(bad_goal):
+                dir_goal[bad_goal] = np.array([1.0, 0.0, 0.0], dtype=np.float64)
 
-                # When UUVs are far away, fish progresses toward goal slowly; when close, it flees (herding).
-                flee = 0.85 if dist <= 45.0 else 0.25
-                speed = 1.15  # meters per step
-                move = flee * rep + (1.0 - flee) * dir_goal
-                mn = float(np.linalg.norm(move[[0, 2]]))
-                if mn > 1e-9:
-                    move = move / mn
-                fish_next[fi] = fish[fi] + speed * move * float(self.cfg.dt_s) + 0.08 * drift + noise[fi]
+            nrm_safe = np.where((nrm > 1e-9) & np.isfinite(nrm), nrm, 1.0)
+            rep = v / nrm_safe[:, None]
+            bad_rep = ~((nrm > 1e-9) & np.isfinite(nrm))
+            if np.any(bad_rep):
+                rep[bad_rep] = dir_goal[bad_rep]
+                dist[bad_rep] = float("inf")
+
+            flee = np.where(dist <= float(flee_thresh_m), float(flee_close), float(flee_far))
+            move = flee[:, None] * rep + (1.0 - flee)[:, None] * dir_goal
+            mn = np.linalg.norm(move[:, [0, 2]], axis=1)
+            mn_safe = np.where(mn > 1e-9, mn, 1.0)
+            move = move / mn_safe[:, None]
+            speed = float(fish_speed)
+            fish_next = fish + speed * move * float(self.cfg.dt_s) + float(drift_scale) * drift[None, :] + noise
 
             fish = fish_next
             lo, hi = self.bounds_xyz
@@ -989,20 +1056,22 @@ class HeadlessOceanEnv:
 
         # Recompute probes for logging/metrics.
         probe2 = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
-        self.rec.step(
-            self._t,
-            positions_xyz=self._positions,
-            quats_xyzw=self._quats_xyzw,
-            body_vel_uvw_pqr=self._nu_body,
-            actions_xyz=act,
-            currents_xyz=currents,
-            pollution_probe=probe2,
-            latitude=lat_arr,
-            longitude=lon_arr,
-            elevation=elev_arr,
-            land_mask=mask_arr,
-        )
-        self.rec.write_environment_sample(self._t, dataset_time_index=self.dataset_time_index, dataset_depth_index=self.dataset_depth_index)
+        stride = int(max(1, int(self.rec.cfg.step_stride)))
+        if step_i % stride == 0:
+            self.rec.step(
+                self._t,
+                positions_xyz=self._positions,
+                quats_xyzw=self._quats_xyzw,
+                body_vel_uvw_pqr=self._nu_body,
+                actions_xyz=act,
+                currents_xyz=currents,
+                pollution_probe=probe2,
+                latitude=lat_arr,
+                longitude=lon_arr,
+                elevation=elev_arr,
+                land_mask=mask_arr,
+            )
+            self.rec.write_environment_sample(self._t, dataset_time_index=self.dataset_time_index, dataset_depth_index=self.dataset_depth_index)
 
         # Optional semantic stream (downsample to reduce file size).
         if step_i % 5 == 0:

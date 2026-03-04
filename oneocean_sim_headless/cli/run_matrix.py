@@ -78,7 +78,13 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run a headless experiment matrix and aggregate results (H1).")
     ap.add_argument("--drift-npz", type=str, required=True)
     ap.add_argument("--out-dir", type=str, default="")
-    ap.add_argument("--preset", type=str, default="", choices=["", "smoke", "hero", "hero_full10"], help="Convenience presets (override tasks/difficulties/seeds/episodes).")
+    ap.add_argument(
+        "--preset",
+        type=str,
+        default="",
+        choices=["", "smoke", "hero", "hero_full10", "paper_v1"],
+        help="Convenience presets (override tasks/difficulties/seeds/episodes and may adjust per-task N defaults).",
+    )
     ap.add_argument("--seeds", type=str, default="0-9", help="Seed range like '0-9' or list like '0,1,2'")
     ap.add_argument("--episodes", type=int, default=1, help="Episodes per seed (writes episode subfolders when >1).")
     ap.add_argument("--seed-step", type=int, default=1, help="Seed increment per episode within a base seed.")
@@ -103,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     ap.add_argument("--current-gain", type=float, default=1.0, help="Scale dataset currents (ablation/stress-test).")
+    ap.add_argument("--rec-step-stride", type=int, default=1, help="Record every K simulation steps (reduces I/O for long episodes).")
     return ap.parse_args()
 
 
@@ -122,6 +129,12 @@ def _parse_seeds(spec: str) -> list[int]:
 
 def main() -> int:
     args = parse_args()
+    argv = list(sys.argv[1:])
+    user_set_tasks = "--tasks" in argv
+    user_set_difficulties = "--difficulties" in argv
+    user_set_pollution_models = "--pollution-models" in argv
+    user_set_seeds = "--seeds" in argv
+    user_set_episodes = "--episodes" in argv
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     root = Path(args.out_dir).expanduser().resolve() if args.out_dir else (Path("runs") / "headless" / f"matrix_{stamp}").resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -149,37 +162,65 @@ def main() -> int:
     _write_env_snapshot(root)
 
     if str(args.preset).strip() == "smoke":
-        args.tasks = ",".join(list(CANONICAL_TASKS_10))
-        args.difficulties = "easy,medium,hard"
-        args.pollution_models = "gaussian"
-        args.seeds = "0"
-        args.episodes = 1
+        if not user_set_tasks:
+            args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        if not user_set_difficulties:
+            args.difficulties = "easy,medium,hard"
+        if not user_set_pollution_models:
+            args.pollution_models = "gaussian"
+        if not user_set_seeds:
+            args.seeds = "0"
+        if not user_set_episodes:
+            args.episodes = 1
     elif str(args.preset).strip() == "hero":
         # Designed to hit: seeds>=5 and episodes>=10 (interpreting episodes as seeds×episodes).
         # Keep small enough to run routinely.
-        args.tasks = ",".join(
-            [
-                "go_to_goal_current",
-                "station_keeping",
-                "surface_pollution_cleanup_multiagent",
-                "area_scan_terrain_recon",
-                "formation_transit_multiagent",
-                "pipeline_inspection_leak_detection",
-                "route_following_waypoints",
-                "depth_profile_tracking",
-            ]
-        )
-        args.difficulties = "medium,hard"
-        args.pollution_models = "gaussian"
-        args.seeds = "0-4"
-        args.episodes = 2
+        if not user_set_tasks:
+            args.tasks = ",".join(
+                [
+                    "go_to_goal_current",
+                    "station_keeping",
+                    "surface_pollution_cleanup_multiagent",
+                    "area_scan_terrain_recon",
+                    "formation_transit_multiagent",
+                    "pipeline_inspection_leak_detection",
+                    "route_following_waypoints",
+                    "depth_profile_tracking",
+                ]
+            )
+        if not user_set_difficulties:
+            args.difficulties = "medium,hard"
+        if not user_set_pollution_models:
+            args.pollution_models = "gaussian"
+        if not user_set_seeds:
+            args.seeds = "0-4"
+        if not user_set_episodes:
+            args.episodes = 2
     elif str(args.preset).strip() == "hero_full10":
         # Full canonical 10-task suite for paper-scale reporting.
-        args.tasks = ",".join(list(CANONICAL_TASKS_10))
-        args.difficulties = "medium,hard"
-        args.pollution_models = "gaussian"
-        args.seeds = "0-9"
-        args.episodes = 2
+        if not user_set_tasks:
+            args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        if not user_set_difficulties:
+            args.difficulties = "medium,hard"
+        if not user_set_pollution_models:
+            args.pollution_models = "gaussian"
+        if not user_set_seeds:
+            args.seeds = "0-9"
+        if not user_set_episodes:
+            args.episodes = 2
+    elif str(args.preset).strip() == "paper_v1":
+        # Paper-facing preset: avoid artificial success inflation from multi-agent "min distance" success
+        # definitions by running canonical single-agent tasks with N=1.
+        if not user_set_tasks:
+            args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        if not user_set_difficulties:
+            args.difficulties = "medium,hard"
+        if not user_set_pollution_models:
+            args.pollution_models = "gaussian"
+        if not user_set_seeds:
+            args.seeds = "0-9"
+        if not user_set_episodes:
+            args.episodes = 2
 
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     diffs = [d.strip() for d in args.difficulties.split(",") if d.strip()]
@@ -215,6 +256,10 @@ def main() -> int:
         for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
             if k in defaults:
                 defaults[k]["n_agents"] = 8
+    elif str(args.preset).strip() == "paper_v1":
+        for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
+            if k in defaults:
+                defaults[k]["n_agents"] = 1
     # Global override (e.g., scaling sweeps). Tasks with required_n_agents will fail fast in env.reset.
     if int(args.n_agents) > 0:
         for v in defaults.values():
@@ -287,6 +332,7 @@ def main() -> int:
             bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
             seafloor_clearance_m=float(args.seafloor_clearance_m),
             current_gain=float(args.current_gain),
+            rec_step_stride=int(max(1, int(args.rec_step_stride))),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
         ctrl_cfg = preset_controller(
@@ -370,6 +416,7 @@ def main() -> int:
                     "coverage": last.get("coverage", None),
                     "leaks_detected": last.get("leaks_detected", None),
                     "fish_progress": last.get("fish_progress", None),
+                    "fish_target_progress": last.get("fish_target_progress", None),
                     "lift_phase": last.get("lift_phase", None),
                     "elapsed_s": float(time.time() - t0),
                     "run_dir": str(run_dir),

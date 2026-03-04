@@ -12,6 +12,7 @@ import numpy as np
 @dataclass(frozen=True)
 class RecorderConfig:
     write_csv: bool = True
+    step_stride: int = 1
 
 
 class _CsvStream:
@@ -54,25 +55,26 @@ class HeadlessRecorder:
         self._run_meta: dict[str, Any] = {}
         self._semantics_path = self.root / "environment_samples" / "semantics.jsonl"
 
-        for i in range(self.n_agents):
-            agent_dir = self.root / "agents" / f"agent_{i:03d}"
-            self._pose.append(
-                _CsvStream(
-                    agent_dir / "pose_groundtruth" / "data.csv",
-                    header=["t", "x", "y", "z", "qx", "qy", "qz", "qw"],
+        if bool(self.cfg.write_csv):
+            for i in range(self.n_agents):
+                agent_dir = self.root / "agents" / f"agent_{i:03d}"
+                self._pose.append(
+                    _CsvStream(
+                        agent_dir / "pose_groundtruth" / "data.csv",
+                        header=["t", "x", "y", "z", "qx", "qy", "qz", "qw"],
+                    )
                 )
-            )
-            self._body_vel.append(
-                _CsvStream(
-                    agent_dir / "body_velocity" / "data.csv",
-                    header=["t", "u", "v", "w", "p", "q", "r"],
+                self._body_vel.append(
+                    _CsvStream(
+                        agent_dir / "body_velocity" / "data.csv",
+                        header=["t", "u", "v", "w", "p", "q", "r"],
+                    )
                 )
-            )
-            self._actions.append(_CsvStream(agent_dir / "actions" / "data.csv", header=["t", "ax", "ay", "az"]))
-            self._current.append(_CsvStream(agent_dir / "obs" / "local_current" / "data.csv", header=["t", "cx", "cy", "cz"]))
-            self._probe.append(_CsvStream(agent_dir / "obs" / "pollution_probe" / "data.csv", header=["t", "concentration"]))
-            self._latlon.append(_CsvStream(agent_dir / "obs" / "latlon" / "data.csv", header=["t", "lat", "lon"]))
-            self._bathy.append(_CsvStream(agent_dir / "obs" / "bathymetry" / "data.csv", header=["t", "elevation", "land_mask"]))
+                self._actions.append(_CsvStream(agent_dir / "actions" / "data.csv", header=["t", "ax", "ay", "az"]))
+                self._current.append(_CsvStream(agent_dir / "obs" / "local_current" / "data.csv", header=["t", "cx", "cy", "cz"]))
+                self._probe.append(_CsvStream(agent_dir / "obs" / "pollution_probe" / "data.csv", header=["t", "concentration"]))
+                self._latlon.append(_CsvStream(agent_dir / "obs" / "latlon" / "data.csv", header=["t", "lat", "lon"]))
+                self._bathy.append(_CsvStream(agent_dir / "obs" / "bathymetry" / "data.csv", header=["t", "elevation", "land_mask"]))
 
         (self.root / "environment_samples").mkdir(parents=True, exist_ok=True)
 
@@ -123,6 +125,8 @@ class HeadlessRecorder:
         elevation: np.ndarray,
         land_mask: np.ndarray,
     ) -> None:
+        if not bool(self.cfg.write_csv):
+            return
         pos = np.asarray(positions_xyz, dtype=np.float64).reshape(self.n_agents, 3)
         quat = np.asarray(quats_xyzw, dtype=np.float64).reshape(self.n_agents, 4)
         nu = np.asarray(body_vel_uvw_pqr, dtype=np.float64).reshape(self.n_agents, 6)
