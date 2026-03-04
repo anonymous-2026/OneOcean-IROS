@@ -223,8 +223,20 @@ All media below come from:
 These two screenshots are selected for the paper (user-confirmed as **[Image #1]** and **[Image #2]**):
 
 - [Image #1] (viewport keyframe; pollution containment/cleanup context):
+  - Experiment context:
+    - run: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/`
+    - scenario: `PierHarbor-HoveringCamera`
+    - task_id: `surface_pollution_cleanup_multiagent`, task_variant: `containment`
+    - difficulty: `easy`, multi-agent `N=8`, episode: `ep000`
+    - episode metrics: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/metrics.json`
   - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/surface_pollution_cleanup_multiagent__containment/ep000/contain_viewport_keyframe_000.png`
 - [Image #2] (viewport keyframe; multi-agent formation context):
+  - Experiment context:
+    - run: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/`
+    - scenario: `PierHarbor-HoveringCamera`
+    - task_id: `formation_transit_multiagent`
+    - difficulty: `easy`, multi-agent `N=8`, episode: `ep000`
+    - episode metrics: `oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/metrics.json`
   - `/data/private/user2/workspace/ocean/oneocean(iros-2026-code)/runs/oceangym_h3/h3_FINALFIX_COMSOCKET_hero_easy_ep10_N8_20260303_103437/PierHarbor-HoveringCamera/formation_transit_multiagent/ep000/formation_viewport_keyframe_000.png`
 
 ### PierHarbor (ep000; easy; N=8 where applicable)

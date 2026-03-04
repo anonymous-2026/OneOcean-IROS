@@ -30,7 +30,52 @@ venv/
 runs/
 
 # Local outputs (do not commit)
-OCPNet/output/
+# OCPNet outputs: ignore everything by default, then whitelist a tiny curated set.
+OCPNet/output/**
+
+# Never commit paper-only/vector or large binary artifacts from OCPNet.
+OCPNet/output/**/*.eps
+OCPNet/output/**/*.nc
+
+# Local notes (never commit)
+OCPNet/LOCAL_README.md
+OCPNet/readme_for_sum.md
+
+# --- Curated examples allowed in repo (PNG/GIF/JSON only) ---
+!OCPNet/output/main_output/
+!OCPNet/output/main_output/statistics.txt
+!OCPNet/output/main_output/visualization_0.png
+!OCPNet/output/main_output/visualization_1.png
+
+!OCPNet/output/test_output/
+!OCPNet/output/test_output/statistics.txt
+!OCPNet/output/test_output/environmental_fields.png
+!OCPNet/output/test_output/final_concentrations.png
+!OCPNet/output/test_output/visualization_7200.png
+
+!OCPNet/output/pollution_refactor/
+!OCPNet/output/pollution_refactor/**/
+
+!OCPNet/output/pollution_refactor/current_viz_final/
+!OCPNet/output/pollution_refactor/current_viz_final/current_viz_final_manifest.json
+!OCPNet/output/pollution_refactor/current_viz_final/total_current_3d_diffusion_el25_az215.png
+
+!OCPNet/output/pollution_refactor/dataset_latest_suite/
+!OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_suite_manifest.json
+!OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_seed03_panel.png
+!OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_seed03.gif
+
+!OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/
+!OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_suite_manifest.json
+!OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_manifest.json
+!OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_panel.png
+!OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04.gif
+
+!OCPNet/output/pollution_refactor/synthetic_latest/
+!OCPNet/output/pollution_refactor/synthetic_latest/run_summary.json
+!OCPNet/output/pollution_refactor/synthetic_latest/synthetic_latest_manifest.json
+!OCPNet/output/pollution_refactor/synthetic_latest/synthetic_preview.gif
+!OCPNet/output/pollution_refactor/synthetic_latest/visualization_480.png
 
 ref/
 **/ref/

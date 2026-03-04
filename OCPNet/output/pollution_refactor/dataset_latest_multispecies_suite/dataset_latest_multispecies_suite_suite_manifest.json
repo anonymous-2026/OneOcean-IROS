@@ -1,0 +1,26 @@
+{
+  "output_dir": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite",
+  "seed_count": 1,
+  "prefix": "dataset_latest_multispecies_suite",
+  "runs": [
+    {
+      "panel_png": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_panel.png",
+      "panel_eps": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_panel.eps",
+      "gif": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04.gif",
+      "coast_seed": [
+        -65.25,
+        32.25
+      ],
+      "coast_window_land_frac": null,
+      "frame_count": 48,
+      "reaction_rate": 0.18,
+      "weathering_rate": 0.05,
+      "seed_index": 4,
+      "seed_lonlat": [
+        -65.25,
+        32.25
+      ],
+      "seed_land_frac": 0.023636363636363636
+    }
+  ]
+}

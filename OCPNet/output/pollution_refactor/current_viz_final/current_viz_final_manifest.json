@@ -1,0 +1,34 @@
+{
+  "dataset": {
+    "nc_path": "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/oneocean_scene_env_tides.nc",
+    "time_index": 0,
+    "depth_index": 0,
+    "variables": [
+      "elevation",
+      "utotal",
+      "vtotal",
+      "uo",
+      "vo",
+      "land_mask"
+    ]
+  },
+  "render": {
+    "style": "diffusion",
+    "arrow_color_mode": "direction",
+    "kept_view": {
+      "elev": 25,
+      "azim": 215
+    },
+    "kept_png": "OCPNet/output/pollution_refactor/current_viz_final/total_current_3d_diffusion_el25_az215.png",
+    "kept_eps": "OCPNet/output/pollution_refactor/current_viz_final/total_current_3d_diffusion_el25_az215.eps"
+  },
+  "intended_use": {
+    "github": [
+      "total_current_3d_diffusion_el25_az215.png"
+    ],
+    "paper_and_supplemental_local": [
+      "total_current_3d_diffusion_el25_az215.eps"
+    ]
+  },
+  "command": "../.venv_ocean/bin/python3 -m OCPNet.pollution.cli render-currents --nc-path ...oneocean_scene_env_tides.nc --output-dir OCPNet/output/pollution_refactor/current_viz_final --styles diffusion --arrow-color-mode direction"
+}

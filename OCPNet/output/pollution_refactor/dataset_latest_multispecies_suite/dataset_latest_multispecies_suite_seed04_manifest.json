@@ -1,0 +1,13 @@
+{
+  "panel_png": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_panel.png",
+  "panel_eps": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04_panel.eps",
+  "gif": "OCPNet/output/pollution_refactor/dataset_latest_multispecies_suite/dataset_latest_multispecies_suite_seed04.gif",
+  "coast_seed": [
+    -65.25,
+    32.25
+  ],
+  "coast_window_land_frac": null,
+  "frame_count": 48,
+  "reaction_rate": 0.18,
+  "weathering_rate": 0.05
+}

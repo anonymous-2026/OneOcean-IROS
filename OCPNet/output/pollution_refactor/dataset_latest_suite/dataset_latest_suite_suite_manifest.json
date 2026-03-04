@@ -1,0 +1,33 @@
+{
+  "output_dir": "OCPNet/output/pollution_refactor/dataset_latest_suite",
+  "seed_count": 1,
+  "prefix": "dataset_latest_suite",
+  "runs": [
+    {
+      "panel_png": "OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_seed03_panel.png",
+      "panel_eps": "OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_seed03_panel.eps",
+      "gif": "OCPNet/output/pollution_refactor/dataset_latest_suite/dataset_latest_suite_seed03.gif",
+      "coast_seed": [
+        -64.25,
+        32.5
+      ],
+      "coast_window_land_frac": null,
+      "domain_lon_min": -67.25,
+      "domain_lon_max": -62.0,
+      "domain_lat_min": 30.0,
+      "domain_lat_max": 35.5,
+      "frame_count": 48,
+      "u_variable": "uo",
+      "v_variable": "vo",
+      "spatial_stride": 1,
+      "depth_index": 0,
+      "diffusion_coeff": 18.0,
+      "seed_index": 3,
+      "seed_lonlat": [
+        -64.25,
+        32.5
+      ],
+      "seed_land_frac": 0.025691699604743084
+    }
+  ]
+}
