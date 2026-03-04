@@ -31,6 +31,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--llm-call-stride-steps", type=int, default=30)
     ap.add_argument("--llm-max-new-tokens", type=int, default=192)
     ap.add_argument("--no-llm", action="store_true", help="Skip LLM jobs (heuristic/BC only).")
+    ap.add_argument("--skip-14b", action="store_true", help="Skip Qwen2.5-14B (often too large for concurrent GPUs).")
     return ap.parse_args()
 
 
@@ -121,6 +122,8 @@ def main() -> int:
             ("qwen2p5_14b", "/data/shared/user2/models/Qwen2.5-14B-Instruct"),
         ]
         for mid, mpath in models:
+            if bool(args.skip_14b) and str(mid) == "qwen2p5_14b":
+                continue
             cache_dir = ""
             if llm_cache_root:
                 cache_dir = str(Path(llm_cache_root) / f"paper_v1_{mid}")
