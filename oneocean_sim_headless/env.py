@@ -606,14 +606,9 @@ class HeadlessOceanEnv:
             assigned: np.ndarray | None = None
             if use_llm and not np.all(done):
                 stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
-                need_call = False
-                if self._llm_last_done_mask is None:
-                    need_call = True
-                else:
-                    try:
-                        need_call = bool(np.any(self._llm_last_done_mask != done))
-                    except Exception:
-                        need_call = True
+                # Only call the LLM at a fixed stride. Calling on every DONE-mask change can be
+                # prohibitively slow for larger local models (and can starve the simulation loop).
+                need_call = self._llm_last_done_mask is None
                 if (step_i - int(self._llm_last_call_step)) >= stride:
                     need_call = True
                 if need_call:

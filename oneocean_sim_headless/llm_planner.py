@@ -114,8 +114,12 @@ class LLMPlanner:
         if isinstance(cached, dict) and isinstance(cached.get("assign"), list):
             return self._validate_assign(cached.get("assign"), n_agents=n_agents, n_sources=int(src.shape[0]), done=done)
 
-        self._ensure_model()
-        assert self._tok is not None and self._model is not None
+        try:
+            self._ensure_model()
+            assert self._tok is not None and self._model is not None
+        except Exception as e:
+            self._cached_put(key, {"error": f"model_load_failed: {type(e).__name__}: {e}"})
+            return None
 
         sys_txt = (
             "You are a planner for multi-agent underwater cleanup. "
@@ -141,18 +145,25 @@ class LLMPlanner:
 
         import torch
 
-        inputs = tok(text, return_tensors="pt")
-        if torch.cuda.is_available():
-            inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
-        with torch.inference_mode():
-            out = self._model.generate(
-                **inputs,
-                max_new_tokens=int(self.cfg.max_new_tokens),
-                do_sample=False,
-                top_p=1.0,
-                top_k=0,
-            )
-        decoded = tok.decode(out[0], skip_special_tokens=True)
+        try:
+            inputs = tok(text, return_tensors="pt")
+            if torch.cuda.is_available():
+                inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
+            with torch.inference_mode():
+                # use_cache=False is a robustness switch for some remote-code models (e.g., ChatGLM variants)
+                # that can be incompatible with the installed transformers generation cache helpers.
+                out = self._model.generate(
+                    **inputs,
+                    max_new_tokens=int(self.cfg.max_new_tokens),
+                    do_sample=False,
+                    top_p=1.0,
+                    top_k=0,
+                    use_cache=False,
+                )
+            decoded = tok.decode(out[0], skip_special_tokens=True)
+        except Exception as e:
+            self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
+            return None
 
         parsed = _extract_json(decoded)
         if not isinstance(parsed, dict):
@@ -205,8 +216,12 @@ class LLMPlanner:
         if isinstance(cached, dict) and isinstance(cached.get("assign_wp"), list):
             return self._validate_wp_assign(cached.get("assign_wp"), n_agents=n_agents, n_wp=int(wps.shape[0]))
 
-        self._ensure_model()
-        assert self._tok is not None and self._model is not None
+        try:
+            self._ensure_model()
+            assert self._tok is not None and self._model is not None
+        except Exception as e:
+            self._cached_put(key, {"error": f"model_load_failed: {type(e).__name__}: {e}"})
+            return None
 
         sys_txt = (
             "You are a planner for multi-agent underwater search.\n"
@@ -232,18 +247,23 @@ class LLMPlanner:
 
         import torch
 
-        inputs = tok(text, return_tensors="pt")
-        if torch.cuda.is_available():
-            inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
-        with torch.inference_mode():
-            out = self._model.generate(
-                **inputs,
-                max_new_tokens=int(self.cfg.max_new_tokens),
-                do_sample=False,
-                top_p=1.0,
-                top_k=0,
-            )
-        decoded = tok.decode(out[0], skip_special_tokens=True)
+        try:
+            inputs = tok(text, return_tensors="pt")
+            if torch.cuda.is_available():
+                inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
+            with torch.inference_mode():
+                out = self._model.generate(
+                    **inputs,
+                    max_new_tokens=int(self.cfg.max_new_tokens),
+                    do_sample=False,
+                    top_p=1.0,
+                    top_k=0,
+                    use_cache=False,
+                )
+            decoded = tok.decode(out[0], skip_special_tokens=True)
+        except Exception as e:
+            self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
+            return None
 
         parsed = _extract_json(decoded)
         if not isinstance(parsed, dict):

@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -41,7 +42,8 @@ def main() -> int:
     llm_cache_root = str(Path(args.llm_cache_root).expanduser().resolve()) if str(args.llm_cache_root).strip() else ""
 
     base = [
-        os.environ.get("PYTHON", "python3"),
+        # Always use the current interpreter so jobs run in the same environment (deps installed).
+        sys.executable,
         "-m",
         "oneocean_sim_headless.cli.run_matrix",
         "--drift-npz",

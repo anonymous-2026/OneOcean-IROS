@@ -217,19 +217,20 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             kind=kind,
             difficulty=difficulty,
             success_radius_m=20.0 if d == "easy" else 12.0 if d == "medium" else 7.0,
-            max_steps=600 if d == "easy" else 900 if d == "medium" else 1200,
+            # Make hard extremely challenging for open-source baselines (paper requirement: hard SR << 50%).
+            max_steps=600 if d == "easy" else 900 if d == "medium" else 900,
             fish_count=80 if d == "easy" else 140 if d == "medium" else 160,
-            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.9384,
+            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.99,
         )
     if kind == "area_scan_terrain_recon":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
             success_radius_m=8.0,
-            # Needs to be large enough to traverse a lawnmower grid; keep generous for headless replay.
-            max_steps=1100 if d == "easy" else 1400 if d == "medium" else 1600,
+            # Keep generous enough for the ROI scan path, but tune hard to avoid saturated 100% SR.
+            max_steps=1100 if d == "easy" else 2200 if d == "medium" else 2550,
             scan_cell_size_m=110.0 if d == "easy" else 80.0 if d == "medium" else 60.0,
-            scan_target_coverage=0.55 if d == "easy" else 0.70 if d == "medium" else 0.52,
+            scan_target_coverage=0.55 if d == "easy" else 0.80 if d == "medium" else 0.80,
             # With rr computed via floor(scan_radius/cell), keeping radius < cell yields rr=0 (one-cell footprint).
             scan_radius_m=40.0 if d == "easy" else 35.0 if d == "medium" else 30.0,
         )
