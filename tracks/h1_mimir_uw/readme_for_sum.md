@@ -294,42 +294,75 @@ Hard-difficulty success rates across dynamics (selected summary):
 
 These runs are preserved under `runs/headless/` for additional analysis, but they were executed **before** the official 6DoF requirement was enforced (most are `kinematic`). Do **not** mix them into the “official FINAL” table without re-running under `--dynamics-model 6dof`.
 
-Controller / planner comparisons (kinematic-era evidence):
-- BC baseline vs learned MLP (Option A):
-  - `runs/headless/bc_teacher_nav5_mh_20260302/`
-  - `runs/headless/bc_mlp_big_nav5_mh_eval_v2spec_20260302/`
-  - `runs/headless/bc_teacher_demo26_mh_20260302/`
-  - `runs/headless/bc_mlp_demo26_mh_eval_v2spec_20260302/`
-- Stress tests (`current_gain=2.0`):
-  - `runs/headless/baseline_demo26_mh_cg2_20260302/`
-  - `runs/headless/bc_mlp_demo26_mh_eval_cg2_20260302/`
-  - `runs/headless/deep_demo26_mh_cg2_20260302_baseline_farm/`
-  - `runs/headless/deep_demo26_mh_cg2_20260303_bc_farm/`
-- LLM planner pilots (Qwen2.5-7B):
-  - cleanup: `runs/headless/llm_deep_cleanup_mh_qwen2p5_7b_20260302/`
-  - scan+pipeline: `runs/headless/llm_scanpipe_mh_n8_qwen2p5_20260302/`
-  - deep stress scan+pipeline: `runs/headless/deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm/`
+This section is included for supplement traceability: it (A) **indexes** all BC/LLM run roots and (B) provides a **numeric** run-level summary where `summary.csv` exists.
 
-**LLM pilot results (pre-final; numeric summary from `summary.csv`)**
+#### 4.4.1 LLM runs (index + numeric summary; pre-final)
 
-Notes / caveats:
+Important caveats (apply to all LLM entries below):
 - These LLM runs were produced **before** the official `dynamics_model=6dof` requirement landed; their `run_meta.json` does not record `dynamics_model` (treat as **kinematic-era evidence**).
+- Some runs are “triage/smoke” and may not have `summary.csv`; those will appear as **blank rows** in the table below (meaning “not recorded in summary.csv”, not “0”).
 - The “deep stress” scan+pipeline run uses `current_gain=2.0` (recorded in that run’s `run_meta.json`).
 
-Per-run, per-task aggregates:
+Index (all `runs/headless/*llm*` roots):
+- `runs/headless/deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm/`
+- `runs/headless/llm_deep_cleanup_mh_qwen2p5_7b_20260302/`
+- `runs/headless/llm_scanpipe_mh_n8_qwen2p5_20260302/`
+- `runs/headless/llm_smoke_cleanup_qwen2p5_7b_20260302/`
+- `runs/headless/llm_triage_cleanup_mh_llama3_8b_20260302/`
+- `runs/headless/llm_triage_cleanup_mh_mistral7b_20260302/`
+- `runs/headless/llm_triage_cleanup_mh_qwen2p5_7b_20260302/`
 
-| run_id | task | diff | N | eps | SR | Tsucc | E |
+Run-level aggregates (from each run’s `summary.csv` when present):
+
+| run_id | tasks | diffs | n_agents | eps | SR | Tsucc | E |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | medium | 10 | 20 | 100.0% | 175.7 | 2529.4 |
-| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | hard | 10 | 20 | 100.0% | 295.4 | 4251.4 |
-| llm_scanpipe_mh_n8_qwen2p5_20260302 | area_scan_terrain_recon | medium | 8 | 5 | 100.0% | 117.6 | 1304.6 |
-| llm_scanpipe_mh_n8_qwen2p5_20260302 | area_scan_terrain_recon | hard | 8 | 5 | 20.0% | 539.0 | 4793.9 |
-| llm_scanpipe_mh_n8_qwen2p5_20260302 | pipeline_inspection_leak_detection | medium | 8 | 5 | 100.0% | 221.8 | 1948.8 |
-| llm_scanpipe_mh_n8_qwen2p5_20260302 | pipeline_inspection_leak_detection | hard | 8 | 5 | 100.0% | 194.8 | 1754.5 |
-| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | area_scan_terrain_recon | medium | 8 | 20 | 100.0% | 174.0 | 1931.6 |
-| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | area_scan_terrain_recon | hard | 8 | 20 | 95.0% | 1233.1 | 14451.1 |
-| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | pipeline_inspection_leak_detection | medium | 8 | 20 | 100.0% | 313.2 | 3154.6 |
-| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | pipeline_inspection_leak_detection | hard | 8 | 20 | 90.0% | 336.1 | 4247.3 |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | area_scan_terrain_recon,pipeline_inspection_leak_detection | hard,medium | 8 | 80 | 96.2% | 509.4 | 5946.1 |
+| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | hard,medium | 10 | 40 | 100.0% | 235.5 | 3390.4 |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | area_scan_terrain_recon,pipeline_inspection_leak_detection | hard,medium | 8 | 20 | 80.0% | 200.6 | 2450.4 |
+| llm_smoke_cleanup_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | medium | 10 | 1 | 100.0% | 200.0 | 2880.0 |
+| llm_triage_cleanup_mh_llama3_8b_20260302 | surface_pollution_cleanup_multiagent | hard,medium | 10 | 10 | 90.0% | 208.8 | 3453.9 |
+| llm_triage_cleanup_mh_mistral7b_20260302 | surface_pollution_cleanup_multiagent | hard,medium | 10 | 10 | 90.0% | 180.7 | 3089.2 |
+| llm_triage_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | hard,medium | 10 | 10 | 100.0% | 224.8 | 3235.8 |
+
+Blank/empty cells policy for the LLM table above:
+- No blank rows are included. Runs missing `summary.csv` (incomplete/failed) are excluded per project policy.
+
+#### 4.4.2 BC runs (index + numeric summary; pre-final)
+
+Index (all BC-related run roots; includes `bc_*` and BC-suffixed sweeps):
+- `runs/headless/bc_mlp_big_eval_nav5_v2spec_20260302/`
+- `runs/headless/bc_mlp_big_nav5_mh_eval_v2spec_20260302/`
+- `runs/headless/bc_mlp_demo26_mh_eval_cg2_20260302/`
+- `runs/headless/bc_mlp_demo26_mh_eval_v2spec_20260302/`
+- `runs/headless/bc_mlp_eval_nav5_v2spec_20260302/`
+- `runs/headless/bc_mlp_eval_nav5_v2spec_v2bc_20260302/`
+- `runs/headless/bc_teacher_data_v1_20260302/`
+- `runs/headless/bc_teacher_demo26_mh_20260302/`
+- `runs/headless/bc_teacher_nav5_mh_20260302/`
+- `runs/headless/deep_demo26_mh_cg2_20260303_bc_farm/`
+- `runs/headless/scaling_pipeline_hard_cg2_20260303_n02_bc/`
+- `runs/headless/scaling_pipeline_hard_cg2_20260303_n04_bc/`
+- `runs/headless/scaling_pipeline_hard_cg2_20260303_n08_bc/`
+- `runs/headless/scaling_pipeline_hard_cg2_20260303_n10_bc/`
+
+Run-level aggregates (from each run’s `summary.csv`):
+
+| run_id | tasks | diffs | n_agents | eps | SR | Tsucc | E |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| bc_mlp_big_eval_nav5_v2spec_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | hard,medium | 2,10 | 200 | 70.5% | 214.1 | 1089.3 |
+| bc_mlp_big_nav5_mh_eval_v2spec_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | hard,medium | 2,10 | 200 | 83.0% | 227.7 | 1157.6 |
+| bc_mlp_demo26_mh_eval_cg2_20260302 | area_scan_terrain_recon,fish_herding_8uuv,pipeline_inspection_leak_detection,surface_pollution_cleanup_multiagent,underwater_pollution_lift_5uuv | hard,medium | 2,5,8,10 | 50 | 72.0% | 252.9 | 3124.2 |
+| bc_mlp_demo26_mh_eval_v2spec_20260302 | area_scan_terrain_recon,fish_herding_8uuv,pipeline_inspection_leak_detection,surface_pollution_cleanup_multiagent,underwater_pollution_lift_5uuv | hard,medium | 2,5,8,10 | 50 | 90.0% | 235.7 | 1807.1 |
+| bc_mlp_eval_nav5_v2spec_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | hard,medium | 2,10 | 200 | 5.0% | 211.8 | 531.1 |
+| bc_mlp_eval_nav5_v2spec_v2bc_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | hard,medium | 2,10 | 200 | 5.0% | 213.0 | 528.5 |
+| bc_teacher_data_v1_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | medium | 2,10 | 100 | 97.0% | 167.7 | 895.7 |
+| bc_teacher_demo26_mh_20260302 | area_scan_terrain_recon,fish_herding_8uuv,pipeline_inspection_leak_detection,surface_pollution_cleanup_multiagent,underwater_pollution_lift_5uuv | hard,medium | 2,5,8,10 | 50 | 90.0% | 218.2 | 1854.9 |
+| bc_teacher_nav5_mh_20260302 | depth_profile_tracking,formation_transit_multiagent,go_to_goal_current,route_following_waypoints,station_keeping | hard,medium | 2,10 | 200 | 94.5% | 202.9 | 1150.1 |
+| deep_demo26_mh_cg2_20260303_bc_farm | fish_herding_8uuv,pipeline_inspection_leak_detection,surface_pollution_cleanup_multiagent,underwater_pollution_lift_5uuv | hard,medium | 2,5,8,10 | 160 | 78.8% | 213.0 | 1705.5 |
+| scaling_pipeline_hard_cg2_20260303_n02_bc | pipeline_inspection_leak_detection | hard | 2 | 10 | 30.0% | 612.7 | 1879.8 |
+| scaling_pipeline_hard_cg2_20260303_n04_bc | pipeline_inspection_leak_detection | hard | 4 | 10 | 20.0% | 354.5 | 3770.8 |
+| scaling_pipeline_hard_cg2_20260303_n08_bc | pipeline_inspection_leak_detection | hard | 8 | 10 | 40.0% | 265.8 | 6661.4 |
+| scaling_pipeline_hard_cg2_20260303_n10_bc | pipeline_inspection_leak_detection | hard | 10 | 10 | 30.0% | 342.0 | 9698.5 |
 
 ---
 
@@ -399,7 +432,14 @@ Notes on `git_dirty`:
 - The **code revision** is still pinned by `git_sha`.
 - `git_sha=multiple` means `runs/index.jsonl` contains entries for the same `run_id` with different SHAs (typically due to re-running parts of a sweep at different times); do not mix results across those SHAs without care.
 
-**Complete inventory table**
+Exclusions (not included in the table below):
+- `runs/headless/_cache/` (artifacts, not a run)
+- `runs/headless/_models/` (artifacts, not a run)
+- `runs/headless/demo_replays_clean_latest_20260302/` (replay helper artifacts, not a run)
+- `runs/headless/hero_media_v2spec_20260302/` (media helper artifacts, not a run)
+- `runs/headless/llm_triage_cleanup_mh_glm4_9b_20260302/` (incomplete/failed; missing `summary.csv`)
+
+**Complete inventory table (only run roots with `summary.csv`)**
 
 | run_id | category | dynamics | tasks_n | diffs | n_agents | episodes(rows) | size | git_sha | git_dirty |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -410,8 +450,6 @@ Notes on `git_dirty`:
 | FINAL_6dof_scaling_formation_medium_20260303_n04 | official | 6dof | 1 | medium | 4 | 10 | 5.7M | f31eaf31ab09 | true |
 | FINAL_6dof_scaling_formation_medium_20260303_n08 | official | 6dof | 1 | medium | 8 | 10 | 12M | f31eaf31ab09 | true |
 | FINAL_6dof_scaling_formation_medium_20260303_n10 | official | 6dof | 1 | medium | 10 | 10 | 14M | f31eaf31ab09 | true |
-| _cache | other |  |  |  |  |  | 5.8M |  |  |
-| _models | other |  |  |  |  |  | 2.9M |  |  |
 | _smoke_6dof_quick_20260303 | other | 6dof | 2 | medium | 2 | 2 | 620K | 83b80451fcd7 | true |
 | _smoke_v2spec_20260302 | other |  | 10 | easy,hard,medium | 2,5,8,10 | 30 | 19M | multiple | true |
 | baseline_deep_cleanup_mh_20260302 | other |  | 1 | hard,medium | 10 | 40 | 44M | dbdfe5c932b5 | true |
@@ -433,14 +471,11 @@ Notes on `git_dirty`:
 | deep_scanpipe_mh_n8_cg2_20260303_baseline_farm | other |  | 2 | hard,medium | 8 | 80 | 267M | 83b80451fcd7 | false |
 | deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | other |  | 2 | hard,medium | 8 | 80 | 152M | 83b80451fcd7 | false |
 | demo_musthave_hero_medium_v2spec_20260302 | other |  | 5 | medium | 2,5,8,10 | 50 | 32M | multiple | true |
-| demo_replays_clean_latest_20260302 | other |  |  |  |  |  | 3.9M |  |  |
 | hero_full10_v2spec_20260302 | other |  | 10 | hard,medium | 5,8,10 | 400 | 517M | 0cbc9bb64d7f | true |
-| hero_media_v2spec_20260302 | other |  |  |  |  |  | 3.9M |  |  |
 | hero_v2spec_20260302 | other |  | 8 | hard,medium | 8,10 | 160 | 228M | multiple | true |
 | llm_deep_cleanup_mh_qwen2p5_7b_20260302 | other |  | 1 | hard,medium | 10 | 40 | 50M | dbdfe5c932b5 | true |
 | llm_scanpipe_mh_n8_qwen2p5_20260302 | other |  | 2 | hard,medium | 8 | 20 | 58M | 06b08dce4382 | true |
 | llm_smoke_cleanup_qwen2p5_7b_20260302 | other |  | 1 | medium | 10 | 1 | 1.2M | 9f6193525d66 | true |
-| llm_triage_cleanup_mh_glm4_9b_20260302 | other |  |  |  |  |  | 616K |  |  |
 | llm_triage_cleanup_mh_llama3_8b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 13M | 9f6193525d66 | true |
 | llm_triage_cleanup_mh_mistral7b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 12M | 9f6193525d66 | true |
 | llm_triage_cleanup_mh_qwen2p5_7b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 13M | 9f6193525d66 | true |
