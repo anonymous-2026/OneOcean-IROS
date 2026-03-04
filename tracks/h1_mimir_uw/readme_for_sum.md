@@ -190,7 +190,16 @@ Legend:
 
 **Task-specific metrics (official FINAL 6DoF suite; aggregated from per-episode `metrics.json` → `final.*`):**
 
+Blank/empty cells policy (applies to the tables below):
+- Empty means **N/A by task definition** (the metric is not produced for that task), unless explicitly stated as “not recorded”.
+- Where `Tsucc_*` is present, it is computed over **successful** episodes only; if `SR=0%` then `Tsucc_*` is undefined and may appear empty.
+
 Navigation / tracking:
+
+Why some cells are empty in this table:
+- `go_to_goal_current`, `station_keeping` do not use waypoints → `best_dist_wp_*`, `wp_*`, `depth_abs_err_*` are N/A.
+- `route_following_waypoints`, `depth_profile_tracking` target waypoints rather than a single goal → `best_dist_goal_*`, `hold_counter_*` are N/A.
+- Only `station_keeping` uses a “hold” success condition → `hold_counter_mean` is N/A for other tasks.
 
 | task | diff | N | eps | SR | Tsucc_mean | Tsucc_std | best_dist_goal_m_mean | best_dist_goal_m_std | best_dist_wp_m_mean | best_dist_wp_m_std | wp_idx_mean | wp_total | depth_abs_err_m_mean | depth_abs_err_m_std | hold_counter_mean |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -205,6 +214,12 @@ Navigation / tracking:
 
 Multi-agent semantics:
 
+Why some cells are empty in this table:
+- `area_scan_terrain_recon` only reports scan coverage/cell counts → formation/fish/lift fields are N/A.
+- `formation_transit_multiagent` only reports formation errors → coverage/fish/lift fields are N/A.
+- `fish_herding_8uuv` only reports fish progress/dist-to-goal → coverage/formation/lift fields are N/A.
+- `underwater_pollution_lift_5uuv` reports lift-phase/attachments → other semantic fields are N/A.
+
 | task | diff | N | eps | SR | coverage_mean | coverage_std | cells_visited_mean | cells_total | formation_err_m_mean | formation_err_m_std | formation_max_err_m_mean | fish_progress_mean | fish_progress_std | fish_dist_goal_xz_m_mean | lift_attached_count_mean |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | area_scan_terrain_recon | medium | 8 | 20 | 100.0% | 0.808 | 0.006 | 206.8 | 256 |  |  |  |  |  |  |  |
@@ -217,6 +232,10 @@ Multi-agent semantics:
 | underwater_pollution_lift_5uuv | hard | 5 | 20 | 75.0% |  |  |  |  |  |  |  |  |  |  | 5.00 |
 
 Pollution / detection:
+
+Why some cells are empty in this table:
+- Cleanup task does not define leaks → `leaks_*` and `t_first_detect_*` are N/A.
+- Pipeline leak detection task does not define “sources_done” → `sources_done_frac_*` and `mean_source_progress_*` are N/A.
 
 | task | diff | N | eps | SR | Tsucc_mean | sources_done_frac_mean | sources_done_frac_std | mean_source_progress_s_mean | leaks_detected_mean | leaks_total | t_first_detect_s_mean | t_first_detect_s_std | probe_mean_final_mean |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -291,6 +310,27 @@ Controller / planner comparisons (kinematic-era evidence):
   - scan+pipeline: `runs/headless/llm_scanpipe_mh_n8_qwen2p5_20260302/`
   - deep stress scan+pipeline: `runs/headless/deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm/`
 
+**LLM pilot results (pre-final; numeric summary from `summary.csv`)**
+
+Notes / caveats:
+- These LLM runs were produced **before** the official `dynamics_model=6dof` requirement landed; their `run_meta.json` does not record `dynamics_model` (treat as **kinematic-era evidence**).
+- The “deep stress” scan+pipeline run uses `current_gain=2.0` (recorded in that run’s `run_meta.json`).
+
+Per-run, per-task aggregates:
+
+| run_id | task | diff | N | eps | SR | Tsucc | E |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | medium | 10 | 20 | 100.0% | 175.7 | 2529.4 |
+| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | surface_pollution_cleanup_multiagent | hard | 10 | 20 | 100.0% | 295.4 | 4251.4 |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | area_scan_terrain_recon | medium | 8 | 5 | 100.0% | 117.6 | 1304.6 |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | area_scan_terrain_recon | hard | 8 | 5 | 20.0% | 539.0 | 4793.9 |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | pipeline_inspection_leak_detection | medium | 8 | 5 | 100.0% | 221.8 | 1948.8 |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | pipeline_inspection_leak_detection | hard | 8 | 5 | 100.0% | 194.8 | 1754.5 |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | area_scan_terrain_recon | medium | 8 | 20 | 100.0% | 174.0 | 1931.6 |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | area_scan_terrain_recon | hard | 8 | 20 | 95.0% | 1233.1 | 14451.1 |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | pipeline_inspection_leak_detection | medium | 8 | 20 | 100.0% | 313.2 | 3154.6 |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | pipeline_inspection_leak_detection | hard | 8 | 20 | 90.0% | 336.1 | 4247.3 |
+
 ---
 
 ## 5) Repro commands (do not hardcode user-specific python paths)
@@ -357,6 +397,7 @@ How to recover the *exact* command and code SHA:
 Notes on `git_dirty`:
 - `git_dirty=true` in `runs/index.jsonl` typically indicates uncommitted / untracked local files at run time (often workspace-only notes).
 - The **code revision** is still pinned by `git_sha`.
+- `git_sha=multiple` means `runs/index.jsonl` contains entries for the same `run_id` with different SHAs (typically due to re-running parts of a sweep at different times); do not mix results across those SHAs without care.
 
 **Complete inventory table**
 
