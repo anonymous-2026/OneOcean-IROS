@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
         "--preset",
         type=str,
         default="",
-        choices=["", "smoke", "hero", "hero_full10", "paper_v1"],
+        choices=["", "smoke", "hero", "hero_full10", "paper_v1", "paper_v1_llm"],
         help="Convenience presets (override tasks/difficulties/seeds/episodes and may adjust per-task N defaults).",
     )
     ap.add_argument("--seeds", type=str, default="0-9", help="Seed range like '0-9' or list like '0,1,2'")
@@ -228,6 +228,21 @@ def main() -> int:
             args.episodes = 2
         if not user_set_seed_step:
             args.seed_step = 1000
+    elif str(args.preset).strip() == "paper_v1_llm":
+        # LLM pilot preset: keep canonical single-agent tasks at N=1, but run planning-sensitive tasks
+        # (scan/pipeline/cleanup/formation) with multi-agent settings so waypoint assignment matters.
+        if not user_set_tasks:
+            args.tasks = ",".join(list(CANONICAL_TASKS_10))
+        if not user_set_difficulties:
+            args.difficulties = "medium,hard"
+        if not user_set_pollution_models:
+            args.pollution_models = "gaussian"
+        if not user_set_seeds:
+            args.seeds = "0-9"
+        if not user_set_episodes:
+            args.episodes = 2
+        if not user_set_seed_step:
+            args.seed_step = 1000
 
     tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     diffs = [d.strip() for d in args.difficulties.split(",") if d.strip()]
@@ -267,6 +282,15 @@ def main() -> int:
         for k in ("go_to_goal_current", "station_keeping", "area_scan_terrain_recon", "pipeline_inspection_leak_detection", "route_following_waypoints", "depth_profile_tracking"):
             if k in defaults:
                 defaults[k]["n_agents"] = 1
+    elif str(args.preset).strip() == "paper_v1_llm":
+        # Single-agent tasks stay single-agent; scan + pipeline run multi-agent to exercise LLM waypoint splitting.
+        for k in ("go_to_goal_current", "station_keeping", "route_following_waypoints", "depth_profile_tracking"):
+            if k in defaults:
+                defaults[k]["n_agents"] = 1
+        if "area_scan_terrain_recon" in defaults:
+            defaults["area_scan_terrain_recon"]["n_agents"] = 8
+        if "pipeline_inspection_leak_detection" in defaults:
+            defaults["pipeline_inspection_leak_detection"]["n_agents"] = 8
     # Global override (e.g., scaling sweeps). Tasks with required_n_agents will fail fast in env.reset.
     if int(args.n_agents) > 0:
         for v in defaults.values():

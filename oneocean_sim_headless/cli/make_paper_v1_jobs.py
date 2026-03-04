@@ -14,6 +14,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--drift-npz", type=str, required=True)
     ap.add_argument("--out-root", type=str, required=True, help="Jobs will write into out_root/<method_id>/")
     ap.add_argument("--jobs-jsonl", type=str, default="", help="Output JSONL path (default: out_root/jobs_<stamp>.jsonl)")
+    ap.add_argument("--preset", type=str, default="paper_v1", choices=["paper_v1", "paper_v1_llm"], help="run_matrix preset to use.")
     ap.add_argument("--seeds", type=str, default="0-9")
     ap.add_argument("--episodes", type=int, default=2)
     ap.add_argument("--dynamics-model", type=str, default="6dof", choices=["kinematic", "3dof", "6dof"])
@@ -49,7 +50,7 @@ def main() -> int:
         "--drift-npz",
         drift_npz,
         "--preset",
-        "paper_v1",
+        str(args.preset),
         "--seeds",
         str(args.seeds),
         "--episodes",

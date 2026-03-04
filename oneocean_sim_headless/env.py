@@ -672,7 +672,10 @@ class HeadlessOceanEnv:
                 goals[i] = barrel + offsets[i]
             # During lift phases, bias upward to approach surface.
             if str(self.task_state.lift_phase) in {"lift_off", "join5", "to_surface"}:
-                goals[:, 1] = max(float(self.bounds_xyz[0][1]) + 0.6, float(barrel[1]) - 0.9)
+                # Difficulty-dependent ascent rate (harder => slower ascent).
+                dd = str(self.task_cfg.difficulty)
+                dy = 0.9 if dd == "easy" else 0.6 if dd == "medium" else 0.45
+                goals[:, 1] = max(float(self.bounds_xyz[0][1]) + 0.6, float(barrel[1]) - float(dy))
             goal = goals
         elif self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
             fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
@@ -1040,8 +1043,12 @@ class HeadlessOceanEnv:
             self.task_state.fish_xyz = fish
 
         if self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None and self.task_state.lift_attached is not None:
+            # Payload motion model: only move the barrel once the full team is attached.
+            # This prevents a single early attachment from dragging the payload trivially.
             attached = np.asarray(self.task_state.lift_attached, dtype=bool).reshape(self.n_agents)
-            if np.any(attached):
+            attached_count = int(np.count_nonzero(attached))
+            phase = str(getattr(self.task_state, "lift_phase", "approach"))
+            if phase in {"lift_off", "join5", "to_surface"} and attached_count >= 4:
                 barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
                 mean = np.mean(self._positions[attached], axis=0)
                 barrel[0] = float(mean[0])

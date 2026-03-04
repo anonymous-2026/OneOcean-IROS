@@ -85,9 +85,13 @@ class TaskConfig:
     fish_count: int = 60
     fish_target_progress: float = 1.0
 
+    # depth profile tracking (success requires reaching the waypoint chain *and* meeting this tolerance at the final waypoint)
+    depth_tolerance_m: float = 1.5
+
     # lift
     lift_attach_radius_m: float = 6.0
     lift_hold_s: float = 2.0
+    lift_surface_depth_m: float = 3.0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -143,16 +147,16 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=8.0 if d == "easy" else 4.5 if d == "medium" else 2.2,
-            max_steps=220 if d == "easy" else 280 if d == "medium" else 360,
+            success_radius_m=7.5 if d == "easy" else 4.0 if d == "medium" else 1.3,
+            max_steps=220 if d == "easy" else 280 if d == "medium" else 300,
         )
     if kind == "station_keeping":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=6.0 if d == "easy" else 3.0 if d == "medium" else 1.5,
-            max_steps=260 if d == "easy" else 360 if d == "medium" else 520,
-            hold_steps=35 if d == "easy" else 90 if d == "medium" else 160,
+            success_radius_m=6.0 if d == "easy" else 2.6 if d == "medium" else 1.3,
+            max_steps=260 if d == "easy" else 360 if d == "medium" else 560,
+            hold_steps=35 if d == "easy" else 110 if d == "medium" else 240,
         )
     if kind == "pollution_localization":
         return TaskConfig(
@@ -173,17 +177,18 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=7.0 if d == "easy" else 4.0 if d == "medium" else 2.8,
-            max_steps=320 if d == "easy" else 440 if d == "medium" else 640,
-            waypoints_n=6 if d == "easy" else 9 if d == "medium" else 13,
+            success_radius_m=7.0 if d == "easy" else 3.2 if d == "medium" else 1.6,
+            max_steps=320 if d == "easy" else 460 if d == "medium" else 560,
+            waypoints_n=6 if d == "easy" else 12 if d == "medium" else 20,
         )
     if kind == "depth_profile_tracking":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=7.0 if d == "easy" else 4.5 if d == "medium" else 3.2,
-            max_steps=360 if d == "easy" else 520 if d == "medium" else 820,
-            waypoints_n=6 if d == "easy" else 9 if d == "medium" else 13,
+            success_radius_m=7.0 if d == "easy" else 3.6 if d == "medium" else 1.8,
+            max_steps=360 if d == "easy" else 560 if d == "medium" else 720,
+            waypoints_n=6 if d == "easy" else 12 if d == "medium" else 18,
+            depth_tolerance_m=2.0 if d == "easy" else 1.2 if d == "medium" else 0.7,
         )
     if kind == "formation_transit_multiagent":
         return TaskConfig(
@@ -197,20 +202,21 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
-            success_radius_m=5.0 if d == "easy" else 3.8 if d == "medium" else 2.0,
-            max_steps=520 if d == "easy" else 720 if d == "medium" else 420,
-            cleanup_sources_n=6 if d == "easy" else 12 if d == "medium" else 36,
-            cleanup_dwell_s=5.0 if d == "easy" else 8.0 if d == "medium" else 12.0,
-            cleanup_required_agents=1,
+            success_radius_m=5.0 if d == "easy" else 3.8 if d == "medium" else 2.6,
+            max_steps=520 if d == "easy" else 720 if d == "medium" else 900,
+            cleanup_sources_n=6 if d == "easy" else 12 if d == "medium" else 6,
+            cleanup_dwell_s=5.0 if d == "easy" else 8.0 if d == "medium" else 6.0,
+            cleanup_required_agents=1 if d in {"easy", "medium"} else 2,
         )
     if kind == "underwater_pollution_lift_5uuv":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
             success_radius_m=6.0,
-            max_steps=480 if d == "easy" else 640 if d == "medium" else 880,
-            lift_attach_radius_m=7.0 if d == "easy" else 5.0 if d == "medium" else 4.0,
-            lift_hold_s=1.8 if d == "easy" else 2.5 if d == "medium" else 3.2,
+            max_steps=520 if d == "easy" else 720 if d == "medium" else 880,
+            lift_attach_radius_m=5.5 if d == "easy" else 4.0 if d == "medium" else 3.0,
+            lift_hold_s=2.5 if d == "easy" else 3.5 if d == "medium" else 4.0,
+            lift_surface_depth_m=3.0 if d == "easy" else 2.5 if d == "medium" else 2.5,
         )
     if kind == "fish_herding_8uuv":
         return TaskConfig(
@@ -218,9 +224,9 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=20.0 if d == "easy" else 12.0 if d == "medium" else 7.0,
             # Make hard extremely challenging for open-source baselines (paper requirement: hard SR << 50%).
-            max_steps=600 if d == "easy" else 900 if d == "medium" else 900,
-            fish_count=80 if d == "easy" else 140 if d == "medium" else 160,
-            fish_target_progress=0.60 if d == "easy" else 0.78 if d == "medium" else 0.99,
+            max_steps=600 if d == "easy" else 650 if d == "medium" else 900,
+            fish_count=80 if d == "easy" else 220 if d == "medium" else 160,
+            fish_target_progress=0.60 if d == "easy" else 0.995 if d == "medium" else 0.99,
         )
     if kind == "area_scan_terrain_recon":
         return TaskConfig(
@@ -228,21 +234,21 @@ def preset_task(kind: TaskKind, difficulty: DifficultyKind) -> TaskConfig:
             difficulty=difficulty,
             success_radius_m=8.0,
             # Keep generous enough for the ROI scan path, but tune hard to avoid saturated 100% SR.
-            max_steps=1100 if d == "easy" else 2200 if d == "medium" else 2550,
-            scan_cell_size_m=110.0 if d == "easy" else 80.0 if d == "medium" else 60.0,
-            scan_target_coverage=0.55 if d == "easy" else 0.80 if d == "medium" else 0.80,
+            max_steps=1100 if d == "easy" else 2000 if d == "medium" else 1700,
+            scan_cell_size_m=110.0 if d == "easy" else 75.0 if d == "medium" else 60.0,
+            scan_target_coverage=0.55 if d == "easy" else 0.82 if d == "medium" else 0.95,
             # With rr computed via floor(scan_radius/cell), keeping radius < cell yields rr=0 (one-cell footprint).
-            scan_radius_m=40.0 if d == "easy" else 35.0 if d == "medium" else 30.0,
+            scan_radius_m=40.0 if d == "easy" else 35.0 if d == "medium" else 70.0,
         )
     if kind == "pipeline_inspection_leak_detection":
         return TaskConfig(
             kind=kind,
             difficulty=difficulty,
             success_radius_m=7.0 if d == "easy" else 5.0 if d == "medium" else 4.0,
-            max_steps=900 if d == "easy" else 1400 if d == "medium" else 1600,
-            waypoints_n=8 if d == "easy" else 12 if d == "medium" else 16,
-            pipeline_leaks_n=3 if d == "easy" else 6 if d == "medium" else 6,
-            pipeline_detect_radius_m=10.0 if d == "easy" else 6.0 if d == "medium" else 3.5,
+            max_steps=900 if d == "easy" else 1500 if d == "medium" else 1500,
+            waypoints_n=8 if d == "easy" else 14 if d == "medium" else 20,
+            pipeline_leaks_n=3 if d == "easy" else 6 if d == "medium" else 8,
+            pipeline_detect_radius_m=10.0 if d == "easy" else 5.0 if d == "medium" else 3.6,
         )
     raise ValueError(f"Unknown task kind: {kind}")
 
@@ -432,8 +438,12 @@ def compute_success(
         done = task_state.waypoint_index >= (wps.shape[0] - 1) and best <= float(cfg.success_radius_m)
         out: dict[str, Any] = {"waypoint_index": int(task_state.waypoint_index), "best_dist_to_waypoint_m": best, "waypoints_total": int(wps.shape[0])}
         if cfg.kind == "depth_profile_tracking":
-            out["mean_depth_abs_error_m"] = float(np.mean(np.abs(pos[:, 1] - float(wp[1]))))
-        return done, out
+            depth_err = float(np.mean(np.abs(pos[:, 1] - float(wp[1]))))
+            out["mean_depth_abs_error_m"] = depth_err
+            out["depth_tolerance_m"] = float(cfg.depth_tolerance_m)
+            # Success requires meeting the terminal waypoint *and* a depth tolerance (prevents saturation under drift).
+            done = bool(done and (depth_err <= float(cfg.depth_tolerance_m)))
+        return bool(done), out
 
     if cfg.kind == "formation_transit_multiagent":
         if task_state.formation_offsets_xyz is None:
@@ -450,22 +460,34 @@ def compute_success(
         done = np.asarray(task_state.cleanup_done, dtype=bool)
         prog = np.asarray(task_state.cleanup_progress_s, dtype=np.float64)
 
-        # Assign each agent to a nearest unfinished source.
+        # Assign each agent to a source.
         if task_state.cleanup_assigned_source is None:
             task_state.cleanup_assigned_source = np.full((n_agents,), -1, dtype=np.int64)
-        for ai in range(n_agents):
-            cur = int(task_state.cleanup_assigned_source[ai])
-            if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
-                continue
-            if np.all(done):
-                task_state.cleanup_assigned_source[ai] = -1
-                continue
+        req = int(max(1, int(cfg.cleanup_required_agents)))
+        if req > 1:
+            # Deterministic team grouping: agents are partitioned into teams of size `req`,
+            # each team targets one unfinished source.
             cand = np.where(~done)[0]
-            dists = np.linalg.norm(srcs[cand] - pos[ai][None, :], axis=1)
-            task_state.cleanup_assigned_source[ai] = int(cand[int(np.argmin(dists))])
+            if cand.size == 0:
+                task_state.cleanup_assigned_source[:] = -1
+            else:
+                for ai in range(n_agents):
+                    team = int(ai // req)
+                    task_state.cleanup_assigned_source[ai] = int(cand[team % int(cand.size)])
+        else:
+            # Nearest unfinished source (single-agent-per-source).
+            for ai in range(n_agents):
+                cur = int(task_state.cleanup_assigned_source[ai])
+                if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
+                    continue
+                if np.all(done):
+                    task_state.cleanup_assigned_source[ai] = -1
+                    continue
+                cand = np.where(~done)[0]
+                dists = np.linalg.norm(srcs[cand] - pos[ai][None, :], axis=1)
+                task_state.cleanup_assigned_source[ai] = int(cand[int(np.argmin(dists))])
 
         radius = float(cfg.success_radius_m)
-        req = int(max(1, int(cfg.cleanup_required_agents)))
         for si in range(int(srcs.shape[0])):
             if bool(done[si]):
                 continue
@@ -518,8 +540,14 @@ def compute_success(
         task_state.lift_attached = attached
         task_state.lift_phase = phase
         # "surface" proxy: small depth
-        success = phase == "to_surface" and float(barrel[1]) <= 3.0
-        return success, {"lift_phase": phase, "lift_attached_count": int(np.count_nonzero(attached))}
+        attached_count = int(np.count_nonzero(attached))
+        surface_depth = float(cfg.lift_surface_depth_m)
+        success = phase == "to_surface" and attached_count >= 5 and float(barrel[1]) <= surface_depth
+        return bool(success), {
+            "lift_phase": phase,
+            "lift_attached_count": attached_count,
+            "lift_surface_depth_m": surface_depth,
+        }
 
     if cfg.kind == "fish_herding_8uuv":
         if task_state.fish_xyz is None:
