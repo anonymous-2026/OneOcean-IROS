@@ -336,3 +336,82 @@ python3 -c \"from oneocean_sim_headless.validators import validate_run_dir; prin
 - Constraint violations are **0** in the reported official suite. This does not indicate a bug, but it means the sampled tiles did not force collisions/touchdowns under these seeds/settings.
 - No sensor noise/bias model is used in the official suite (observations are deterministic numerical streams).
 - Some task families (cleanup/lift/fish/scan/pipeline) use simplified semantic dynamics; they are designed for controllable benchmarking, not photorealism.
+
+---
+
+## 7) Appendix — full H1 `runs/headless/` inventory (for supplement traceability)
+
+This appendix lists **all** run roots under `runs/headless/` at the time of writing, so a reader can:
+- see what was run (and what was selected as “official”),
+- locate artifacts on disk,
+- and map each run back to the code SHA + command record.
+
+Counts:
+- `runs/headless/` top-level run roots: **53**
+- of which have `summary.csv`: **48**
+
+How to recover the *exact* command and code SHA:
+- For `*_farm` runs: check `<run_root>/farm_meta.json` for the full argv.
+- For all runs: check `runs/index.jsonl` (each entry includes `cmd` + `git.sha` + `git.dirty`) and grep by `runs/headless/<run_id>/`.
+
+Notes on `git_dirty`:
+- `git_dirty=true` in `runs/index.jsonl` typically indicates uncommitted / untracked local files at run time (often workspace-only notes).
+- The **code revision** is still pinned by `git_sha`.
+
+**Complete inventory table**
+
+| run_id | category | dynamics | tasks_n | diffs | n_agents | episodes(rows) | size | git_sha | git_dirty |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ABL_dynamics_3dof_full10_mh_20260303_farm | ablation | 3dof | 10 | hard,medium | 5,8,10 | 400 | 700M | f31eaf31ab09 | true |
+| ABL_dynamics_kinematic_full10_mh_20260303_farm | ablation | kinematic | 10 | hard,medium | 5,8,10 | 400 | 632M | f31eaf31ab09 | true |
+| FINAL_6dof_hero_full10_mh_20260303_farm | official | 6dof | 10 | hard,medium | 5,8,10 | 400 | 701M | f31eaf31ab09 | true |
+| FINAL_6dof_scaling_formation_medium_20260303_n02 | official | 6dof | 1 | medium | 2 | 10 | 3.2M | f31eaf31ab09 | true |
+| FINAL_6dof_scaling_formation_medium_20260303_n04 | official | 6dof | 1 | medium | 4 | 10 | 5.7M | f31eaf31ab09 | true |
+| FINAL_6dof_scaling_formation_medium_20260303_n08 | official | 6dof | 1 | medium | 8 | 10 | 12M | f31eaf31ab09 | true |
+| FINAL_6dof_scaling_formation_medium_20260303_n10 | official | 6dof | 1 | medium | 10 | 10 | 14M | f31eaf31ab09 | true |
+| _cache | other |  |  |  |  |  | 5.8M |  |  |
+| _models | other |  |  |  |  |  | 2.9M |  |  |
+| _smoke_6dof_quick_20260303 | other | 6dof | 2 | medium | 2 | 2 | 620K | 83b80451fcd7 | true |
+| _smoke_v2spec_20260302 | other |  | 10 | easy,hard,medium | 2,5,8,10 | 30 | 19M | multiple | true |
+| baseline_deep_cleanup_mh_20260302 | other |  | 1 | hard,medium | 10 | 40 | 44M | dbdfe5c932b5 | true |
+| baseline_demo26_mh_cg2_20260302 | other |  | 5 | hard,medium | 2,5,8,10 | 50 | 83M | 06b08dce4382 | true |
+| baseline_eval_nav5_v2spec_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 94M | 9f6193525d66 | true |
+| baseline_scanpipe_mh_n8_20260302 | other |  | 2 | hard,medium | 8 | 20 | 59M | 06b08dce4382 | true |
+| baseline_triage_cleanup_mh_20260302 | other |  | 1 | hard,medium | 10 | 10 | 12M | dbdfe5c932b5 | false |
+| bc_mlp_big_eval_nav5_v2spec_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 102M | dbdfe5c932b5 | true |
+| bc_mlp_big_nav5_mh_eval_v2spec_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 99M | dbdfe5c932b5 | true |
+| bc_mlp_demo26_mh_eval_cg2_20260302 | other |  | 5 | hard,medium | 2,5,8,10 | 50 | 92M | 06b08dce4382 | true |
+| bc_mlp_demo26_mh_eval_v2spec_20260302 | other |  | 5 | hard,medium | 2,5,8,10 | 50 | 82M | 06b08dce4382 | true |
+| bc_mlp_eval_nav5_v2spec_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 132M | 9f6193525d66 | true |
+| bc_mlp_eval_nav5_v2spec_v2bc_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 132M | dbdfe5c932b5 | true |
+| bc_teacher_data_v1_20260302 | other |  | 5 | medium | 2,10 | 100 | 40M | 9f6193525d66 | true |
+| bc_teacher_demo26_mh_20260302 | other |  | 5 | hard,medium | 2,5,8,10 | 50 | 78M | 06b08dce4382 | true |
+| bc_teacher_nav5_mh_20260302 | other |  | 5 | hard,medium | 2,10 | 200 | 94M | dbdfe5c932b5 | true |
+| deep_demo26_mh_cg2_20260302_baseline_farm | other |  | 4 | hard,medium | 2,5,8,10 | 160 | 120M | 83b80451fcd7 | false |
+| deep_demo26_mh_cg2_20260303_bc_farm | other |  | 4 | hard,medium | 2,5,8,10 | 160 | 146M | 83b80451fcd7 | false |
+| deep_scanpipe_mh_n8_cg2_20260303_baseline_farm | other |  | 2 | hard,medium | 8 | 80 | 267M | 83b80451fcd7 | false |
+| deep_scanpipe_mh_n8_cg2_20260303_llm_qwen2p5_7b_farm | other |  | 2 | hard,medium | 8 | 80 | 152M | 83b80451fcd7 | false |
+| demo_musthave_hero_medium_v2spec_20260302 | other |  | 5 | medium | 2,5,8,10 | 50 | 32M | multiple | true |
+| demo_replays_clean_latest_20260302 | other |  |  |  |  |  | 3.9M |  |  |
+| hero_full10_v2spec_20260302 | other |  | 10 | hard,medium | 5,8,10 | 400 | 517M | 0cbc9bb64d7f | true |
+| hero_media_v2spec_20260302 | other |  |  |  |  |  | 3.9M |  |  |
+| hero_v2spec_20260302 | other |  | 8 | hard,medium | 8,10 | 160 | 228M | multiple | true |
+| llm_deep_cleanup_mh_qwen2p5_7b_20260302 | other |  | 1 | hard,medium | 10 | 40 | 50M | dbdfe5c932b5 | true |
+| llm_scanpipe_mh_n8_qwen2p5_20260302 | other |  | 2 | hard,medium | 8 | 20 | 58M | 06b08dce4382 | true |
+| llm_smoke_cleanup_qwen2p5_7b_20260302 | other |  | 1 | medium | 10 | 1 | 1.2M | 9f6193525d66 | true |
+| llm_triage_cleanup_mh_glm4_9b_20260302 | other |  |  |  |  |  | 616K |  |  |
+| llm_triage_cleanup_mh_llama3_8b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 13M | 9f6193525d66 | true |
+| llm_triage_cleanup_mh_mistral7b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 12M | 9f6193525d66 | true |
+| llm_triage_cleanup_mh_qwen2p5_7b_20260302 | other |  | 1 | hard,medium | 10 | 10 | 13M | 9f6193525d66 | true |
+| scaling_formation_medium_v2_20260302_n02 | other |  | 1 | medium | 2 | 10 | 2.5M | multiple | true |
+| scaling_formation_medium_v2_20260302_n04 | other |  | 1 | medium | 4 | 10 | 4.2M | multiple | true |
+| scaling_formation_medium_v2_20260302_n08 | other |  | 1 | medium | 8 | 10 | 8.8M | multiple | true |
+| scaling_formation_medium_v2_20260302_n10 | other |  | 1 | medium | 10 | 10 | 10M | multiple | true |
+| scaling_pipeline_hard_cg2_20260303_n02_baseline | other |  | 1 | hard | 2 | 10 | 6.2M | 83b80451fcd7 | false |
+| scaling_pipeline_hard_cg2_20260303_n02_bc | other |  | 1 | hard | 2 | 10 | 9.6M | 83b80451fcd7 | true |
+| scaling_pipeline_hard_cg2_20260303_n04_baseline | other |  | 1 | hard | 4 | 10 | 11M | 83b80451fcd7 | false |
+| scaling_pipeline_hard_cg2_20260303_n04_bc | other |  | 1 | hard | 4 | 10 | 18M | 83b80451fcd7 | true |
+| scaling_pipeline_hard_cg2_20260303_n08_baseline | other |  | 1 | hard | 8 | 10 | 13M | 83b80451fcd7 | false |
+| scaling_pipeline_hard_cg2_20260303_n08_bc | other |  | 1 | hard | 8 | 10 | 29M | 83b80451fcd7 | true |
+| scaling_pipeline_hard_cg2_20260303_n10_baseline | other |  | 1 | hard | 10 | 10 | 16M | 83b80451fcd7 | false |
+| scaling_pipeline_hard_cg2_20260303_n10_bc | other |  | 1 | hard | 10 | 10 | 40M | 83b80451fcd7 | true |
