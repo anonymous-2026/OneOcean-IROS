@@ -6,28 +6,55 @@ Scope: **numeric-only, table-ready** evidence for paper/web + how to reproduce.
 
 This file is intended to be readable without following the day-to-day logs.
 
+Reading guide (project perspective):
+- **What H1 is in the OneOcean project**: the *backend benchmark harness* (fast + deterministic + scalable) that turns our “ocean data + tasks” into **paper-grade numeric tables** and **replayable recordings**.
+- **What H1 is not**: not a photorealistic underwater renderer; not a UI track. Visual tracks (H2/H3/…) can reuse H1’s task ids, metrics, and recorder contract, but H1 itself stays headless.
+- **What is “official” evidence** (paper tables): the runs explicitly marked as FINAL 6DoF in §4.1–§4.2 (plus the DoF ablation in §4.3 as optional analysis).
+- **What is “supplement traceability”**: §7 lists all `runs/headless/` run roots with code SHA and storage footprint so reviewers can locate artifacts.
+
 ---
 
-## 1) What H1 delivered
+## 1) What H1 delivered (from the project’s point of view)
 
-H1 provides a headless (no-UI) simulation backend that supports:
+H1 provides the “experiment engine” for the project’s data-grounded tasks:
 
-- **Headless runner**: `oneocean_sim_headless.cli.run` and `oneocean_sim_headless.cli.run_matrix` (+ `run_matrix_farm` for parallel sharding).
-- **Deterministic recording** (MIMIR-inspired layout): per-agent streams under `agents/agent_XXX/` and run-level `run_meta.json`, `metrics.json`, `metrics.csv`, `summary.csv`.
-- **Validators**: `oneocean_sim_headless.validators.validate_run_dir` (timestamps monotonic, row counts aligned, constraints respected when enabled).
-- **Dynamics options** (DoF ablation + official mode):
+- **Headless runner (single + matrix)**:
+  - `python3 -m oneocean_sim_headless.cli.run` (one episode)
+  - `python3 -m oneocean_sim_headless.cli.run_matrix` (sweeps)
+  - `python3 -m oneocean_sim_headless.cli.run_matrix_farm` (parallel sharding across many workers/GPUs)
+- **Recorder contract (supplement-friendly)**:
+  - per-agent time-aligned streams under `agents/agent_XXX/`
+  - per-episode provenance + configuration snapshots:
+    - `run_meta.json` (full env/task/controller config + dataset/projection metadata)
+    - `spec_snapshot.json` (paper-facing “device/constraint/dynamics” snapshot)
+    - `metrics.json` / `metrics.csv` (per-episode metrics + final state summary)
+    - `summary.csv` (paper-facing per-episode aggregate table for a run root)
+- **Validators (sanity + integrity)**:
+  - `oneocean_sim_headless.validators.validate_run_dir` checks timestamps/row alignment and flags obvious run-dir corruption.
+- **Multi-agent scaling**:
+  - tasks are parameterized for **N=2–10** (task-dependent; fixed-N tasks fail fast on mismatch).
+- **Dynamics options (DoF ablation + official mode)**:
   - `--dynamics-model kinematic` (legacy/pre-final; simple integrator)
   - `--dynamics-model 3dof` (debugging ablation)
   - `--dynamics-model 6dof` (**official**; used for FINAL suite)
 
-Key policy/UI decision:
-- This track is **no-UI** by design; it focuses on reproducible numeric artifacts that other visual tracks can consume.
+What you can cite as “H1 deliverables” in the overall system:
+- a repeatable way to generate **numeric tables** (success/TTS/energy/violations + task-specific metrics),
+- a repeatable way to generate **auditable recordings** (streams + specs + provenance),
+- and a deterministic baseline backend that other tracks can plug into.
 
 ---
 
-## 2) Data grounding (currents) used by H1
+## 2) Data grounding used by H1 (what is “from our data”)
 
-All official runs below are grounded in our dataset via a drift-cache slice:
+For official FINAL runs, H1 is data-grounded via a drift-cache exported from our `combined_environment.nc`.
+
+What is grounded in data (current official suite):
+- **Currents**: sampled from the cached `utotal/vtotal` slice (used as an additive drift term in world frame).
+- **Land/bathymetry constraints**: `land_mask` + `elevation` are exported into the drift cache and used as hard constraints when enabled.
+
+What is not grounded in the data in the current official suite:
+- The “pollution field” is a **controllable model** (e.g., Gaussian) used to define observation + success/metrics; the official FINAL suite uses `pollution_model=gaussian` (see `summary.csv`).
 
 - Drift cache NPZ: `runs/headless/_cache/drift_scene_utotal_vtotal_t0_d0.npz`
 - Drift cache provenance JSON: `runs/headless/_cache/drift_scene_utotal_vtotal_t0_d0.json`
