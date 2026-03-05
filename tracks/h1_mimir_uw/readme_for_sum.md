@@ -202,6 +202,21 @@ Notes on skipped local models (environment dependency, not a benchmark decision)
 - `GLM-4-9B-Chat` requires `tiktoken` (not available in this host environment).
 - `OLMo-7B-Instruct` requires `hf_olmo` (not available in this host environment).
 
+### 5.5 LLM high-level planner (planning-suite; **medium**; current_gain=2.0; seeds 0–9; includes BC)
+
+Goal: a **stable, paper-facing** planning-suite table (more seeds) that differentiates:
+heuristic vs learned BC vs multiple local LLM planners (high-level phase switching + waypoint assignment).
+
+- Run root: `runs/headless/V65PLANNING_planningSuite_medium_cg2_s0-9_20260305_191000/`
+  - Heuristic: `runs/headless/V65PLANNING_planningSuite_medium_cg2_s0-9_20260305_191000/heuristic/summary.csv`
+  - BC: `runs/headless/V65PLANNING_planningSuite_medium_cg2_s0-9_20260305_191000/mlp_bc/summary.csv`
+  - LLM models: `runs/headless/V65PLANNING_planningSuite_medium_cg2_s0-9_20260305_191000/llm_*/summary.csv`
+- Preset: `paper_v1_llm`
+- Tasks: `surface_pollution_cleanup_multiagent`, `area_scan_terrain_recon`, `pipeline_inspection_leak_detection`
+- Difficulty: `medium` + stronger currents (`--current-gain 2.0`)
+- Seeds/episodes: `seeds=0..9`, `episodes=1` (30 episodes / method)
+- Exported paper table: `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
+
 ---
 
 ## 6) Cleanup guidance (post-verification)
@@ -219,6 +234,7 @@ Keep (paper-relevant):
 - Currentsweep (BC): `runs/headless/V43SWEEP_paper_v1_cg0_mlpbc_hard_20260305_090220/`, `runs/headless/V44SWEEP_paper_v1_cg1_mlpbc_hard_20260305_090310/`, `runs/headless/V45SWEEP_paper_v1_cg2_mlpbc_hard_20260305_090400/`
 - Scaling (Table 3; cleanup, medium): `runs/headless/V52SCALE_cg1_medium_N02_heuristic_20260305_090900/`, `runs/headless/V54SCALE_cg1_medium_N04_heuristic_20260305_090900/`, `runs/headless/V58SCALE_cg1_medium_N08_heuristic_20260305_090900/`, `runs/headless/V510SCALE_cg1_medium_N10_heuristic_20260305_090900/`
 - Exported paper tables (Markdown; do not edit by hand): `runs/headless/_tables_20260305/`
+- Planning-suite (medium; cg=2.0; stable seeds): `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
 
 Safe to delete after verification:
 - calibration-only roots under `runs/headless/_calib_*`
@@ -239,6 +255,7 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
   - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63full/table_planning_suite_hard.md`
   - (fast triage, **medium**; current_gain=2.0): `runs/headless/_tables_20260305_v64c/table_planning_suite_medium.md`
+  - (stable, **medium**; current_gain=2.0; includes BC): `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
 
 Notes:
 - Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.
