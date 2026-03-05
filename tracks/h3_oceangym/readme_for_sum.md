@@ -1,7 +1,7 @@
 # H3 (OceanGym / HoloOcean 2.0.1) — Summary of Deliverables + Selected Evidence
 
-Date: 2026-03-03  
-Status: **Summary mode (experiments stopped)**  
+Date: 2026-03-05  
+Status: **Latest redesigned matrix completed (quant + limited media)**  
 Scope: H3 OceanGym integration + data-grounded runs + curated media pointers for paper/web.
 
 > This file is intended to be **committable** (text-only). It references **local run outputs** under
@@ -103,6 +103,35 @@ See `oneocean(iros-2026-code)/tracks/h3_oceangym/scene_provenance.md` for:
 ## 4) Official experiment inventory (table-ready)
 
 All paths below are relative to the **ocean workspace root** (`/data/private/user2/workspace/ocean`).
+
+### 4.0 Latest redesigned matrix (4 scenes; non-saturated difficulty/robustness/scaling)
+
+This is the **post-suggestion.md** redesign intended to avoid the “all 100% / all 0%” reviewer red flag by adding:
+- `--current_scale` (0.0 / 1.0 / 2.5)
+- `--ctrl_profile` (`default` vs `weak`)
+- 4 scenes (`Dam`, `PierHarbor`, `OpenWater`, `SimpleUnderwater`)
+- explicit slices for: difficulty ladder / robustness / pollution model compare / N-scaling
+
+Run root:
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/`
+
+What’s inside:
+- `A_difficulty_ladder_{easy,medium,hard}/summary.csv`
+- `B_robust_ds{0.0,0.1}_scale{0.0,1.0,2.5}_ctrl{default,weak}/summary.csv`
+- `C_pollution_model_{analytic,ocpnet_3d}_scale{1.0,2.5}/summary.csv`
+- `D_scaling_N{2,4,8,10}/summary.csv`
+- `latest_plan.json`, `run_index.jsonl`
+
+Paper-table-ready exports (auto-generated into `project/results/`):
+- `project/results/h3_h3_LATEST_20260305_1__A_difficulty_ladder.md`
+- `project/results/h3_h3_LATEST_20260305_1__B_robustness__collapsed_over_scenes.md`
+- `project/results/h3_h3_LATEST_20260305_1__C_pollution_models.md`
+- `project/results/h3_h3_LATEST_20260305_1__D_scaling.md`
+
+Notes (interpretation guardrails):
+- This run is **quant-only** (`--no_media`) for throughput; keep using §5 media from the FINALFIX hero run for visuals.
+- In the difficulty ladder, `station_keeping` remains close to saturation; the other 3 single-agent tasks show strong degradation from `easy`→`hard` in most scenes.
+- For `route_following_waypoints`, success can become **very strict** under `difficulty>=medium`; use the continuous indicators (`mean_cross_track_error_m`, `waypoints_reached`) even when SR is low.
 
 ### 4.1 Official FINALFIX hero suite (use this as the H3 “main table” evidence)
 
@@ -495,3 +524,18 @@ Selection rule (to avoid “wrong” results):
   - scenarios: `Dam-HoveringCamera`, `OpenWater-HoveringCamera`, `PierHarbor-HoveringCamera`, `SimpleUnderwater-Hovering`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/hero_bundle_20260302_150011/summary.csv`
   - `oneocean(iros-2026-code)/runs/oceangym_h3/hero_bundle_20260302_150011/results_manifest.json`
+
+### A.4 Latest redesigned matrix (4 scenes; difficulty/robustness/pollution/scaling)
+
+- `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/`
+  - quant-only (no media); 4-scene coverage; includes controller profile + current scale knobs
+  - Example slice artifacts:
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/A_difficulty_ladder_medium/summary.csv`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/B_robust_ds0.0_scale2.5_ctrlweak/summary.csv`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/C_pollution_model_ocpnet_3d_scale2.5/summary.csv`
+    - `oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1/D_scaling_N10/summary.csv`
+  - Aggregated tables:
+    - `project/results/h3_h3_LATEST_20260305_1__A_difficulty_ladder.md`
+    - `project/results/h3_h3_LATEST_20260305_1__B_robustness__collapsed_over_scenes.md`
+    - `project/results/h3_h3_LATEST_20260305_1__C_pollution_models.md`
+    - `project/results/h3_h3_LATEST_20260305_1__D_scaling.md`
