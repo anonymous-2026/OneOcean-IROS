@@ -61,19 +61,62 @@ Not grounded in data (current suite):
 ## 3) Design + constraints (paper-facing; implemented)
 
 - World frame: `x=east`, `z=north`, `y=depth` (**positive down**).
-- Action space: desired relative velocity in world frame (clipped to `max_speed_mps`).
+- Action space: desired **relative** velocity in world frame, `a_t∈R^3` (clipped to `max_speed_mps`).
 - Energy proxy:
   ```tex
   E := \\sum_t \\lVert a_t \\rVert_2^2 \\; \\Delta t
   ```
 
-Hard constraints:
+### 3.1 Dynamics + drift (what “data-grounded” means in H1)
+
+At every step we sample a local horizontal current from the cached dataset field:
+```tex
+c(x,z,t) := \\big[u_{data}(x,z)\\cdot g,\\;0,\\;v_{data}(x,z)\\cdot g\\big] + c_{tide}(t)
+```
+where `g = current_gain` is a stress-test knob. The default “official” setting is `g=1.0`.
+
+State update is an engineering drift model (not full CFD):
+```tex
+p_{t+1} = p_t + (a_t + c(p_t,t))\\,\\Delta t
+```
+(`p=[x,y,z]`, with `y` positive down). For `--dynamics-model 6dof`, attitude/velocity are additionally integrated with bounded roll/pitch and a yaw update; however the **controller interface stays the same** (it always outputs `a_t`).
+
+### 3.2 Hard constraints (land + bathymetry)
+
+Constraints are enforced during the state update. If the proposed `p_{t+1}` violates constraints, the update is rejected (velocity is canceled for that step) and a counter increments.
+
+Land constraint:
 - Land: reject when `land_mask(x,z) ≥ land_mask_threshold`.
+
+Bathymetry clearance (when `bathy_mode=hard`):
 - Bathymetry clearance (when `bathy_mode=hard`):
   ```tex
   y + \\text{seafloor_clearance_m} > \\text{water_depth}(x,z),\\quad \\text{water_depth}(x,z) := -\\text{elevation}(x,z)
   ```
-- On rejection: position update is rejected and `constraint_violations += 1`.
+On rejection:
+- `p_{t+1} := p_t`
+- `constraint_violations += 1`
+
+Implementation note (reproducibility guardrail):
+- If `constraint_mode!=off` then the drift cache must include `land_mask`; if `bathy_mode=hard` it must include `elevation` (run fails fast otherwise).
+
+### 3.3 Near-collision metric (multi-agent safety proxy)
+
+H1 logs both `min_pairwise_dist_m` (episode min) and a step-based rate:
+```tex
+\\text{collision\\_rate} := \\frac{\\#\\{t : \\min_{i<j}\\|p^i_t - p^j_t\\|_2 \\le r\\}}{T}
+```
+where `r = collision_radius_m` is a reporting knob (it does **not** change dynamics).
+
+### 3.4 Synthetic tide disturbance (robustness ablation)
+
+To avoid depending on external tide downloads while still stress-testing policies with oscillatory flow, we add an optional synthetic term:
+```tex
+c_{tide}(t) := A\\,[\\sin(\\omega(t+\\phi)),\\;0,\\;\\cos(\\omega(t+\\phi))]
+```
+with amplitude `A=tide_amp_mps`, period `2π/ω = tide_period_s`, and phase `φ=tide_phase_s`.
+
+This is a deliberate **engineering disturbance**: it is spatially uniform (same for all agents/positions) and does not claim to model realistic depth-dependent tides.
 
 ---
 
@@ -105,6 +148,7 @@ Table conventions:
 - `Tsucc_s` = mean `time_to_success_s` over **successful** episodes only (blank if SR=0%)
 - `E_mean` = mean `energy_proxy` over all episodes
 - `Viol_mean` = mean `constraint_violations` over all episodes
+- `collision_rate` = fraction of steps with `min_pairwise_dist_m ≤ collision_radius_m` (multi-agent only)
 
 ---
 
@@ -143,15 +187,31 @@ This supersedes older V15/V17 tables: task knobs were retuned to avoid saturated
 
 ### 5.2 Option A (MLP BC) learned baseline (end-to-end; 6DoF; medium+hard) — **current**
 
+Method summary (paper-facing):
+- Teacher: the built-in heuristic controllers (per task) under the same physics/constraints as evaluation.
+- Data: we record (i) a downsampled semantic stream containing `goal_for_action_xyz`, plus (ii) per-agent pose/actions/local_current/pollution_probe.
+- Supervision target: the **relative velocity** action `a_t` that the teacher executed.
+- Model: a tiny 2-layer MLP trained with MSE on standardized features/targets; exported as NumPy weights and run without torch during evaluation.
+
 Dense demos (for BC dataset):
 - `runs/headless/V26DEMOS_paper_v1_6dof_heuristic_rec5_20260305_070150_farm/`
 
 BC dataset:
 - `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/bc_dataset_v1.npz`
 - `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/bc_dataset_v1_meta.json`
+  - Feature schema (per agent):
+    - `goal_delta = goal_for_action_xyz - pre_step_pose_xyz` (3)
+    - `depth_y` (1)
+    - `pollution_probe` (1)
+    - `local_current_xz` (2)
+    - `task_onehot` (10)
+  - Total input dim: `7 + |task_vocab|`, output dim: `3` (`action_xyz`)
 
 BC weights:
 - `runs/headless/_models/bc_mlp_paper_v1_curfeat_20260305_073510/bc_mlp_v1_weights.npz`
+  - Training script: `python -m oneocean_sim_headless.ml.train_bc_mlp_torch ...`
+  - Architecture: `Linear(D→64)→ReLU→Linear(64→64)→ReLU→Linear(64→3)`
+  - Inference: pure NumPy forward pass with stored `x_mean/x_std/y_mean/y_std`, then speed clipping to `max_speed_mps`
 
 BC evaluation suite:
 - Run root: `runs/headless/V34PAPER_paper_v1_6dof_mlp_bc_curfeat_mh_bathyhard_20260305_073530_farm/`
@@ -181,6 +241,17 @@ BC evaluation suite:
 | underwater_pollution_lift_5uuv | medium | 5 | 20 | 90.0% | 83.1 | 58.8 | 0.00 |
 
 ### 5.3 LLM high-level planner pilot (pipeline-only; hard; seeds 0–2; 14B + OLMo excluded)
+
+Method summary (paper-facing):
+- LLM is **not** used for low-level control. The low-level controller stays as a deterministic goal-following policy.
+- The LLM only proposes **high-level discrete plans** at a fixed stride (every `llm_call_stride_steps`), and every output is schema-validated with deterministic fallbacks.
+- Two high-level APIs are used:
+  1) cleanup assignment: JSON `{ "assign": [s_i or -1] }` (one entry per agent; cannot assign already-done sources)
+  2) waypoint assignment: JSON `{ "assign_wp": [k_i] }` (one entry per agent; each in `[0,K-1]`)
+- Determinism + reproducibility:
+  - generation uses `do_sample=False` and `temperature=0.0`
+  - per-step payloads are hashed and cached to disk (`llm_cache_dir/<sha>.json`) so repeated runs reuse identical plans
+  - invalid JSON / schema violations automatically fall back to a deterministic heuristic assignment
 
 Pilot goal: demonstrate that the benchmark can differentiate an LLM high-level planner on a planning-sensitive multi-agent task.
 
