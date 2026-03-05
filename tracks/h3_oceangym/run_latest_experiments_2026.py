@@ -196,6 +196,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out_root", default=None, help="Run root folder under runs/oceangym_h3/ (default: h3_LATEST_<timestamp>).")
     ap.add_argument("--dry_run", action="store_true")
+    ap.add_argument(
+        "--only",
+        nargs="*",
+        default=None,
+        help="Optional list of slice prefixes to run (e.g., A_difficulty_ladder B_robust D_scaling). Default: run all.",
+    )
     ap.add_argument("--strong_scale", type=float, default=2.5)
     ap.add_argument("--episodes_nav", type=int, default=5)
     ap.add_argument("--episodes_plume", type=int, default=3)
@@ -222,6 +228,10 @@ def main() -> int:
         n_multiagent=int(args.n_multiagent),
     )
     (out_root / "latest_plan.json").write_text(json.dumps([s.__dict__ for s in specs], indent=2) + "\n", encoding="utf-8")
+
+    only = [str(x).strip() for x in (args.only or []) if str(x).strip()]
+    if only:
+        specs = [s for s in specs if any(s.name.startswith(pfx) for pfx in only)]
 
     for spec in specs:
         _run_one(python=python, repo_root=repo_root, spec=spec, out_root=out_root, dry_run=bool(args.dry_run))

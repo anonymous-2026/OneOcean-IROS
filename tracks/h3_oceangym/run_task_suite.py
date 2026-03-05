@@ -378,7 +378,14 @@ def _cfg_with_difficulty(cfg: SuiteCfg, difficulty: str) -> SuiteCfg:
     if d not in {"easy", "medium", "hard"}:
         raise ValueError(f"Unknown difficulty: {difficulty!r}")
     if d == "medium":
-        return replace(cfg, difficulty="medium")
+        # Medium should be non-trivial but not "all fail" for the single-agent ladder.
+        # Keep the baseline distances, but relax the success radius to avoid saturating at 0%.
+        return replace(
+            cfg,
+            difficulty="medium",
+            nav_goal_radius_m=max(4.0, cfg.nav_goal_radius_m * 1.6),
+            nav_goal_dist_m=max(25.0, cfg.nav_goal_dist_m * 0.85),
+        )
     if d == "easy":
         return replace(
             cfg,
@@ -397,7 +404,8 @@ def _cfg_with_difficulty(cfg: SuiteCfg, difficulty: str) -> SuiteCfg:
         difficulty="hard",
         current_u_mps=cfg.current_u_mps * 1.6,
         current_v_mps=cfg.current_v_mps * 1.6,
-        nav_goal_dist_m=cfg.nav_goal_dist_m * 1.5,
+        nav_goal_dist_m=cfg.nav_goal_dist_m * 1.35,
+        nav_goal_radius_m=max(3.0, cfg.nav_goal_radius_m * 1.2),
         station_keep_seconds=cfg.station_keep_seconds * 1.25,
         plume_sigma_m=max(10.0, cfg.plume_sigma_m * 0.75),
         plume_success_radius_m=max(5.0, cfg.plume_success_radius_m * 0.7),
@@ -1070,14 +1078,15 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
 
     d = str(cfg.difficulty).lower().strip()
     if d == "easy":
-        r = 10.0
-        wp_radius = 8.0
+        r = 12.0
+        wp_radius = 10.0
     elif d == "hard":
-        r = 60.0
-        wp_radius = 3.0
+        # Keep "hard" challenging, but avoid a fully unreachable path under drift.
+        r = 35.0
+        wp_radius = 6.0
     else:
-        r = 40.0
-        wp_radius = 4.0
+        r = 25.0
+        wp_radius = 8.0
 
     wps = [
         (start[0] + r, start[1] + 0.0),
@@ -1113,7 +1122,7 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
     success = False
     steps = 0
     ctrl: _ThrusterCtrlState | None = None
-    max_steps = int(cfg.max_steps) * (3 if d == "easy" else 1)
+    max_steps = int(cfg.max_steps) * (3 if d == "easy" else (2 if d == "medium" else 2))
     for step in range(max_steps):
         steps = step + 1
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
@@ -1198,6 +1207,8 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
         "collisions": int(collisions),
         "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
+        "waypoint_radius_m": float(wp_radius),
+        "route_radius_m": float(r),
     }
     res.update(_att_stats_finalize(att))
     if record:
@@ -1504,11 +1515,11 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
 
     rms_form = math.sqrt(form_err_sq / float(max(1, form_err_n)))
     if d == "easy":
-        rms_thresh = 6.0
+        rms_thresh = 14.0
     elif d == "hard":
-        rms_thresh = 3.0
+        rms_thresh = 10.0
     else:
-        rms_thresh = 4.5
+        rms_thresh = 12.0
     success_final = bool(success and rms_form <= rms_thresh)
 
     res = {
@@ -2021,12 +2032,15 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     if plume is not None:
         removed_mass = max(0.0, float(removed_mass))
         leaked_mass = max(0.0, float(leaked_mass))
-        success = (leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)
+        # Require both "low leak" and "meaningful removal" to avoid saturated 100% success.
+        removed_min_kg = 0.30 if str(cfg.difficulty).lower().strip() != "hard" else 0.45
+        success = bool((removed_mass >= removed_min_kg) and ((leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)))
     else:
         # Success: remove a meaningful amount while limiting leakage.
         removed_mass = float(removed) * float(particle_mass_kg)
         leaked_mass = float(leaked) * float(particle_mass_kg)
-        success = (leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)
+        removed_min_kg = 0.20 if str(cfg.difficulty).lower().strip() != "hard" else 0.30
+        success = bool((removed_mass >= removed_min_kg) and ((leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)))
     if rec_vp is not None:
         rec_vp.close()
     if rec_fp is not None:
@@ -2052,6 +2066,7 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "removed_mass_kg": float(removed_mass),
         "leaked_mass_kg": float(leaked_mass),
+        "success_removed_min_kg": float(removed_min_kg),
         "collisions": int(collisions),
         "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
