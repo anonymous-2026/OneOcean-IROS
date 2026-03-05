@@ -314,6 +314,7 @@ def _look_at_x_axis(camera_xyz: tuple[float, float, float], target_xyz: tuple[fl
 class SuiteCfg:
     preset: str = "ocean_worlds_camera"
     difficulty: str = "medium"
+    ctrl_profile: str = "default"  # default | weak
     ticks_per_sec: int = 20
     fps: int = 20
     max_steps: int = 300
@@ -342,6 +343,7 @@ class SuiteCfg:
 
     current_u_mps: float = 0.25
     current_v_mps: float = 0.10
+    current_scale: float = 1.0  # scales both constant and data-grounded currents
 
     # Optional data-grounded current series (exported from combined_environment.nc via export_current_series_npz.py).
     current_npz: str | None = None
@@ -401,6 +403,52 @@ def _cfg_with_difficulty(cfg: SuiteCfg, difficulty: str) -> SuiteCfg:
         plume_success_radius_m=max(5.0, cfg.plume_success_radius_m * 0.7),
         contain_spawn_per_step=max(6, int(round(cfg.contain_spawn_per_step * 1.3))),
     )
+
+
+def _controller_label(cfg: SuiteCfg) -> str:
+    return f"thruster_pd:{str(cfg.ctrl_profile).lower().strip()}"
+
+
+def _pollution_controller_label(cfg: SuiteCfg) -> str:
+    model = str(cfg.pollution_model).lower().strip()
+    return f"{model}:ring_thruster_pd:{str(cfg.ctrl_profile).lower().strip()}"
+
+
+def _scaled_ctrl(
+    cfg: SuiteCfg,
+    *,
+    kp_pos: float,
+    kd_vel: float,
+    max_accel: float,
+    kp_ang: float,
+    kd_ang: float,
+    max_torque: float,
+) -> dict[str, float]:
+    """
+    Light-weight baseline variant knob: scale a baseline PD controller to create a measurable gap without
+    introducing new algorithmic dependencies.
+    """
+    profile = str(cfg.ctrl_profile).lower().strip()
+    if profile not in {"default", "weak"}:
+        profile = "default"
+
+    if profile == "weak":
+        kp_s = 0.55
+        kd_s = 0.75
+        lim_s = 0.60
+    else:
+        kp_s = 1.0
+        kd_s = 1.0
+        lim_s = 1.0
+
+    return {
+        "kp_pos": float(kp_pos) * kp_s,
+        "kd_vel": float(kd_vel) * kd_s,
+        "max_accel": float(max_accel) * lim_s,
+        "kp_ang": float(kp_ang) * kp_s,
+        "kd_ang": float(kd_ang) * kd_s,
+        "max_torque": float(max_torque) * lim_s,
+    }
 
 
 def _mean(xs: list[float]) -> float | None:
@@ -696,14 +744,23 @@ def _episode_current_uv(
     sim_time_s: float,
 ) -> tuple[float, float]:
     if series is None:
-        return float(cfg.current_u_mps), float(cfg.current_v_mps)
+        u, v = float(cfg.current_u_mps), float(cfg.current_v_mps)
+    else:
+        t0 = seed % max(1, series.t_len)
+        if float(cfg.dataset_days_per_sim_second) <= 0.0:
+            u, v = series.uv_at(time_idx=t0)
+        else:
+            day_offset = int(math.floor(sim_time_s * float(cfg.dataset_days_per_sim_second)))
+            u, v = series.uv_at(time_idx=t0 + day_offset)
 
-    t0 = seed % max(1, series.t_len)
-    if float(cfg.dataset_days_per_sim_second) <= 0.0:
-        return series.uv_at(time_idx=t0)
-
-    day_offset = int(math.floor(sim_time_s * float(cfg.dataset_days_per_sim_second)))
-    return series.uv_at(time_idx=t0 + day_offset)
+    s = float(cfg.current_scale)
+    u = float(u) * s
+    v = float(v) * s
+    if not math.isfinite(u):
+        u = 0.0
+    if not math.isfinite(v):
+        v = 0.0
+    return u, v
 
 
 def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir: Path, n_agents: int, current: _CurrentSeries | None) -> dict:
@@ -721,6 +778,10 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
     energy = 0.0
     collisions = 0
     prev_collision = False
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params = _scaled_ctrl(cfg, kp_pos=0.55, kd_vel=1.2, max_accel=8.0, kp_ang=8.0, kd_ang=3.0, max_torque=12.0)
 
     rec: _Recorder | None = None
     if record:
@@ -748,6 +809,9 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
 
         # Drift hook (data-driven current integration comes later; constant current is the default).
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(
             env,
             state=state,
@@ -771,12 +835,12 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
                 target_xyz_nwu=goal,
                 dt=dt,
                 ctrl=ctrl.get(name),
-                kp_pos=0.55,
-                kd_vel=1.2,
-                max_accel=8.0,
-                kp_ang=8.0,
-                kd_ang=3.0,
-                max_torque=12.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act(name, np.asarray(thr, dtype=np.float32))
 
@@ -820,14 +884,23 @@ def _run_nav_go_to_goal(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir:
         "task": "go_to_goal_current",
         "seed": int(seed),
         "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
+        "controller": _controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "goal_xyz": [float(goal[0]), float(goal[1]), float(goal[2])],
         "goal_radius_m": float(cfg.nav_goal_radius_m),
         "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success) else None,
         "min_dist_to_goal_m": float(min_dist),
         "final_dist_to_goal_m": float(final_dist),
         "collisions": int(collisions),
+        "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
@@ -854,6 +927,10 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     prev_collision = False
     energy = 0.0
     att = _att_stats_init()
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params = _scaled_ctrl(cfg, kp_pos=0.65, kd_vel=1.3, max_accel=6.0, kp_ang=9.0, kd_ang=3.5, max_torque=12.0)
 
     rec: _Recorder | None = None
     if record:
@@ -869,6 +946,9 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
     for step in range(steps):
         sim_time_s = float(step) * dt
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=sim_time_s)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(
             env,
             state=state,
@@ -890,12 +970,12 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
                 target_xyz_nwu=p0,
                 dt=dt,
                 ctrl=ctrl.get(name),
-                kp_pos=0.65,
-                kd_vel=1.3,
-                max_accel=6.0,
-                kp_ang=9.0,
-                kd_ang=3.5,
-                max_torque=12.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act(name, np.asarray(thr, dtype=np.float32))
         state = env.tick(num_ticks=1, publish=False)
@@ -938,12 +1018,20 @@ def _run_station_keeping(env, *, cfg: SuiteCfg, seed: int, record: bool, out_dir
         "seed": int(seed),
         "n_agents": int(n_agents),
         "difficulty": str(cfg.difficulty),
+        "controller": _controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "success": bool(rms <= rms_thresh),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(rms <= rms_thresh) else None,
         "rms_pos_error_m": float(rms),
         "rms_success_threshold_m": float(rms_thresh),
         "collisions": int(collisions),
+        "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
@@ -1007,6 +1095,10 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
     xte_sum = 0.0
     xte_n = 0
     att = _att_stats_init()
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params = _scaled_ctrl(cfg, kp_pos=0.55, kd_vel=1.2, max_accel=8.0, kp_ang=7.5, kd_ang=3.0, max_torque=10.0)
 
     rec: _Recorder | None = None
     if record:
@@ -1025,6 +1117,9 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
     for step in range(max_steps):
         steps = step + 1
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(env, state=state, agent_names=["auv0"], n_agents=n_agents, u=u, v=v, dt=dt)
 
         tx, ty = wps[min(wp_idx, len(wps) - 1)]
@@ -1039,12 +1134,12 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
                 target_xyz_nwu=(float(tx), float(ty), float(start[2])),
                 dt=dt,
                 ctrl=ctrl,
-                kp_pos=0.55,
-                kd_vel=1.2,
-                max_accel=8.0,
-                kp_ang=7.5,
-                kd_ang=3.0,
-                max_torque=10.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act("auv0", np.asarray(thr, dtype=np.float32))
         state = env.tick(num_ticks=1, publish=False)
@@ -1087,13 +1182,21 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
         "seed": int(seed),
         "n_agents": int(n_agents),
         "difficulty": str(cfg.difficulty),
+        "controller": _controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success) else None,
         "waypoints": int(len(wps)),
         "waypoints_reached": int(min(wp_idx, len(wps))),
         "mean_cross_track_error_m": float(xte_sum / float(max(1, xte_n))),
         "collisions": int(collisions),
+        "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
@@ -1134,6 +1237,10 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
     energy = 0.0
     ctrl: _ThrusterCtrlState | None = None
     att = _att_stats_init()
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params = _scaled_ctrl(cfg, kp_pos=0.8, kd_vel=1.5, max_accel=8.0, kp_ang=9.0, kd_ang=3.8, max_torque=12.0)
 
     rec: _Recorder | None = None
     if record:
@@ -1147,6 +1254,9 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
 
     for step in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(env, state=state, agent_names=["auv0"], n_agents=n_agents, u=u, v=v, dt=dt)
 
         seg = min(len(schedule) - 2, step // seg_len)
@@ -1163,12 +1273,12 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
                 target_xyz_nwu=(float(start[0]), float(start[1]), float(z_t)),
                 dt=dt,
                 ctrl=ctrl,
-                kp_pos=0.8,
-                kd_vel=1.5,
-                max_accel=8.0,
-                kp_ang=9.0,
-                kd_ang=3.8,
-                max_torque=12.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act("auv0", np.asarray(thr, dtype=np.float32))
         state = env.tick(num_ticks=1, publish=False)
@@ -1201,17 +1311,26 @@ def _run_depth_profile_tracking(env, *, cfg: SuiteCfg, seed: int, record: bool, 
         rec.close()
 
     rms = math.sqrt(sq_depth / float(max(1, steps)))
+    success = bool(rms <= float(rms_thresh))
     res = {
         "task": "depth_profile_tracking",
         "seed": int(seed),
         "n_agents": int(n_agents),
         "difficulty": str(cfg.difficulty),
-        "success": bool(rms <= float(rms_thresh)),
+        "controller": _controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
+        "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success) else None,
         "rms_depth_error_m": float(rms),
         "rms_success_threshold_m": float(rms_thresh),
         "collisions": int(collisions),
+        "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
@@ -1251,6 +1370,11 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     form_err_sq = 0.0
     form_err_n = 0
     att = _att_stats_init()
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params_leader = _scaled_ctrl(cfg, kp_pos=0.75, kd_vel=1.5, max_accel=10.0, kp_ang=7.5, kd_ang=3.0, max_torque=10.0)
+    params_follower = _scaled_ctrl(cfg, kp_pos=0.85, kd_vel=1.7, max_accel=10.0, kp_ang=7.5, kd_ang=3.0, max_torque=10.0)
 
     rec: _Recorder | None = None
     if record:
@@ -1277,6 +1401,9 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     for step in range(int(max_steps)):
         steps = step + 1
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(env, state=state, agent_names=agent_names, n_agents=n_agents, u=u, v=v, dt=dt)
 
         # Leader drives to goal.
@@ -1291,12 +1418,12 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
                 target_xyz_nwu=goal,
                 dt=dt,
                 ctrl=ctrl.get("auv0"),
-                kp_pos=0.75,
-                kd_vel=1.5,
-                max_accel=10.0,
-                kp_ang=7.5,
-                kd_ang=3.0,
-                max_torque=10.0,
+                kp_pos=params_leader["kp_pos"],
+                kd_vel=params_leader["kd_vel"],
+                max_accel=params_leader["max_accel"],
+                kp_ang=params_leader["kp_ang"],
+                kd_ang=params_leader["kd_ang"],
+                max_torque=params_leader["max_torque"],
             )
             env.act("auv0", np.asarray(thr0, dtype=np.float32))
 
@@ -1317,12 +1444,12 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
                     target_xyz_nwu=(float(lx + ox), float(ly + oy), float(lz + oz)),
                     dt=dt,
                     ctrl=ctrl.get(name),
-                    kp_pos=0.85,
-                    kd_vel=1.7,
-                    max_accel=10.0,
-                    kp_ang=7.5,
-                    kd_ang=3.0,
-                    max_torque=10.0,
+                    kp_pos=params_follower["kp_pos"],
+                    kd_vel=params_follower["kd_vel"],
+                    max_accel=params_follower["max_accel"],
+                    kp_ang=params_follower["kp_ang"],
+                    kd_ang=params_follower["kd_ang"],
+                    max_torque=params_follower["max_torque"],
                 )
                 env.act(name, np.asarray(thr, dtype=np.float32))
 
@@ -1382,19 +1509,28 @@ def _run_formation_transit_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         rms_thresh = 3.0
     else:
         rms_thresh = 4.5
+    success_final = bool(success and rms_form <= rms_thresh)
 
     res = {
         "task": "formation_transit_multiagent",
         "seed": int(seed),
         "n_agents": int(n_agents),
         "difficulty": str(cfg.difficulty),
+        "controller": _controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "goal_xyz": [float(goal[0]), float(goal[1]), float(goal[2])],
-        "success": bool(success and rms_form <= rms_thresh),
+        "success": bool(success_final),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success_final) else None,
         "rms_formation_error_m": float(rms_form),
         "rms_success_threshold_m": float(rms_thresh),
         "collisions": int(collisions),
+        "constraint_violations": float(collisions),
         "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
@@ -1520,9 +1656,19 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
     wx_sum = 0.0
     wy_sum = 0.0
     att = _att_stats_init()
+    energy = 0.0
+    collisions = 0
+    prev_collision = False
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    params = _scaled_ctrl(cfg, kp_pos=0.5, kd_vel=1.1, max_accel=8.0, kp_ang=7.0, kd_ang=2.8, max_torque=10.0)
 
     for k in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(k) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         _apply_constant_current_drift(
             env,
             state=state,
@@ -1549,16 +1695,26 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
                 target_xyz_nwu=(float(tx), float(ty), float(start[2])),
                 dt=dt,
                 ctrl=ctrl[i],
-                kp_pos=0.5,
-                kd_vel=1.1,
-                max_accel=8.0,
-                kp_ang=7.0,
-                kd_ang=2.8,
-                max_torque=10.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act(name, np.asarray(thr, dtype=np.float32))
 
         state = env.tick(num_ticks=1, publish=False)
+        col = _state_get(state, "auv0", "CollisionSensor", n_agents)
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
+        vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
+        if vel is not None:
+            v0 = np.asarray(vel, dtype=np.float32)
+            energy += float(v0.dot(v0)) * dt
 
         for i, name in enumerate(agent_names):
             pose = _state_get(state, name, "PoseSensor", n_agents)
@@ -1616,6 +1772,12 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         "seed": int(seed),
         "n_agents": int(n_agents),
         "difficulty": str(cfg.difficulty),
+        "controller": _pollution_controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
         "pollution_model": str(cfg.pollution_model),
         "source_range_m": float(src_range),
         "source_xy": [float(src[0]), float(src[1])],
@@ -1629,6 +1791,10 @@ def _run_plume_localization(env, *, cfg: SuiteCfg, seed: int, record: bool, out_
         "success": bool(success),
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success) else None,
+        "collisions": int(collisions),
+        "constraint_violations": float(collisions),
+        "energy_proxy": float(energy),
     }
     res.update(_att_stats_finalize(att))
     if record:
@@ -1733,8 +1899,19 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
     steps = min(max(1, int(cfg.plume_containment_steps)), max(1, int(cfg.max_steps)) * 10)
     ctrl = [None for _ in range(n_agents)]
     att = _att_stats_init()
+    cur_u_sum = 0.0
+    cur_v_sum = 0.0
+    cur_n = 0
+    collisions = 0
+    prev_collision = False
+    energy = 0.0
+    particle_mass_kg = float(cfg.ocpnet_emission_rate) * float(dt) / float(max(1, int(cfg.contain_spawn_per_step)))
+    params = _scaled_ctrl(cfg, kp_pos=0.5, kd_vel=1.1, max_accel=8.0, kp_ang=7.0, kd_ang=2.8, max_torque=10.0)
     for step in range(steps):
         u, v = _episode_current_uv(current, cfg=cfg, seed=seed, sim_time_s=float(step) * dt)
+        cur_u_sum += float(u)
+        cur_v_sum += float(v)
+        cur_n += 1
         theta = 2.0 * math.pi * (step / float(max(1, steps)))
         cx = src[0] + cam_r * math.cos(theta)
         cy = src[1] + cam_r * math.sin(theta)
@@ -1770,17 +1947,27 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
                 target_xyz_nwu=(float(tx), float(ty), float(tz)),
                 dt=dt,
                 ctrl=ctrl[i],
-                kp_pos=0.5,
-                kd_vel=1.1,
-                max_accel=8.0,
-                kp_ang=7.0,
-                kd_ang=2.8,
-                max_torque=10.0,
+                kp_pos=params["kp_pos"],
+                kd_vel=params["kd_vel"],
+                max_accel=params["max_accel"],
+                kp_ang=params["kp_ang"],
+                kd_ang=params["kd_ang"],
+                max_torque=params["max_torque"],
             )
             env.act(name, np.asarray(thr, dtype=np.float32))
 
         state = env.tick(num_ticks=1, publish=False)
         _att_stats_update(att, _state_get(state, "auv0", "PoseSensor", n_agents))
+        col = _state_get(state, "auv0", "CollisionSensor", n_agents)
+        if col is not None:
+            now = bool(np.asarray(col).reshape(-1)[0])
+            if now and not prev_collision:
+                collisions += 1
+            prev_collision = now
+        vel = _state_get(state, "auv0", "VelocitySensor", n_agents)
+        if vel is not None:
+            v0 = np.asarray(vel, dtype=np.float32)
+            energy += float(v0.dot(v0)) * dt
 
         if rec_vp is not None:
             vp = _state_get(state, "auv0", "ViewportCapture", n_agents)
@@ -1837,7 +2024,9 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         success = (leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)
     else:
         # Success: remove a meaningful amount while limiting leakage.
-        success = (leaked <= 0.25 * removed) if removed > 0 else (leaked == 0)
+        removed_mass = float(removed) * float(particle_mass_kg)
+        leaked_mass = float(leaked) * float(particle_mass_kg)
+        success = (leaked_mass <= 0.25 * removed_mass) if removed_mass > 0 else (leaked_mass == 0.0)
     if rec_vp is not None:
         rec_vp.close()
     if rec_fp is not None:
@@ -1847,17 +2036,28 @@ def _run_plume_containment_multiagent(env, *, cfg: SuiteCfg, seed: int, record: 
         "task": "plume_containment_multiagent",
         "seed": int(seed),
         "n_agents": int(n_agents),
+        "difficulty": str(cfg.difficulty),
         "source_xyz": [float(src[0]), float(src[1]), float(src[2])],
         "steps": int(steps),
         "time_s": float(steps * dt),
+        "time_to_success_s": float(steps * dt) if bool(success) else None,
         "pollution_model": str(cfg.pollution_model),
         "ocpnet_freeze_source_after_warmup": bool(cfg.ocpnet_freeze_source_after_warmup),
         "success": bool(success),
+        "controller": _pollution_controller_label(cfg),
+        "ctrl_profile": str(cfg.ctrl_profile),
+        "current_scale": float(cfg.current_scale),
+        "current_u_mean_mps": float(cur_u_sum / float(max(1, cur_n))),
+        "current_v_mean_mps": float(cur_v_sum / float(max(1, cur_n))),
+        "dataset_days_per_sim_second": float(cfg.dataset_days_per_sim_second),
+        "removed_mass_kg": float(removed_mass),
+        "leaked_mass_kg": float(leaked_mass),
+        "collisions": int(collisions),
+        "constraint_violations": float(collisions),
+        "energy_proxy": float(energy),
     }
-    if plume is not None:
-        res["removed_mass_kg"] = float(removed_mass)
-        res["leaked_mass_kg"] = float(leaked_mass)
-    else:
+    if plume is None:
+        res["particle_mass_kg"] = float(particle_mass_kg)
         res["removed_particles"] = int(removed)
         res["leaked_particles"] = int(leaked)
     if record:
@@ -1873,6 +2073,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--preset", default=SuiteCfg.preset)
     ap.add_argument("--difficulty", default=SuiteCfg.difficulty, choices=("easy", "medium", "hard"))
+    ap.add_argument("--ctrl_profile", default=SuiteCfg.ctrl_profile, choices=("default", "weak"))
     ap.add_argument(
         "--scenarios",
         nargs="*",
@@ -1898,9 +2099,11 @@ def main() -> int:
     )
     ap.add_argument("--no_media", action="store_true", help="Disable MP4/GIF/PNG generation during the run (quant-only).")
     ap.add_argument("--show_viewport", action="store_true")
+    ap.add_argument("--fog_density", type=float, default=SuiteCfg.fog_density)
     ap.add_argument("--current_npz", default=None, help="Optional exported current series npz (data-grounded forcing).")
     ap.add_argument("--current_depth_m", type=float, default=SuiteCfg.current_depth_m)
     ap.add_argument("--dataset_days_per_sim_second", type=float, default=SuiteCfg.dataset_days_per_sim_second)
+    ap.add_argument("--current_scale", type=float, default=SuiteCfg.current_scale)
     ap.add_argument("--pollution_model", default=SuiteCfg.pollution_model, choices=("analytic", "ocpnet_3d"))
     ap.add_argument("--ocpnet_warmup_steps", type=int, default=SuiteCfg.ocpnet_warmup_steps)
     ap.add_argument("--ocpnet_emission_rate", type=float, default=SuiteCfg.ocpnet_emission_rate)
@@ -1925,9 +2128,12 @@ def main() -> int:
         episodes=int(args.episodes),
         n_multiagent=int(args.n_multiagent),
         show_viewport=bool(args.show_viewport),
+        fog_density=float(args.fog_density),
+        ctrl_profile=str(args.ctrl_profile),
         current_npz=str(args.current_npz) if args.current_npz else None,
         current_depth_m=float(args.current_depth_m),
         dataset_days_per_sim_second=float(args.dataset_days_per_sim_second),
+        current_scale=float(args.current_scale),
         pollution_model=str(args.pollution_model),
         ocpnet_warmup_steps=int(args.ocpnet_warmup_steps),
         ocpnet_emission_rate=float(args.ocpnet_emission_rate),
