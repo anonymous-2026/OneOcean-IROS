@@ -109,6 +109,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     ap.add_argument("--current-gain", type=float, default=1.0, help="Scale dataset currents (ablation/stress-test).")
+    ap.add_argument("--tide-amp-mps", type=float, default=0.0, help="Optional synthetic oscillatory current amplitude (m/s).")
+    ap.add_argument("--tide-period-s", type=float, default=600.0, help="Tide oscillation period in seconds (synthetic).")
+    ap.add_argument("--tide-phase-s", type=float, default=0.0, help="Phase offset (seconds) for the synthetic tide.")
     ap.add_argument("--collision-radius-m", type=float, default=1.0, help="Near-collision radius for collision_rate metrics (meters).")
     ap.add_argument("--rec-step-stride", type=int, default=1, help="Record every K simulation steps (reduces I/O for long episodes).")
     return ap.parse_args()
@@ -331,6 +334,10 @@ def main() -> int:
                 "seafloor_clearance_m": float(args.seafloor_clearance_m),
                 "collision_radius_m": float(args.collision_radius_m),
                 "preset": str(args.preset),
+                "current_gain": float(args.current_gain),
+                "tide_amp_mps": float(args.tide_amp_mps),
+                "tide_period_s": float(args.tide_period_s),
+                "tide_phase_s": float(args.tide_phase_s),
                 "tasks": tasks,
                 "difficulties": diffs,
                 "pollution_models": pmods,
@@ -379,6 +386,9 @@ def main() -> int:
             bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
             seafloor_clearance_m=float(args.seafloor_clearance_m),
             current_gain=float(args.current_gain),
+            tide_amp_mps=float(args.tide_amp_mps),
+            tide_period_s=float(args.tide_period_s),
+            tide_phase_s=float(args.tide_phase_s),
             collision_radius_m=float(args.collision_radius_m),
             rec_step_stride=int(max(1, int(args.rec_step_stride))),
         )
@@ -490,6 +500,12 @@ def main() -> int:
                     "llm_cleanup_valid": last.get("llm_cleanup_valid", None),
                     "llm_wp_calls": last.get("llm_wp_calls", None),
                     "llm_wp_valid": last.get("llm_wp_valid", None),
+                    "llm_cached_calls": last.get("llm_cached_calls", None),
+                    "llm_uncached_calls": last.get("llm_uncached_calls", None),
+                    "llm_latency_ms_total": last.get("llm_latency_ms_total", None),
+                    "llm_latency_ms_mean": last.get("llm_latency_ms_mean", None),
+                    "llm_prompt_tokens_total": last.get("llm_prompt_tokens_total", None),
+                    "llm_output_tokens_total": last.get("llm_output_tokens_total", None),
                     "elapsed_s": float(time.time() - t0),
                     "run_dir": str(run_dir),
                 }

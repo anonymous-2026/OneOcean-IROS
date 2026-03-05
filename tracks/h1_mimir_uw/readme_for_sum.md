@@ -217,6 +217,18 @@ heuristic vs learned BC vs multiple local LLM planners (high-level phase switchi
 - Seeds/episodes: `seeds=0..9`, `episodes=1` (30 episodes / method)
 - Exported paper table: `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
 
+### 5.6 LLM planner efficiency (planning-suite; **medium**; current_gain=2.0; seeds 0–2; latency + token usage)
+
+Goal: support the “LLM planner comparison” table in `paper/.../docs/suggestion.md` with **cost metrics**:
+planning latency and token usage (measured on uncached local inference calls).
+
+- Run root: `runs/headless/V67LLMCOST_planningSuite_medium_cg2_s0-2_20260305_203000/`
+- Exported paper table: `runs/headless/_tables_20260305_v67cost/table_planning_suite_cost_medium.md`
+- New recorded fields in `summary.csv` (per-episode):
+  - `llm_uncached_calls`, `llm_cached_calls`
+  - `llm_latency_ms_total`, `llm_latency_ms_mean`
+  - `llm_prompt_tokens_total`, `llm_output_tokens_total`
+
 ---
 
 ## 6) Cleanup guidance (post-verification)
@@ -249,6 +261,8 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - per-task breakdown: `runs/headless/_tables_20260305/table_per_task_hard.md`
 - Table 2 (robustness vs current strength; hard; SR averaged over canonical 10 tasks):
   - `runs/headless/_tables_20260305/table_currentsweep_hard.md`
+- Table 2b (robustness with **tidal disturbance**; hard; SR averaged over canonical 10 tasks):
+  - `runs/headless/_tables_20260305_v66disturb/table_disturbances_hard.md`
 - Table 3 (multi-agent scaling; cleanup; medium; N=2/4/8/10):
   - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
 - LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
@@ -256,6 +270,7 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63full/table_planning_suite_hard.md`
   - (fast triage, **medium**; current_gain=2.0): `runs/headless/_tables_20260305_v64c/table_planning_suite_medium.md`
   - (stable, **medium**; current_gain=2.0; includes BC): `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
+  - (LLM efficiency add-on; **medium**; latency + token usage): `runs/headless/_tables_20260305_v67cost/table_planning_suite_cost_medium.md`
 
 Notes:
 - Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.

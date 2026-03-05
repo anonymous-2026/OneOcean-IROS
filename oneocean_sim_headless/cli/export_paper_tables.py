@@ -228,6 +228,67 @@ def export_currents(*, out_dir: Path, runs: list[RunSpec], difficulty: str, task
     _write_md_table(out_dir / f"table_currentsweep_{difficulty}.md", header, rows_out)
 
 
+def export_disturbances(*, out_dir: Path, runs: list[RunSpec], difficulty: str, tasks: list[str]) -> None:
+    """Table 2-style robustness: success rate under no/mild/strong/tidal disturbances."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def _cond_key(raw: str) -> str | None:
+        s = str(raw or "").strip().lower()
+        if not s:
+            return None
+        s = s.replace("-", "_").replace(" ", "_")
+        if s in {"no", "none", "nocurrent", "no_current", "cg0", "current0"}:
+            return "No Current"
+        if s in {"mild", "mildcurrent", "mild_current", "cg1", "current1"}:
+            return "Mild Current"
+        if s in {"strong", "strongcurrent", "strong_current", "cg2", "current2"}:
+            return "Strong Current"
+        if s in {"tide", "tidal", "tidal_disturbance", "tidal_disturb"}:
+            return "Tidal Disturbance"
+        return None
+
+    by_method: dict[str, dict[str, RunSpec]] = {}
+    for rs in runs:
+        lab = str(rs.label)
+        method = lab
+        cond_raw = ""
+        if "__" in lab:
+            method, cond_raw = lab.split("__", 1)
+        elif "_cg" in lab:
+            method, cg = lab.split("_cg", 1)
+            cond_raw = "cg" + cg
+        elif ":" in lab:
+            method, cond_raw = lab.split(":", 1)
+        cond = _cond_key(cond_raw)
+        if cond is None:
+            raise SystemExit(f"disturbances: could not infer condition from label {lab!r}; use method__no_current etc.")
+        by_method.setdefault(str(method), {})[cond] = rs
+
+    conds = ["No Current", "Mild Current", "Strong Current", "Tidal Disturbance"]
+    header = ["method", *conds]
+    rows_out: list[list[object]] = []
+    for method, m in sorted(by_method.items()):
+        r: list[object] = [method]
+        for cond in conds:
+            rs = m.get(cond)
+            if rs is None:
+                r.append("")
+                continue
+            rows = _load_rows(_find_summary_csv(rs.root))
+            g = _group_rows(rows, difficulty=difficulty)
+            srs: list[float] = []
+            for t in tasks:
+                rr = g.get((t, difficulty), [])
+                if not rr:
+                    continue
+                a = _agg_task(rr)
+                if a.get("SR") is not None:
+                    srs.append(float(a["SR"]))
+            r.append(_fmt_pct(_mean(srs)))
+        rows_out.append(r)
+    _write_md_table(out_dir / f"table_disturbances_{difficulty}.md", header, rows_out)
+
+
 def export_scaling(*, out_dir: Path, runs: list[RunSpec], task: str, difficulty: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     # Expect labels like "N02", "N04", ...
@@ -309,11 +370,83 @@ def export_planning_suite(*, out_dir: Path, runs: list[RunSpec], difficulty: str
     _write_md_table(out_dir / f"table_planning_suite_{difficulty}.md", header, rows_out)
 
 
+def export_planning_suite_cost(*, out_dir: Path, runs: list[RunSpec], difficulty: str) -> None:
+    """LLM comparison with efficiency metrics (latency/tokens) for planning-suite tasks."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    header = [
+        "method",
+        "cleanup SR",
+        "scan SR",
+        "pipeline SR",
+        "llm uncached calls",
+        "llm latency (ms/call)",
+        "llm prompt toks/call",
+        "llm output toks/call",
+    ]
+    rows_out: list[list[object]] = []
+    tasks = ["surface_pollution_cleanup_multiagent", "area_scan_terrain_recon", "pipeline_inspection_leak_detection"]
+
+    for rs in runs:
+        rows = _load_rows(_find_summary_csv(rs.root))
+        g = _group_rows(rows, difficulty=difficulty)
+
+        def agg(task: str) -> dict[str, Any]:
+            rr = g.get((task, difficulty), [])
+            return _agg_task(rr) if rr else {"eps": 0, "SR": None}
+
+        cl = agg("surface_pollution_cleanup_multiagent")
+        sc = agg("area_scan_terrain_recon")
+        pl = agg("pipeline_inspection_leak_detection")
+
+        # Aggregate LLM efficiency over all planning-suite episodes (ignore cached calls).
+        uncached_calls = 0.0
+        latency_ms_total = 0.0
+        prompt_toks_total = 0.0
+        out_toks_total = 0.0
+        for t in tasks:
+            rr = g.get((t, difficulty), [])
+            for r in rr:
+                try:
+                    uncached_calls += float(r.get("llm_uncached_calls", "") or 0.0)
+                except Exception:
+                    pass
+                try:
+                    latency_ms_total += float(r.get("llm_latency_ms_total", "") or 0.0)
+                except Exception:
+                    pass
+                try:
+                    prompt_toks_total += float(r.get("llm_prompt_tokens_total", "") or 0.0)
+                except Exception:
+                    pass
+                try:
+                    out_toks_total += float(r.get("llm_output_tokens_total", "") or 0.0)
+                except Exception:
+                    pass
+        lat_per = (latency_ms_total / uncached_calls) if uncached_calls > 0 else None
+        pt_per = (prompt_toks_total / uncached_calls) if uncached_calls > 0 else None
+        ot_per = (out_toks_total / uncached_calls) if uncached_calls > 0 else None
+
+        rows_out.append(
+            [
+                rs.label,
+                _fmt_pct(cl.get("SR")),
+                _fmt_pct(sc.get("SR")),
+                _fmt_pct(pl.get("SR")),
+                _fmt_f(uncached_calls, 1) if uncached_calls > 0 else "",
+                _fmt_f(lat_per, 1),
+                _fmt_f(pt_per, 1),
+                _fmt_f(ot_per, 1),
+            ]
+        )
+
+    _write_md_table(out_dir / f"table_planning_suite_cost_{difficulty}.md", header, rows_out)
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Export paper-ready Markdown tables from headless run_matrix summary.csv.")
     ap.add_argument("--out-dir", type=str, required=True)
     ap.add_argument("--run", action="append", default=[], help="Run spec label=path (repeatable).")
-    ap.add_argument("--table", type=str, required=True, choices=["main", "currents", "scaling", "planning_suite"])
+    ap.add_argument("--table", type=str, required=True, choices=["main", "currents", "disturbances", "scaling", "planning_suite", "planning_suite_cost"])
     ap.add_argument("--difficulty", type=str, default="hard", choices=["easy", "medium", "hard"])
     ap.add_argument("--tasks", type=str, default="", help="Comma list for currentsweep (default: canonical 10).")
     ap.add_argument("--task", type=str, default="surface_pollution_cleanup_multiagent", help="Task id for scaling table.")
@@ -346,8 +479,26 @@ def main() -> int:
                 "formation_transit_multiagent",
             ]
         export_currents(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty), tasks=tasks)
+    elif str(args.table) == "disturbances":
+        tasks = [t.strip() for t in str(args.tasks).split(",") if t.strip()]
+        if not tasks:
+            tasks = [
+                "go_to_goal_current",
+                "station_keeping",
+                "surface_pollution_cleanup_multiagent",
+                "underwater_pollution_lift_5uuv",
+                "fish_herding_8uuv",
+                "area_scan_terrain_recon",
+                "pipeline_inspection_leak_detection",
+                "route_following_waypoints",
+                "depth_profile_tracking",
+                "formation_transit_multiagent",
+            ]
+        export_disturbances(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty), tasks=tasks)
     elif str(args.table) == "planning_suite":
         export_planning_suite(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty))
+    elif str(args.table) == "planning_suite_cost":
+        export_planning_suite_cost(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty))
     else:
         export_scaling(out_dir=out_dir, runs=runs, task=str(args.task), difficulty=str(args.difficulty))
 

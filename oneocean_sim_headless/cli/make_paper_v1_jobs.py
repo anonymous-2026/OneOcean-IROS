@@ -25,6 +25,9 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--bathy-mode", type=str, default="hard", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     ap.add_argument("--current-gain", type=float, default=1.0)
+    ap.add_argument("--tide-amp-mps", type=float, default=0.0)
+    ap.add_argument("--tide-period-s", type=float, default=600.0)
+    ap.add_argument("--tide-phase-s", type=float, default=0.0)
     ap.add_argument("--collision-radius-m", type=float, default=1.0, help="Near-collision radius for collision_rate metrics (meters).")
     ap.add_argument("--rec-step-stride", type=int, default=5, help="Pass through to run_matrix (reduce I/O); 1 keeps full-rate recordings.")
     ap.add_argument("--bc-weights-npz", type=str, default="", help="If provided, include an mlp_bc job.")
@@ -80,6 +83,12 @@ def main() -> int:
         str(float(args.seafloor_clearance_m)),
         "--current-gain",
         str(float(args.current_gain)),
+        "--tide-amp-mps",
+        str(float(args.tide_amp_mps)),
+        "--tide-period-s",
+        str(float(args.tide_period_s)),
+        "--tide-phase-s",
+        str(float(args.tide_phase_s)),
         "--collision-radius-m",
         str(float(args.collision_radius_m)),
         "--rec-step-stride",

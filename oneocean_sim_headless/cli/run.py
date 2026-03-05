@@ -64,6 +64,10 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--constraint-mode", type=str, default="hard", choices=["off", "hard"], help="Hard constraints using land_mask (invalid regions).")
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"], help="Hard constraints using elevation vs agent depth (touchdown/too-shallow).")
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0, help="Minimum clearance above seafloor when bathy-mode=hard.")
+    ap.add_argument("--current-gain", type=float, default=1.0, help="Scale dataset currents (ablation/stress-test).")
+    ap.add_argument("--tide-amp-mps", type=float, default=0.0, help="Optional synthetic oscillatory current amplitude (m/s).")
+    ap.add_argument("--tide-period-s", type=float, default=600.0, help="Tide oscillation period in seconds (synthetic).")
+    ap.add_argument("--tide-phase-s", type=float, default=0.0, help="Phase offset (seconds) for the synthetic tide.")
     ap.add_argument("--collision-radius-m", type=float, default=1.0, help="Near-collision radius for collision_rate metrics (meters).")
     ap.add_argument("--rec-step-stride", type=int, default=1, help="Record every K simulation steps (reduces I/O for long episodes).")
     ap.add_argument("--max-steps", type=int, default=-1, help="Override max steps; -1 uses task preset.")
@@ -101,6 +105,10 @@ def main() -> int:
         constraint_mode=str(args.constraint_mode),  # type: ignore[arg-type]
         bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
         seafloor_clearance_m=float(args.seafloor_clearance_m),
+        current_gain=float(args.current_gain),
+        tide_amp_mps=float(args.tide_amp_mps),
+        tide_period_s=float(args.tide_period_s),
+        tide_phase_s=float(args.tide_phase_s),
         collision_radius_m=float(args.collision_radius_m),
         rec_step_stride=int(max(1, int(args.rec_step_stride))),
     )

@@ -34,6 +34,9 @@ class EnvConfig:
     seafloor_clearance_m: float = 1.0
     max_speed_mps: float = 1.2
     current_gain: float = 1.0
+    tide_amp_mps: float = 0.0
+    tide_period_s: float = 600.0
+    tide_phase_s: float = 0.0
     collision_radius_m: float = 1.0  # metrics-only; does not affect dynamics/constraints
 
     # Dynamics model selection (v2+).
@@ -152,6 +155,11 @@ class HeadlessOceanEnv:
         self._llm_cleanup_valid = 0
         self._llm_wp_calls = 0
         self._llm_wp_valid = 0
+        self._llm_cached_calls = 0
+        self._llm_uncached_calls = 0
+        self._llm_latency_ms_sum = 0.0
+        self._llm_prompt_tokens_sum = 0
+        self._llm_output_tokens_sum = 0
 
         self.rec = HeadlessRecorder(
             self.out_dir,
@@ -183,7 +191,18 @@ class HeadlessOceanEnv:
             origin_lat=self.origin_lat,
             origin_lon=self.origin_lon,
         )
-        return float(drift_x) * float(self.cfg.current_gain), float(drift_z) * float(self.cfg.current_gain)
+        base_x = float(drift_x) * float(self.cfg.current_gain)
+        base_z = float(drift_z) * float(self.cfg.current_gain)
+
+        amp = float(getattr(self.cfg, "tide_amp_mps", 0.0) or 0.0)
+        period = float(getattr(self.cfg, "tide_period_s", 0.0) or 0.0)
+        if amp > 0.0 and period > 1e-6:
+            phase = float(getattr(self.cfg, "tide_phase_s", 0.0) or 0.0)
+            w = 2.0 * math.pi / period
+            tt = w * (float(self._t) + phase)
+            return base_x + amp * math.sin(tt), base_z + amp * math.cos(tt)
+
+        return base_x, base_z
 
     def _violates_constraints(self, p_xyz: np.ndarray) -> bool:
         if str(self.cfg.constraint_mode) == "off":
@@ -247,6 +266,11 @@ class HeadlessOceanEnv:
             self._llm_cleanup_valid = 0
             self._llm_wp_calls = 0
             self._llm_wp_valid = 0
+            self._llm_cached_calls = 0
+            self._llm_uncached_calls = 0
+            self._llm_latency_ms_sum = 0.0
+            self._llm_prompt_tokens_sum = 0
+            self._llm_output_tokens_sum = 0
         else:
             self._llm_planner = None
             self._llm_last_done_mask = None
@@ -257,6 +281,11 @@ class HeadlessOceanEnv:
             self._llm_cleanup_valid = 0
             self._llm_wp_calls = 0
             self._llm_wp_valid = 0
+            self._llm_cached_calls = 0
+            self._llm_uncached_calls = 0
+            self._llm_latency_ms_sum = 0.0
+            self._llm_prompt_tokens_sum = 0
+            self._llm_output_tokens_sum = 0
         req_n = required_n_agents(task.kind)
         if req_n is not None and int(self.n_agents) != int(req_n):
             raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
@@ -646,6 +675,7 @@ class HeadlessOceanEnv:
                     need_call = True
                 if need_call:
                     self._llm_cleanup_calls += 1
+                    llm_stats: dict[str, Any] = {}
                     plan = self._llm_planner.plan_cleanup_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -653,7 +683,24 @@ class HeadlessOceanEnv:
                         sources_xyz=srcs,
                         done_mask=done,
                         n_agents=int(self.n_agents),
+                        stats_out=llm_stats,
                     )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
                     self._llm_last_call_step = int(step_i)
                     self._llm_last_done_mask = done.copy()
                     if plan is not None:
@@ -751,6 +798,7 @@ class HeadlessOceanEnv:
                 stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
                 if (step_i - int(self._llm_last_wp_call_step)) >= stride:
                     self._llm_wp_calls += 1
+                    llm_stats = {}
                     plan = self._llm_planner.plan_waypoint_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -758,7 +806,24 @@ class HeadlessOceanEnv:
                         waypoints_xyz=wps,
                         n_agents=int(self.n_agents),
                         detected_mask=None,
+                        stats_out=llm_stats,
                     )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
                     self._llm_last_wp_call_step = int(step_i)
                     if plan is not None:
                         self._llm_wp_valid += 1
@@ -802,6 +867,7 @@ class HeadlessOceanEnv:
                     if self.task_state.leak_detected is not None:
                         det = np.asarray(self.task_state.leak_detected, dtype=bool)
                     self._llm_wp_calls += 1
+                    llm_stats = {}
                     plan = self._llm_planner.plan_waypoint_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -809,7 +875,24 @@ class HeadlessOceanEnv:
                         waypoints_xyz=wps,
                         n_agents=int(self.n_agents),
                         detected_mask=det,
+                        stats_out=llm_stats,
                     )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
                     self._llm_last_wp_call_step = int(step_i)
                     if plan is not None:
                         self._llm_wp_valid += 1
@@ -1235,6 +1318,14 @@ class HeadlessOceanEnv:
         info["llm_cleanup_valid"] = int(self._llm_cleanup_valid)
         info["llm_wp_calls"] = int(self._llm_wp_calls)
         info["llm_wp_valid"] = int(self._llm_wp_valid)
+        info["llm_cached_calls"] = int(self._llm_cached_calls)
+        info["llm_uncached_calls"] = int(self._llm_uncached_calls)
+        info["llm_prompt_tokens_total"] = int(self._llm_prompt_tokens_sum)
+        info["llm_output_tokens_total"] = int(self._llm_output_tokens_sum)
+        info["llm_latency_ms_total"] = float(self._llm_latency_ms_sum)
+        info["llm_latency_ms_mean"] = None
+        if int(self._llm_uncached_calls) > 0:
+            info["llm_latency_ms_mean"] = float(self._llm_latency_ms_sum) / float(int(self._llm_uncached_calls))
         self._t += float(self.cfg.dt_s)
         # Termination by time horizon.
         done = bool(success)

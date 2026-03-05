@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,7 @@ class LLMPlanner:
         self._model = model
         _GLOBAL_MODEL_CACHE[mp] = (tok, model)
 
-    def _generate_text(self, prompt: str) -> str:
+    def _generate_text(self, prompt: str) -> tuple[str, dict[str, Any]]:
         """Best-effort deterministic text generation across heterogeneous HF/remote-code chat models."""
         self._ensure_model()
         assert self._tok is not None and self._model is not None
@@ -64,11 +65,21 @@ class LLMPlanner:
         tok = self._tok
         model = self._model
 
+        def _count_tokens(txt: str) -> int | None:
+            try:
+                ids = tok.encode(str(txt))
+                return int(len(ids))
+            except Exception:
+                return None
+
+        prompt_tokens = _count_tokens(str(prompt))
+
         # Some remote-code chat models (notably ChatGLM variants) implement a custom `.chat` interface and
         # can be incompatible with transformers' generation cache helpers. Prefer `.chat` when available.
         if hasattr(model, "chat"):
             try:
                 # Common signature: chat(tokenizer, query, history=[])
+                t0 = time.time()
                 out = model.chat(  # type: ignore[attr-defined]
                     tok,
                     str(prompt),
@@ -78,11 +89,15 @@ class LLMPlanner:
                     top_p=1.0,
                     max_new_tokens=int(self.cfg.max_new_tokens),
                 )
+                dt_ms = 1000.0 * (time.time() - t0)
                 if isinstance(out, tuple) and out:
-                    return str(out[0])
-                return str(out)
+                    txt = str(out[0])
+                else:
+                    txt = str(out)
+                return txt, {"latency_ms": float(dt_ms), "prompt_tokens": prompt_tokens, "output_tokens": _count_tokens(txt)}
             except Exception:
                 try:
+                    t0 = time.time()
                     out = model.chat(  # type: ignore[attr-defined]
                         tok,
                         str(prompt),
@@ -91,28 +106,44 @@ class LLMPlanner:
                         top_p=1.0,
                         max_new_tokens=int(self.cfg.max_new_tokens),
                     )
+                    dt_ms = 1000.0 * (time.time() - t0)
                     if isinstance(out, tuple) and out:
-                        return str(out[0])
-                    return str(out)
+                        txt = str(out[0])
+                    else:
+                        txt = str(out)
+                    return txt, {"latency_ms": float(dt_ms), "prompt_tokens": prompt_tokens, "output_tokens": _count_tokens(txt)}
                 except Exception:
                     try:
+                        t0 = time.time()
                         out = model.chat(tok, str(prompt), history=[])  # type: ignore[attr-defined]
+                        dt_ms = 1000.0 * (time.time() - t0)
                         if isinstance(out, tuple) and out:
-                            return str(out[0])
-                        return str(out)
+                            txt = str(out[0])
+                        else:
+                            txt = str(out)
+                        return txt, {"latency_ms": float(dt_ms), "prompt_tokens": prompt_tokens, "output_tokens": _count_tokens(txt)}
                     except Exception:
                         try:
+                            t0 = time.time()
                             out = model.chat(tok, str(prompt))  # type: ignore[attr-defined]
+                            dt_ms = 1000.0 * (time.time() - t0)
                             if isinstance(out, tuple) and out:
-                                return str(out[0])
-                            return str(out)
+                                txt = str(out[0])
+                            else:
+                                txt = str(out)
+                            return txt, {"latency_ms": float(dt_ms), "prompt_tokens": prompt_tokens, "output_tokens": _count_tokens(txt)}
                         except Exception:
                             # Fall through to .generate()
                             pass
 
         import torch
 
+        t0 = time.time()
         inputs = tok(str(prompt), return_tensors="pt")
+        try:
+            prompt_tokens2 = int(inputs["input_ids"].shape[-1])
+        except Exception:
+            prompt_tokens2 = prompt_tokens
         if torch.cuda.is_available():
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
         with torch.inference_mode():
@@ -125,7 +156,9 @@ class LLMPlanner:
                 top_k=0,
                 use_cache=False,
             )
-        return tok.decode(out[0], skip_special_tokens=True)
+        dt_ms = 1000.0 * (time.time() - t0)
+        txt = tok.decode(out[0], skip_special_tokens=True)
+        return txt, {"latency_ms": float(dt_ms), "prompt_tokens": prompt_tokens2, "output_tokens": _count_tokens(txt)}
 
     def _cache_key(self, payload: dict[str, Any]) -> str:
         b = json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -163,6 +196,7 @@ class LLMPlanner:
         sources_xyz: np.ndarray,
         done_mask: np.ndarray,
         n_agents: int,
+        stats_out: dict[str, Any] | None = None,
     ) -> list[int] | None:
         """Return a list length N: each entry is source index or -1.
 
@@ -183,6 +217,9 @@ class LLMPlanner:
         key = self._cache_key({"model": str(self.cfg.model_path), **payload})
         cached = self._cached_get(key)
         if isinstance(cached, dict) and isinstance(cached.get("assign"), list):
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 1, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return self._validate_assign(cached.get("assign"), n_agents=n_agents, n_sources=int(src.shape[0]), done=done)
 
         try:
@@ -190,6 +227,9 @@ class LLMPlanner:
             assert self._tok is not None and self._model is not None
         except Exception as e:
             self._cached_put(key, {"error": f"model_load_failed: {type(e).__name__}: {e}"})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return None
 
         sys_txt = (
@@ -214,22 +254,34 @@ class LLMPlanner:
                 text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
             else:
                 text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
-            decoded = self._generate_text(text)
+            decoded, st = self._generate_text(text)
         except Exception as e:
             self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return None
 
         parsed = _extract_json(decoded)
         if not isinstance(parsed, dict):
             self._cached_put(key, {"error": "parse_failed", "raw": decoded})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, **st})
             return None
         assign = parsed.get("assign", None)
         valid = self._validate_assign(assign, n_agents=n_agents, n_sources=int(src.shape[0]), done=done)
         if valid is None:
             self._cached_put(key, {"error": "schema_failed", "raw": decoded, "parsed": parsed})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, **st})
             return None
         out_obj = {"assign": valid}
         self._cached_put(key, out_obj)
+        if stats_out is not None:
+            stats_out.clear()
+            stats_out.update({"cached": 0, **st})
         return valid
 
     def plan_waypoint_assignment(
@@ -241,6 +293,7 @@ class LLMPlanner:
         waypoints_xyz: np.ndarray,
         n_agents: int,
         detected_mask: np.ndarray | None = None,
+        stats_out: dict[str, Any] | None = None,
     ) -> list[int] | None:
         """Assign each agent a waypoint index along a path (high-level planning)."""
         pos = np.asarray(positions_xyz, dtype=np.float64).reshape(n_agents, 3)
@@ -268,6 +321,9 @@ class LLMPlanner:
         key = self._cache_key({"model": str(self.cfg.model_path), "kind": "waypoint_assignment", **payload})
         cached = self._cached_get(key)
         if isinstance(cached, dict) and isinstance(cached.get("assign_wp"), list):
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 1, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return self._validate_wp_assign(cached.get("assign_wp"), n_agents=n_agents, n_wp=int(wps.shape[0]))
 
         try:
@@ -275,6 +331,9 @@ class LLMPlanner:
             assert self._tok is not None and self._model is not None
         except Exception as e:
             self._cached_put(key, {"error": f"model_load_failed: {type(e).__name__}: {e}"})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return None
 
         sys_txt = (
@@ -299,22 +358,34 @@ class LLMPlanner:
                 text = tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)  # type: ignore[attr-defined]
             else:
                 text = sys_txt + "\n\n" + user_txt + "\n\nJSON:"
-            decoded = self._generate_text(text)
+            decoded, st = self._generate_text(text)
         except Exception as e:
             self._cached_put(key, {"error": f"generate_failed: {type(e).__name__}: {e}"})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, "latency_ms": 0.0, "prompt_tokens": 0, "output_tokens": 0})
             return None
 
         parsed = _extract_json(decoded)
         if not isinstance(parsed, dict):
             self._cached_put(key, {"error": "parse_failed", "raw": decoded})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, **st})
             return None
         assign = parsed.get("assign_wp", None)
         valid = self._validate_wp_assign(assign, n_agents=n_agents, n_wp=int(wps.shape[0]))
         if valid is None:
             self._cached_put(key, {"error": "schema_failed", "raw": decoded, "parsed": parsed})
+            if stats_out is not None:
+                stats_out.clear()
+                stats_out.update({"cached": 0, **st})
             return None
         out_obj = {"assign_wp": valid}
         self._cached_put(key, out_obj)
+        if stats_out is not None:
+            stats_out.clear()
+            stats_out.update({"cached": 0, **st})
         return valid
 
     @staticmethod
