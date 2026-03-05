@@ -442,11 +442,36 @@ def export_planning_suite_cost(*, out_dir: Path, runs: list[RunSpec], difficulty
     _write_md_table(out_dir / f"table_planning_suite_cost_{difficulty}.md", header, rows_out)
 
 
+def export_difficulty_ladder(*, out_dir: Path, runs: list[RunSpec], tasks: list[str]) -> None:
+    """Table 4-style ladder: per-task success over easy/medium/hard for a task subset."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    header = ["method", "task", "difficulty", "n_agents", "eps", "SR"]
+    rows_out: list[list[object]] = []
+    diffs = ["easy", "medium", "hard"]
+
+    for rs in runs:
+        rows = _load_rows(_find_summary_csv(rs.root))
+        for t in tasks:
+            for d in diffs:
+                rr = [r for r in rows if str(r.get("task", "")).strip() == str(t) and str(r.get("difficulty", "")).strip() == str(d)]
+                if not rr:
+                    continue
+                a = _agg_task(rr)
+                # n_agents is constant within rr; take the first.
+                try:
+                    n = str(int(float(rr[0].get("n_agents", "0") or "0")))
+                except Exception:
+                    n = ""
+                rows_out.append([rs.label, t, d, n, int(a.get("eps", 0) or 0), _fmt_pct(a.get("SR"))])
+
+    _write_md_table(out_dir / "table_difficulty_ladder.md", header, rows_out)
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Export paper-ready Markdown tables from headless run_matrix summary.csv.")
     ap.add_argument("--out-dir", type=str, required=True)
     ap.add_argument("--run", action="append", default=[], help="Run spec label=path (repeatable).")
-    ap.add_argument("--table", type=str, required=True, choices=["main", "currents", "disturbances", "scaling", "planning_suite", "planning_suite_cost"])
+    ap.add_argument("--table", type=str, required=True, choices=["main", "currents", "disturbances", "scaling", "planning_suite", "planning_suite_cost", "difficulty_ladder"])
     ap.add_argument("--difficulty", type=str, default="hard", choices=["easy", "medium", "hard"])
     ap.add_argument("--tasks", type=str, default="", help="Comma list for currentsweep (default: canonical 10).")
     ap.add_argument("--task", type=str, default="surface_pollution_cleanup_multiagent", help="Task id for scaling table.")
@@ -499,6 +524,17 @@ def main() -> int:
         export_planning_suite(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty))
     elif str(args.table) == "planning_suite_cost":
         export_planning_suite_cost(out_dir=out_dir, runs=runs, difficulty=str(args.difficulty))
+    elif str(args.table) == "difficulty_ladder":
+        tasks = [t.strip() for t in str(args.tasks).split(",") if t.strip()]
+        if not tasks:
+            tasks = [
+                "go_to_goal_current",
+                "route_following_waypoints",
+                "area_scan_terrain_recon",
+                "pipeline_inspection_leak_detection",
+                "surface_pollution_cleanup_multiagent",
+            ]
+        export_difficulty_ladder(out_dir=out_dir, runs=runs, tasks=tasks)
     else:
         export_scaling(out_dir=out_dir, runs=runs, task=str(args.task), difficulty=str(args.difficulty))
 

@@ -265,6 +265,8 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - `runs/headless/_tables_20260305_v66disturb/table_disturbances_hard.md`
 - Table 3 (multi-agent scaling; cleanup; medium; N=2/4/8/10):
   - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
+- Table 4 (difficulty ladder; easy→medium→hard; task subset):
+  - `runs/headless/_tables_20260305_v68ladder/table_difficulty_ladder.md`
 - LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
   - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
   - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63full/table_planning_suite_hard.md`
