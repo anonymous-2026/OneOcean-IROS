@@ -34,6 +34,7 @@ class EnvConfig:
     seafloor_clearance_m: float = 1.0
     max_speed_mps: float = 1.2
     current_gain: float = 1.0
+    collision_radius_m: float = 1.0  # metrics-only; does not affect dynamics/constraints
 
     # Dynamics model selection (v2+).
     dynamics_model: Literal["kinematic", "3dof", "6dof"] = "kinematic"
@@ -107,6 +108,16 @@ class HeadlessOceanEnv:
         self._energy = 0.0
         self._constraint_violations = 0
         self._time_to_success_s: float | None = None
+        # Episode accumulators (table-ready metrics; surfaced in the per-step `info` dict).
+        self._metric_step_count = 0
+        self._station_err_sum = 0.0
+        self._station_err2_sum = 0.0
+        self._station_err_count = 0
+        self._wp_err_sum = 0.0
+        self._wp_err2_sum = 0.0
+        self._wp_err_count = 0
+        self._min_pairwise_dist_m = float("inf")
+        self._collision_steps = 0
 
         # pollution model expects access to drift payload arrays for OCPNet velocity mapping.
         drift_payload = {
@@ -136,6 +147,11 @@ class HeadlessOceanEnv:
         self._llm_last_call_step: int = -10**9
         self._llm_last_wp_call_step: int = -10**9
         self._llm_last_wp_assign: np.ndarray | None = None
+        # LLM instrumentation (prevents silent fallback from being mistaken as "LLM performance").
+        self._llm_cleanup_calls = 0
+        self._llm_cleanup_valid = 0
+        self._llm_wp_calls = 0
+        self._llm_wp_valid = 0
 
         self.rec = HeadlessRecorder(
             self.out_dir,
@@ -227,12 +243,20 @@ class HeadlessOceanEnv:
             self._llm_last_call_step = -10**9
             self._llm_last_wp_call_step = -10**9
             self._llm_last_wp_assign = None
+            self._llm_cleanup_calls = 0
+            self._llm_cleanup_valid = 0
+            self._llm_wp_calls = 0
+            self._llm_wp_valid = 0
         else:
             self._llm_planner = None
             self._llm_last_done_mask = None
             self._llm_last_call_step = -10**9
             self._llm_last_wp_call_step = -10**9
             self._llm_last_wp_assign = None
+            self._llm_cleanup_calls = 0
+            self._llm_cleanup_valid = 0
+            self._llm_wp_calls = 0
+            self._llm_wp_valid = 0
         req_n = required_n_agents(task.kind)
         if req_n is not None and int(self.n_agents) != int(req_n):
             raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
@@ -538,6 +562,15 @@ class HeadlessOceanEnv:
         self._energy = 0.0
         self._constraint_violations = 0
         self._time_to_success_s = None
+        self._metric_step_count = 0
+        self._station_err_sum = 0.0
+        self._station_err2_sum = 0.0
+        self._station_err_count = 0
+        self._wp_err_sum = 0.0
+        self._wp_err2_sum = 0.0
+        self._wp_err_count = 0
+        self._min_pairwise_dist_m = float("inf")
+        self._collision_steps = 0
         self.pollution_meta = self.pollution.reset(self.rng, bounds_xyz=self.bounds_xyz)
 
         # Track an initial mass proxy (for containment task success definition).
@@ -612,6 +645,7 @@ class HeadlessOceanEnv:
                 if (step_i - int(self._llm_last_call_step)) >= stride:
                     need_call = True
                 if need_call:
+                    self._llm_cleanup_calls += 1
                     plan = self._llm_planner.plan_cleanup_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -623,6 +657,7 @@ class HeadlessOceanEnv:
                     self._llm_last_call_step = int(step_i)
                     self._llm_last_done_mask = done.copy()
                     if plan is not None:
+                        self._llm_cleanup_valid += 1
                         assigned = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
 
             if assigned is None:
@@ -715,6 +750,7 @@ class HeadlessOceanEnv:
             if use_llm:
                 stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
                 if (step_i - int(self._llm_last_wp_call_step)) >= stride:
+                    self._llm_wp_calls += 1
                     plan = self._llm_planner.plan_waypoint_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -725,6 +761,7 @@ class HeadlessOceanEnv:
                     )
                     self._llm_last_wp_call_step = int(step_i)
                     if plan is not None:
+                        self._llm_wp_valid += 1
                         self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
                 assign = self._llm_last_wp_assign
 
@@ -764,6 +801,7 @@ class HeadlessOceanEnv:
                     det = None
                     if self.task_state.leak_detected is not None:
                         det = np.asarray(self.task_state.leak_detected, dtype=bool)
+                    self._llm_wp_calls += 1
                     plan = self._llm_planner.plan_waypoint_assignment(
                         task_kind=str(self.task_cfg.kind),
                         step_index=int(step_i),
@@ -774,6 +812,7 @@ class HeadlessOceanEnv:
                     )
                     self._llm_last_wp_call_step = int(step_i)
                     if plan is not None:
+                        self._llm_wp_valid += 1
                         self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
                 if self._llm_last_wp_assign is not None:
                     assign = np.asarray(self._llm_last_wp_assign, dtype=np.int64).reshape(self.n_agents)
@@ -952,6 +991,43 @@ class HeadlessOceanEnv:
                 )
                 mask_arr[i] = float(np.nan if m is None else m)
                 self._energy += float(np.dot(act[i], act[i])) * dt
+
+        # Episode-level metric accumulators (computed on the post-update state).
+        self._metric_step_count += 1
+        if self.n_agents >= 2:
+            min_d = float("inf")
+            for i in range(self.n_agents):
+                for j in range(i + 1, self.n_agents):
+                    d = float(np.linalg.norm(self._positions[i] - self._positions[j]))
+                    if d < min_d:
+                        min_d = d
+            if np.isfinite(min_d):
+                self._min_pairwise_dist_m = float(min(self._min_pairwise_dist_m, min_d))
+                if min_d <= float(self.cfg.collision_radius_m):
+                    self._collision_steps += 1
+
+        if self.task_cfg.kind == "station_keeping":
+            g = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            d = np.linalg.norm(self._positions - g[None, :], axis=1)
+            mean_d = float(np.mean(d))
+            self._station_err_sum += mean_d
+            self._station_err2_sum += float(mean_d * mean_d)
+            self._station_err_count += 1
+
+        if self.task_cfg.kind in ("route_following_waypoints", "depth_profile_tracking", "pipeline_inspection_leak_detection", "area_scan_terrain_recon"):
+            try:
+                g = np.asarray(goal, dtype=np.float64)
+                if g.shape == (3,):
+                    g = np.repeat(g.reshape(1, 3), self.n_agents, axis=0)
+                else:
+                    g = g.reshape(self.n_agents, 3)
+                d = np.linalg.norm(self._positions - g, axis=1)
+                mean_d = float(np.mean(d))
+                self._wp_err_sum += mean_d
+                self._wp_err2_sum += float(mean_d * mean_d)
+                self._wp_err_count += 1
+            except Exception:
+                pass
 
         # Update pollution field.
         if hasattr(self.pollution, "advect_center"):
@@ -1139,6 +1215,26 @@ class HeadlessOceanEnv:
             "constraint_violations": int(self._constraint_violations),
             **extra,
         }
+        if self.task_cfg.kind == "station_keeping":
+            if self._station_err_count > 0:
+                info["station_mean_error_m"] = float(self._station_err_sum / float(self._station_err_count))
+                info["station_rms_error_m"] = float(math.sqrt(self._station_err2_sum / float(self._station_err_count)))
+            else:
+                info["station_mean_error_m"] = None
+                info["station_rms_error_m"] = None
+        if self._wp_err_count > 0:
+            info["waypoint_track_mean_error_m"] = float(self._wp_err_sum / float(self._wp_err_count))
+            info["waypoint_track_rms_error_m"] = float(math.sqrt(self._wp_err2_sum / float(self._wp_err_count)))
+        else:
+            info["waypoint_track_mean_error_m"] = None
+            info["waypoint_track_rms_error_m"] = None
+        info["min_pairwise_dist_m"] = None if self.n_agents < 2 or not np.isfinite(self._min_pairwise_dist_m) else float(self._min_pairwise_dist_m)
+        info["collision_steps"] = int(self._collision_steps)
+        info["collision_rate"] = float(self._collision_steps) / float(max(1, int(self._metric_step_count)))
+        info["llm_cleanup_calls"] = int(self._llm_cleanup_calls)
+        info["llm_cleanup_valid"] = int(self._llm_cleanup_valid)
+        info["llm_wp_calls"] = int(self._llm_wp_calls)
+        info["llm_wp_valid"] = int(self._llm_wp_valid)
         self._t += float(self.cfg.dt_s)
         # Termination by time horizon.
         done = bool(success)

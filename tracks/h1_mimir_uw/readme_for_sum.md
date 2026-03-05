@@ -190,11 +190,37 @@ Table: SR + mean leaks detected (final state) + time-to-success (successful eps 
 
 Keep (paper-relevant):
 - Baseline: `runs/headless/V24PAPER_paper_v1_6dof_heuristic_mh_bathyhard_20260305_065933_farm/`
+- Baseline (metric-complete; for suggestion.md tables): `runs/headless/V61PAPER_paper_v1_6dof_heuristic_mh_bathyhard_metrics_20260305_091220/`
 - Dense demos: `runs/headless/V26DEMOS_paper_v1_6dof_heuristic_rec5_20260305_070150_farm/`
 - BC dataset: `runs/headless/_models/bc_dataset_paper_v1_curfeat_20260305_073457/`
 - BC weights: `runs/headless/_models/bc_mlp_paper_v1_curfeat_20260305_073510/`
 - BC eval: `runs/headless/V34PAPER_paper_v1_6dof_mlp_bc_curfeat_mh_bathyhard_20260305_073530_farm/`
+- BC eval (metric-complete; for suggestion.md tables): `runs/headless/V62PAPER_paper_v1_6dof_mlp_bc_mh_bathyhard_metrics_20260305_091300/`
 - LLM pilot: `runs/headless/V32PILOT_paper_v1_llm_pipelineOnly_hard_s0-2_20260305_072659/`
+- Currentsweep (Table 2): `runs/headless/V40SWEEP_paper_v1_cg0_heuristic_hard_20260305_090000/`, `runs/headless/V41SWEEP_paper_v1_cg1_heuristic_hard_20260305_090050/`, `runs/headless/V42SWEEP_paper_v1_cg2_heuristic_hard_20260305_090120/`
+- Currentsweep (BC): `runs/headless/V43SWEEP_paper_v1_cg0_mlpbc_hard_20260305_090220/`, `runs/headless/V44SWEEP_paper_v1_cg1_mlpbc_hard_20260305_090310/`, `runs/headless/V45SWEEP_paper_v1_cg2_mlpbc_hard_20260305_090400/`
+- Scaling (Table 3; cleanup, medium): `runs/headless/V52SCALE_cg1_medium_N02_heuristic_20260305_090900/`, `runs/headless/V54SCALE_cg1_medium_N04_heuristic_20260305_090900/`, `runs/headless/V58SCALE_cg1_medium_N08_heuristic_20260305_090900/`, `runs/headless/V510SCALE_cg1_medium_N10_heuristic_20260305_090900/`
+- Exported paper tables (Markdown; do not edit by hand): `runs/headless/_tables_20260305/`
 
 Safe to delete after verification:
 - calibration-only roots under `runs/headless/_calib_*`
+
+---
+
+## 7) suggestion.md table coverage (current state)
+
+The following tables are now exportable from the run artifacts (no spreadsheets):
+
+- Table 1 (main suite; hard): `runs/headless/_tables_20260305/table_main_hard.md`
+  - per-task breakdown: `runs/headless/_tables_20260305/table_per_task_hard.md`
+- Table 2 (robustness vs current strength; hard; SR averaged over canonical 10 tasks):
+  - `runs/headless/_tables_20260305/table_currentsweep_hard.md`
+- Table 3 (multi-agent scaling; cleanup; medium; N=2/4/8/10):
+  - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
+- LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
+  - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
+
+Notes:
+- Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.
+  Official tables above use `--collision-radius-m 2.0` (does not affect dynamics).
+- `GLM-4-9B-Chat` currently falls back to heuristic because it requires `tiktoken` which is not available in the host environment (pip network unavailable).

@@ -109,6 +109,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--bathy-mode", type=str, default="off", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     ap.add_argument("--current-gain", type=float, default=1.0, help="Scale dataset currents (ablation/stress-test).")
+    ap.add_argument("--collision-radius-m", type=float, default=1.0, help="Near-collision radius for collision_rate metrics (meters).")
     ap.add_argument("--rec-step-stride", type=int, default=1, help="Record every K simulation steps (reduces I/O for long episodes).")
     return ap.parse_args()
 
@@ -328,6 +329,7 @@ def main() -> int:
                 "constraint_mode": str(args.constraint_mode),
                 "bathy_mode": str(args.bathy_mode),
                 "seafloor_clearance_m": float(args.seafloor_clearance_m),
+                "collision_radius_m": float(args.collision_radius_m),
                 "preset": str(args.preset),
                 "tasks": tasks,
                 "difficulties": diffs,
@@ -343,6 +345,20 @@ def main() -> int:
         ),
         encoding="utf-8",
     )
+
+    def _safe_ratio(num: object, den: object) -> float | None:
+        try:
+            if num is None or den is None:
+                return None
+            d = float(den)
+            if not (d > 0.0):
+                return None
+            n = float(num)
+            if not (n == n):  # NaN check
+                return None
+            return float(n / d)
+        except Exception:
+            return None
 
     rows = []
     t_all = time.time()
@@ -363,6 +379,7 @@ def main() -> int:
             bathy_mode=str(args.bathy_mode),  # type: ignore[arg-type]
             seafloor_clearance_m=float(args.seafloor_clearance_m),
             current_gain=float(args.current_gain),
+            collision_radius_m=float(args.collision_radius_m),
             rec_step_stride=int(max(1, int(args.rec_step_stride))),
         )
         task_cfg = preset_task(kind=str(sc.task), difficulty=str(sc.difficulty))  # type: ignore[arg-type]
@@ -439,16 +456,40 @@ def main() -> int:
                     "energy_proxy": metrics["energy_proxy"],
                     "constraint_violations": metrics["constraint_violations"],
                     "best_dist_to_goal_m": last.get("best_dist_to_goal_m", None),
+                    "station_mean_error_m": last.get("station_mean_error_m", None),
+                    "station_rms_error_m": last.get("station_rms_error_m", None),
                     "source_error_m": last.get("source_error_m", None),
                     "mass_frac": last.get("mass_frac", None),
                     "target": last.get("target", None),
                     "waypoint_index": last.get("waypoint_index", None),
+                    "best_dist_to_waypoint_m": last.get("best_dist_to_waypoint_m", None),
+                    "waypoints_total": last.get("waypoints_total", None),
+                    "waypoint_track_mean_error_m": last.get("waypoint_track_mean_error_m", None),
+                    "waypoint_track_rms_error_m": last.get("waypoint_track_rms_error_m", None),
                     "formation_err_m": last.get("formation_err_m", None),
+                    "formation_max_err_m": last.get("formation_max_err_m", None),
                     "coverage": last.get("coverage", None),
+                    "cells_visited": last.get("cells_visited", None),
+                    "cells_total": last.get("cells_total", None),
                     "leaks_detected": last.get("leaks_detected", None),
+                    "leaks_total": last.get("leaks_total", None),
+                    "pipeline_score": _safe_ratio(last.get("leaks_detected", None), last.get("leaks_total", None)),
+                    "time_to_first_detection_s": last.get("time_to_first_detection_s", None),
                     "fish_progress": last.get("fish_progress", None),
                     "fish_target_progress": last.get("fish_target_progress", None),
                     "lift_phase": last.get("lift_phase", None),
+                    "sources_done": last.get("sources_done", None),
+                    "sources_total": last.get("sources_total", None),
+                    "cleanup_rate": _safe_ratio(last.get("sources_done", None), last.get("sources_total", None)),
+                    "mean_depth_abs_error_m": last.get("mean_depth_abs_error_m", None),
+                    "depth_tolerance_m": last.get("depth_tolerance_m", None),
+                    "min_pairwise_dist_m": last.get("min_pairwise_dist_m", None),
+                    "collision_steps": last.get("collision_steps", None),
+                    "collision_rate": last.get("collision_rate", None),
+                    "llm_cleanup_calls": last.get("llm_cleanup_calls", None),
+                    "llm_cleanup_valid": last.get("llm_cleanup_valid", None),
+                    "llm_wp_calls": last.get("llm_wp_calls", None),
+                    "llm_wp_valid": last.get("llm_wp_valid", None),
                     "elapsed_s": float(time.time() - t0),
                     "run_dir": str(run_dir),
                 }

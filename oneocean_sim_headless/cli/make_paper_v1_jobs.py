@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--bathy-mode", type=str, default="hard", choices=["off", "hard"])
     ap.add_argument("--seafloor-clearance-m", type=float, default=1.0)
     ap.add_argument("--current-gain", type=float, default=1.0)
+    ap.add_argument("--collision-radius-m", type=float, default=1.0, help="Near-collision radius for collision_rate metrics (meters).")
     ap.add_argument("--rec-step-stride", type=int, default=5, help="Pass through to run_matrix (reduce I/O); 1 keeps full-rate recordings.")
     ap.add_argument("--bc-weights-npz", type=str, default="", help="If provided, include an mlp_bc job.")
     ap.add_argument("--llm-cache-root", type=str, default="", help="Cache root for LLM JSON outputs (optional).")
@@ -33,6 +34,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--no-llm", action="store_true", help="Skip LLM jobs (heuristic/BC only).")
     ap.add_argument("--skip-14b", action="store_true", help="Skip Qwen2.5-14B (often too large for concurrent GPUs).")
     ap.add_argument("--skip-olmo", action="store_true", help="Skip OLMo (requires extra hf_olmo package).")
+    ap.add_argument("--skip-glm4", action="store_true", help="Skip GLM-4-9B-Chat (often requires extra deps like tiktoken).")
     return ap.parse_args()
 
 
@@ -78,6 +80,8 @@ def main() -> int:
         str(float(args.seafloor_clearance_m)),
         "--current-gain",
         str(float(args.current_gain)),
+        "--collision-radius-m",
+        str(float(args.collision_radius_m)),
         "--rec-step-stride",
         str(int(max(1, int(args.rec_step_stride)))),
         "--validate",
@@ -111,19 +115,22 @@ def main() -> int:
         )
 
     if not bool(args.no_llm):
+        llm_root = str(os.environ.get("ONEOCEAN_LLM_ROOT", "")).strip() or "/data/private/user2/models"
         models = [
-            ("chatglm3_6b", "/data/shared/user2/models/ChatGLM3-6B"),
-            ("glm4_9b", "/data/shared/user2/models/GLM-4-9B-Chat"),
-            ("llama2_7b", "/data/shared/user2/models/LLaMA-2-7B-Chat"),
-            ("llama3_8b", "/data/shared/user2/models/LLaMA-3-8B-Instruct"),
-            ("mistral7b", "/data/shared/user2/models/Mistral-7B-Instruct-v0.3"),
-            ("olmo7b", "/data/shared/user2/models/OLMo-7B-Instruct"),
-            ("qwen2_7b", "/data/shared/user2/models/Qwen2-7B-Instruct"),
-            ("qwen2p5_7b", "/data/shared/user2/models/Qwen2.5-7B-Instruct"),
-            ("qwen2p5_14b", "/data/shared/user2/models/Qwen2.5-14B-Instruct"),
+            ("chatglm3_6b", str(Path(llm_root) / "ChatGLM3-6B")),
+            ("glm4_9b", str(Path(llm_root) / "GLM-4-9B-Chat")),
+            ("llama2_7b", str(Path(llm_root) / "LLaMA-2-7B-Chat")),
+            ("llama3_8b", str(Path(llm_root) / "LLaMA-3-8B-Instruct")),
+            ("mistral7b", str(Path(llm_root) / "Mistral-7B-Instruct-v0.3")),
+            ("olmo7b", str(Path(llm_root) / "OLMo-7B-Instruct")),
+            ("qwen2_7b", str(Path(llm_root) / "Qwen2-7B-Instruct")),
+            ("qwen2p5_7b", str(Path(llm_root) / "Qwen2.5-7B-Instruct")),
+            ("qwen2p5_14b", str(Path(llm_root) / "Qwen2.5-14B-Instruct")),
         ]
         for mid, mpath in models:
             if bool(args.skip_olmo) and str(mid) == "olmo7b":
+                continue
+            if bool(args.skip_glm4) and str(mid) == "glm4_9b":
                 continue
             if bool(args.skip_14b) and str(mid) == "qwen2p5_14b":
                 continue

@@ -291,8 +291,10 @@ class LLMPlanner:
 
     @staticmethod
     def _validate_assign(assign_any: Any, *, n_agents: int, n_sources: int, done: np.ndarray) -> list[int] | None:
-        if not isinstance(assign_any, list) or len(assign_any) != int(n_agents):
+        if not isinstance(assign_any, list) or len(assign_any) < int(n_agents):
             return None
+        if len(assign_any) > int(n_agents):
+            assign_any = list(assign_any[: int(n_agents)])
         out: list[int] = []
         for a in assign_any:
             try:
@@ -311,8 +313,10 @@ class LLMPlanner:
 
     @staticmethod
     def _validate_wp_assign(assign_any: Any, *, n_agents: int, n_wp: int) -> list[int] | None:
-        if not isinstance(assign_any, list) or len(assign_any) != int(n_agents):
+        if not isinstance(assign_any, list) or len(assign_any) < int(n_agents):
             return None
+        if len(assign_any) > int(n_agents):
+            assign_any = list(assign_any[: int(n_agents)])
         out: list[int] = []
         for a in assign_any:
             try:
