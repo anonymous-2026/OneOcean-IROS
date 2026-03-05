@@ -143,3 +143,4 @@ python3 -m oneocean_sim_headless.cli.export_demo_replay \
 Writes:
 - `drone_map_data.json`
 - `drone_path_data.json`
+- `replay_bundle.json` (single-file import for `h1_demo_player/tasks.html`)

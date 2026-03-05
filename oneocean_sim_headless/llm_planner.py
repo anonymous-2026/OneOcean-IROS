@@ -69,19 +69,46 @@ class LLMPlanner:
         if hasattr(model, "chat"):
             try:
                 # Common signature: chat(tokenizer, query, history=[])
-                out = model.chat(tok, str(prompt), history=[])  # type: ignore[attr-defined]
+                out = model.chat(  # type: ignore[attr-defined]
+                    tok,
+                    str(prompt),
+                    history=[],
+                    do_sample=False,
+                    temperature=0.0,
+                    top_p=1.0,
+                    max_new_tokens=int(self.cfg.max_new_tokens),
+                )
                 if isinstance(out, tuple) and out:
                     return str(out[0])
                 return str(out)
             except Exception:
                 try:
-                    out = model.chat(tok, str(prompt))  # type: ignore[attr-defined]
+                    out = model.chat(  # type: ignore[attr-defined]
+                        tok,
+                        str(prompt),
+                        do_sample=False,
+                        temperature=0.0,
+                        top_p=1.0,
+                        max_new_tokens=int(self.cfg.max_new_tokens),
+                    )
                     if isinstance(out, tuple) and out:
                         return str(out[0])
                     return str(out)
                 except Exception:
-                    # Fall through to .generate()
-                    pass
+                    try:
+                        out = model.chat(tok, str(prompt), history=[])  # type: ignore[attr-defined]
+                        if isinstance(out, tuple) and out:
+                            return str(out[0])
+                        return str(out)
+                    except Exception:
+                        try:
+                            out = model.chat(tok, str(prompt))  # type: ignore[attr-defined]
+                            if isinstance(out, tuple) and out:
+                                return str(out[0])
+                            return str(out)
+                        except Exception:
+                            # Fall through to .generate()
+                            pass
 
         import torch
 
@@ -93,6 +120,7 @@ class LLMPlanner:
                 **inputs,
                 max_new_tokens=int(self.cfg.max_new_tokens),
                 do_sample=False,
+                temperature=0.0,
                 top_p=1.0,
                 top_k=0,
                 use_cache=False,

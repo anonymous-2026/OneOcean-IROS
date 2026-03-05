@@ -184,6 +184,24 @@ Table: SR + mean leaks detected (final state) + time-to-success (successful eps 
 | llm_qwen2_7b | 3 | 0.0% | 6.00 |  |
 | llm_qwen2p5_7b | 3 | 33.3% | 6.67 | 1448.0 |
 
+### 5.4 LLM high-level planner (planning-suite; **medium**; current_gain=2.0; seeds 0–1; fast triage)
+
+Goal: provide a **multi-task** LLM comparison table (cleanup + scan + pipeline) that does *not* saturate at all-0% or all-100%.
+
+- Run root: `runs/headless/V64CLLM_planningTasks_medium_cg2_s0-1_ultrafast_20260305_191500/`
+  - Heuristic baseline: `runs/headless/V64CLLM_planningTasks_medium_cg2_s0-1_ultrafast_20260305_191500/heuristic/summary.csv`
+  - LLM models: `runs/headless/V64CLLM_planningTasks_medium_cg2_s0-1_ultrafast_20260305_191500/llm_*/summary.csv`
+- Preset: `paper_v1_llm` (scan/pipeline multi-agent; single-agent tasks kept single-agent by preset)
+- Tasks: `surface_pollution_cleanup_multiagent`, `area_scan_terrain_recon`, `pipeline_inspection_leak_detection`
+- Difficulty: `medium` (with stronger currents via `--current-gain 2.0`)
+- Seeds/episodes: `seeds=0..1`, `episodes=1`
+- LLM budget: `--llm-call-stride-steps 200`, `--llm-max-new-tokens 96`
+- Exported paper table: `runs/headless/_tables_20260305_v64c/table_planning_suite_medium.md`
+
+Notes on skipped local models (environment dependency, not a benchmark decision):
+- `GLM-4-9B-Chat` requires `tiktoken` (not available in this host environment).
+- `OLMo-7B-Instruct` requires `hf_olmo` (not available in this host environment).
+
 ---
 
 ## 6) Cleanup guidance (post-verification)
@@ -219,7 +237,8 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
 - LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
   - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
-  - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63/table_planning_suite_hard.md`
+  - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63full/table_planning_suite_hard.md`
+  - (fast triage, **medium**; current_gain=2.0): `runs/headless/_tables_20260305_v64c/table_planning_suite_medium.md`
 
 Notes:
 - Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.
