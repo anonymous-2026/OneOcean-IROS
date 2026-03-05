@@ -376,6 +376,16 @@ Notes:
 
 All commands assume you are at the repo root: `oneocean(iros-2026-code)/`.
 
+### 6.0 Generate the latest paper tables (workspace script)
+
+From the ocean workspace root (`/data/private/user2/workspace/ocean`):
+
+```bash
+python3 project/results/summarize_h3_latest.py \
+  --root oneocean(iros-2026-code)/runs/oceangym_h3/h3_LATEST_20260305_1 \
+  --out-dir project/results
+```
+
 ### 6.0 Repro capsule (versions + hashes; for supplement sanity)
 
 - Code:
