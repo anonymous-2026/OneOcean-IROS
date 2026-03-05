@@ -219,6 +219,7 @@ The following tables are now exportable from the run artifacts (no spreadsheets)
   - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
 - LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
   - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
+  - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63/table_planning_suite_hard.md`
 
 Notes:
 - Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.
