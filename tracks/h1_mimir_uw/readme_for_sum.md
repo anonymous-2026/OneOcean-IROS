@@ -8,12 +8,30 @@ data-grounded tasks into auditable, paper-ready tables (and replayable recording
 
 ---
 
+## 0) Latest artifacts (as of 2026-03-05) — LATEST
+
+These are the newest paper-facing outputs produced in this iteration (with clear deltas vs earlier artifacts):
+
+- **LATEST (Main suite)**: `runs/headless/_tables_20260305/table_main_hard.md`
+  - Delta vs older main tables: uses `paper_v1` knobs retuned to avoid saturated hard results + enforces bathy/land hard constraints by default.
+- **LATEST (Robustness + tides)**: `runs/headless/_tables_20260305_v66disturb/table_disturbances_hard.md`
+  - Delta vs `table_currentsweep_hard.md`: adds a **synthetic tidal disturbance** term on top of dataset currents (so robustness is not only “current_gain”).
+- **LATEST (Planning-suite, stable seeds)**: `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
+  - Delta vs earlier planning triage tables (e.g. `_tables_20260305_v64c/`): more seeds, includes BC, and keeps `current_gain=2.0` to prevent all-100% SR.
+- **LATEST (Planning-suite cost)**: `runs/headless/_tables_20260305_v67cost/table_planning_suite_cost_medium.md`
+  - Delta vs older planning tables: adds **LLM cost metrics** (latency + token counts) and corresponding new `summary.csv` fields.
+- **LATEST (Difficulty ladder)**: `runs/headless/_tables_20260305_v68ladder/table_difficulty_ladder.md`
+  - Delta vs earlier reporting: makes the **easy→medium→hard** progression explicit (task×difficulty ladder, subset).
+
 ## 1) What H1 delivered
 
 - Headless runners:
   - `python -m oneocean_sim_headless.cli.run` (single episode)
   - `python -m oneocean_sim_headless.cli.run_matrix` (sweeps)
   - `python -m oneocean_sim_headless.cli.run_matrix_farm` (parallel sharding)
+- Demo replay export (bridge to the demo UI without touching `workspace/ocean/demo/`):
+  - `python -m oneocean_sim_headless.cli.export_demo_replay --run-dir <H1_RUN_DIR> --out-dir <OUT_DIR>`
+  - Output: `replay_bundle.json` (single-file import for `h1_demo_player/tasks.html`)
 - Stable run-dir contract (per episode):
   - `run_meta.json`, `spec_snapshot.json`, `metrics.json`/`metrics.csv`, per-agent streams under `agents/`
   - run-root aggregate: `summary.csv` (paper tables come from this, not spreadsheets)
@@ -257,22 +275,22 @@ Safe to delete after verification:
 
 The following tables are now exportable from the run artifacts (no spreadsheets):
 
-- Table 1 (main suite; hard): `runs/headless/_tables_20260305/table_main_hard.md`
+- Table 1 (main suite; hard) — **LATEST**: `runs/headless/_tables_20260305/table_main_hard.md`
   - per-task breakdown: `runs/headless/_tables_20260305/table_per_task_hard.md`
 - Table 2 (robustness vs current strength; hard; SR averaged over canonical 10 tasks):
   - `runs/headless/_tables_20260305/table_currentsweep_hard.md`
-- Table 2b (robustness with **tidal disturbance**; hard; SR averaged over canonical 10 tasks):
+- Table 2b (robustness with **tidal disturbance**; hard; SR averaged over canonical 10 tasks) — **LATEST**:
   - `runs/headless/_tables_20260305_v66disturb/table_disturbances_hard.md`
 - Table 3 (multi-agent scaling; cleanup; medium; N=2/4/8/10):
   - `runs/headless/_tables_20260305/table_scaling_surface_pollution_cleanup_multiagent_medium.md`
-- Table 4 (difficulty ladder; easy→medium→hard; task subset):
+- Table 4 (difficulty ladder; easy→medium→hard; task subset) — **LATEST**:
   - `runs/headless/_tables_20260305_v68ladder/table_difficulty_ladder.md`
 - LLM planner comparison (planning-sensitive tasks only; hard; cg=1.0):
   - `runs/headless/_tables_20260305/table_planning_suite_hard.md`
   - (triage rerun, seeds 0–2; includes LLM instrumentation fields): `runs/headless/_tables_20260305_v63full/table_planning_suite_hard.md`
   - (fast triage, **medium**; current_gain=2.0): `runs/headless/_tables_20260305_v64c/table_planning_suite_medium.md`
-  - (stable, **medium**; current_gain=2.0; includes BC): `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
-  - (LLM efficiency add-on; **medium**; latency + token usage): `runs/headless/_tables_20260305_v67cost/table_planning_suite_cost_medium.md`
+  - (stable, **medium**; current_gain=2.0; includes BC) — **LATEST**: `runs/headless/_tables_20260305_v65planning/table_planning_suite_medium.md`
+  - (LLM efficiency add-on; **medium**; latency + token usage) — **LATEST**: `runs/headless/_tables_20260305_v67cost/table_planning_suite_cost_medium.md`
 
 Notes:
 - Collision is currently a **near-collision** metric: `collision_rate := (#steps with min_pairwise_dist_m <= collision_radius_m) / steps`.
