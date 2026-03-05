@@ -1119,6 +1119,15 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
         rec = _Recorder(out_dir / "route_viewport.mp4", out_dir / "route_leftcamera.mp4", fps=cfg.fps)
         rec.start(_state_get(state, "auv0", "ViewportCapture", n_agents), _state_get(state, "auv0", "LeftCamera", n_agents))
 
+    # Success definition for tracking tasks should avoid "all or nothing" saturation.
+    # We treat reaching a sufficient fraction of waypoints as success (difficulty-dependent).
+    if d == "easy":
+        success_waypoints_required = 5
+    elif d == "hard":
+        success_waypoints_required = 3
+    else:
+        success_waypoints_required = 4
+
     success = False
     steps = 0
     ctrl: _ThrusterCtrlState | None = None
@@ -1163,7 +1172,6 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
                 seg_prev = (tx, ty)
                 wp_idx += 1
                 if wp_idx >= len(wps):
-                    success = True
                     break
 
         col = _state_get(state, "auv0", "CollisionSensor", n_agents)
@@ -1186,6 +1194,8 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
     if rec is not None:
         rec.close()
 
+    success = bool(wp_idx >= int(success_waypoints_required))
+
     res = {
         "task": "route_following_waypoints",
         "seed": int(seed),
@@ -1203,6 +1213,7 @@ def _run_route_following_waypoints(env, *, cfg: SuiteCfg, seed: int, record: boo
         "time_to_success_s": float(steps * dt) if bool(success) else None,
         "waypoints": int(len(wps)),
         "waypoints_reached": int(min(wp_idx, len(wps))),
+        "success_waypoints_required": int(success_waypoints_required),
         "mean_cross_track_error_m": float(xte_sum / float(max(1, xte_n))),
         "collisions": int(collisions),
         "constraint_violations": float(collisions),
