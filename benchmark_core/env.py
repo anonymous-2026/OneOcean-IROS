@@ -1,0 +1,1339 @@
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Literal
+
+import numpy as np
+
+from .controllers import ControllerConfig, compute_actions
+from .drift import CachedDriftField, METERS_PER_DEG_LAT, meters_per_deg_lon
+from .dynamics import quat_from_yaw_roll_pitch, rotmat_yaw_roll_pitch, wrap_pi
+from .drift_cache import DriftCacheInfo, load_drift_cache
+from .pollution import PollutionModelKind, build_pollution_field
+from .recorder import HeadlessRecorder, RecorderConfig
+from .specs import build_spec_snapshot
+from .tasks import TaskConfig, TaskState, compute_success, required_n_agents, reset_task
+
+
+@dataclass(frozen=True)
+class EnvConfig:
+    drift_cache_npz: str
+    pollution_model: PollutionModelKind = "gaussian"
+    dt_s: float = 1.0
+    y_depth_range_m: tuple[float, float] = (2.0, 18.0)  # y is depth (positive down)
+    tile_size_x_m: float = 600.0
+    tile_size_z_m: float = 600.0
+    land_mask_threshold: float = 0.5
+    constraint_mode: Literal["off", "hard"] = "hard"
+    bathy_mode: Literal["off", "hard"] = "off"
+    seafloor_clearance_m: float = 1.0
+    max_speed_mps: float = 1.2
+    current_gain: float = 1.0
+    tide_amp_mps: float = 0.0
+    tide_period_s: float = 600.0
+    tide_phase_s: float = 0.0
+    collision_radius_m: float = 1.0  # metrics-only; does not affect dynamics/constraints
+
+    # Dynamics model selection (v2+).
+    dynamics_model: Literal["kinematic", "3dof", "6dof"] = "kinematic"
+
+    # Recording controls (for scalability in large sweeps).
+    rec_write_csv: bool = True
+    rec_step_stride: int = 1
+
+    # Minimal diagonal 6DoF-ish model parameters (used for 3dof/6dof modes).
+    # These are engineering parameters for a stable, paper-defensible relative-velocity model.
+    dyn_mass_linear: tuple[float, float, float] = (12.0, 12.0, 12.0)  # u,v,w
+    dyn_mass_angular: tuple[float, float, float] = (6.0, 6.0, 6.0)  # p,q,r
+    dyn_damping_linear: tuple[float, float, float] = (8.0, 8.0, 8.0)
+    dyn_damping_angular: tuple[float, float, float] = (3.0, 3.0, 3.0)
+    dyn_kp_linear: tuple[float, float, float] = (18.0, 18.0, 18.0)
+    dyn_kp_angular: tuple[float, float, float] = (10.0, 10.0, 10.0)
+    dyn_kd_angular: tuple[float, float, float] = (2.0, 2.0, 2.0)
+    dyn_max_angular_rate_rps: tuple[float, float, float] = (1.2, 1.2, 1.2)  # p,q,r
+    dyn_yaw_rate_kp: float = 2.0  # maps yaw error -> desired q
+    dyn_attitude_rate_kp: float = 2.0  # maps (roll/pitch) angle -> desired (p/r)
+    dyn_max_tilt_rad: float = 0.6  # safety clamp for roll/pitch in dynamics modes
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+class HeadlessOceanEnv:
+    def __init__(self, cfg: EnvConfig, *, out_dir: str | Path, seed: int, n_agents: int) -> None:
+        self.cfg = cfg
+        self.out_dir = Path(out_dir).expanduser().resolve()
+        self.seed = int(seed)
+        self.n_agents = int(n_agents)
+        self.rng = np.random.default_rng(self.seed)
+
+        self.drift_field, self.drift_info = load_drift_cache(cfg.drift_cache_npz)
+        meta_json = self.drift_info.meta_json or {}
+        self.dataset_time_index: int | None = int(meta_json["time_index"]) if "time_index" in meta_json else None
+        self.dataset_depth_index: int | None = int(meta_json["depth_index"]) if "depth_index" in meta_json else None
+
+        # Define a manageable simulation tile (meters) over the cached lat/lon grid.
+        lat_min = float(np.min(self.drift_field.latitude))
+        lat_max = float(np.max(self.drift_field.latitude))
+        lon_min = float(np.min(self.drift_field.longitude))
+        lon_max = float(np.max(self.drift_field.longitude))
+        lat_mid = 0.5 * (lat_min + lat_max)
+        max_x = (lon_max - lon_min) * meters_per_deg_lon(lat_mid)
+        max_z = (lat_max - lat_min) * METERS_PER_DEG_LAT
+        self.tile_size_x_m = float(np.clip(float(cfg.tile_size_x_m), 10.0, max(10.0, float(max_x))))
+        self.tile_size_z_m = float(np.clip(float(cfg.tile_size_z_m), 10.0, max(10.0, float(max_z))))
+        self.bounds_xyz = (
+            np.array([0.0, float(cfg.y_depth_range_m[0]), 0.0], dtype=np.float64),
+            np.array([self.tile_size_x_m, float(cfg.y_depth_range_m[1]), self.tile_size_z_m], dtype=np.float64),
+        )
+
+        # Tile origin on the dataset grid (chosen per-episode in reset; recorded in run_meta).
+        self.origin_lat = lat_min
+        self.origin_lon = lon_min
+        self._dataset_lat_min = lat_min
+        self._dataset_lat_max = lat_max
+        self._dataset_lon_min = lon_min
+        self._dataset_lon_max = lon_max
+
+        self._positions = np.zeros((self.n_agents, 3), dtype=np.float64)
+        self._yaws = np.zeros((self.n_agents,), dtype=np.float64)
+        # rpy convention (see dynamics.py): roll about +x, pitch about +z, yaw about +y (down).
+        self._angles_rpy = np.zeros((self.n_agents, 3), dtype=np.float64)
+        # Relative body velocity nu=[u,v,w,p,q,r] where q is yaw-rate about +y (down).
+        self._nu_body = np.zeros((self.n_agents, 6), dtype=np.float64)
+        self._quats_xyzw = np.zeros((self.n_agents, 4), dtype=np.float64)
+        self._t = 0.0
+        self._energy = 0.0
+        self._constraint_violations = 0
+        self._time_to_success_s: float | None = None
+        # Episode accumulators (table-ready metrics; surfaced in the per-step `info` dict).
+        self._metric_step_count = 0
+        self._station_err_sum = 0.0
+        self._station_err2_sum = 0.0
+        self._station_err_count = 0
+        self._wp_err_sum = 0.0
+        self._wp_err2_sum = 0.0
+        self._wp_err_count = 0
+        self._min_pairwise_dist_m = float("inf")
+        self._collision_steps = 0
+
+        # pollution model expects access to drift payload arrays for OCPNet velocity mapping.
+        drift_payload = {
+            "latitude": self.drift_field.latitude,
+            "longitude": self.drift_field.longitude,
+            "u": self.drift_field.u,
+            "v": self.drift_field.v,
+            "domain_size_m": [
+                float(self.bounds_xyz[1][0] - self.bounds_xyz[0][0]),
+                float(self.bounds_xyz[1][2] - self.bounds_xyz[0][2]),
+                float(self.bounds_xyz[1][1] - self.bounds_xyz[0][1]),
+            ],
+        }
+        self.pollution, self.pollution_meta = build_pollution_field(
+            cfg.pollution_model,
+            rng=self.rng,
+            bounds_xyz=self.bounds_xyz,
+            output_dir=self.out_dir,
+            drift_payload=drift_payload,
+        )
+
+        self.task_cfg: TaskConfig | None = None
+        self.task_state: TaskState | None = None
+        self.controller_cfg: ControllerConfig | None = None
+        self._llm_planner = None
+        self._llm_last_done_mask: np.ndarray | None = None
+        self._llm_last_call_step: int = -10**9
+        self._llm_last_wp_call_step: int = -10**9
+        self._llm_last_wp_assign: np.ndarray | None = None
+        # LLM instrumentation (prevents silent fallback from being mistaken as "LLM performance").
+        self._llm_cleanup_calls = 0
+        self._llm_cleanup_valid = 0
+        self._llm_wp_calls = 0
+        self._llm_wp_valid = 0
+        self._llm_cached_calls = 0
+        self._llm_uncached_calls = 0
+        self._llm_latency_ms_sum = 0.0
+        self._llm_prompt_tokens_sum = 0
+        self._llm_output_tokens_sum = 0
+
+        self.rec = HeadlessRecorder(
+            self.out_dir,
+            n_agents=self.n_agents,
+            config=RecorderConfig(write_csv=bool(cfg.rec_write_csv), step_stride=int(max(1, int(cfg.rec_step_stride)))),
+        )
+        self._initial_pollution_mass: float | None = None
+
+    @property
+    def positions_xyz(self) -> np.ndarray:
+        return self._positions.copy()
+
+    @property
+    def energy_proxy(self) -> float:
+        return float(self._energy)
+
+    @property
+    def constraint_violations(self) -> int:
+        return int(self._constraint_violations)
+
+    @property
+    def time_to_success_s(self) -> float | None:
+        return None if self._time_to_success_s is None else float(self._time_to_success_s)
+
+    def _sample_current(self, x_m: float, z_m: float) -> tuple[float, float]:
+        drift_x, drift_z = self.drift_field.sample_xz(
+            x_m=x_m,
+            z_m=z_m,
+            origin_lat=self.origin_lat,
+            origin_lon=self.origin_lon,
+        )
+        base_x = float(drift_x) * float(self.cfg.current_gain)
+        base_z = float(drift_z) * float(self.cfg.current_gain)
+
+        amp = float(getattr(self.cfg, "tide_amp_mps", 0.0) or 0.0)
+        period = float(getattr(self.cfg, "tide_period_s", 0.0) or 0.0)
+        if amp > 0.0 and period > 1e-6:
+            phase = float(getattr(self.cfg, "tide_phase_s", 0.0) or 0.0)
+            w = 2.0 * math.pi / period
+            tt = w * (float(self._t) + phase)
+            return base_x + amp * math.sin(tt), base_z + amp * math.cos(tt)
+
+        return base_x, base_z
+
+    def _violates_constraints(self, p_xyz: np.ndarray) -> bool:
+        if str(self.cfg.constraint_mode) == "off":
+            return False
+        x_m = float(p_xyz[0])
+        y_depth_m = float(p_xyz[1])
+        z_m = float(p_xyz[2])
+
+        m = self.drift_field.sample_land_mask_xz(
+            x_m=x_m,
+            z_m=z_m,
+            origin_lat=self.origin_lat,
+            origin_lon=self.origin_lon,
+        )
+        if m is not None and float(m) >= float(self.cfg.land_mask_threshold):
+            return True
+
+        if str(self.cfg.bathy_mode) != "hard":
+            return False
+
+        elev = self.drift_field.sample_elevation_xz(
+            x_m=x_m,
+            z_m=z_m,
+            origin_lat=self.origin_lat,
+            origin_lon=self.origin_lon,
+        )
+        if elev is None or not np.isfinite(float(elev)):
+            return True
+        elev_m = float(elev)
+        # Convention: elevation is seafloor height relative to sea surface (meters),
+        # typically negative for underwater seabed.
+        if elev_m >= 0.0:
+            return True
+        water_depth_m = -elev_m
+        if (y_depth_m + float(self.cfg.seafloor_clearance_m)) > water_depth_m:
+            return True
+        return False
+
+    def reset(self, *, task: TaskConfig, controller: ControllerConfig) -> dict[str, Any]:
+        self.task_cfg = task
+        self.controller_cfg = controller
+        if str(controller.kind) == "llm_planner":
+            from .llm_planner import LLMPlanner, LLMPlannerConfig
+
+            cache_dir = str(controller.llm_cache_dir).strip()
+            if not cache_dir:
+                cache_dir = str((Path("runs") / "benchmark_core" / "_cache" / "llm_planner").resolve())
+            self._llm_planner = LLMPlanner(
+                LLMPlannerConfig(
+                    model_path=str(controller.llm_model_path),
+                    cache_dir=cache_dir,
+                    call_stride_steps=int(controller.llm_call_stride_steps),
+                    max_new_tokens=int(controller.llm_max_new_tokens),
+                )
+            )
+            self._llm_last_done_mask = None
+            self._llm_last_call_step = -10**9
+            self._llm_last_wp_call_step = -10**9
+            self._llm_last_wp_assign = None
+            self._llm_cleanup_calls = 0
+            self._llm_cleanup_valid = 0
+            self._llm_wp_calls = 0
+            self._llm_wp_valid = 0
+            self._llm_cached_calls = 0
+            self._llm_uncached_calls = 0
+            self._llm_latency_ms_sum = 0.0
+            self._llm_prompt_tokens_sum = 0
+            self._llm_output_tokens_sum = 0
+        else:
+            self._llm_planner = None
+            self._llm_last_done_mask = None
+            self._llm_last_call_step = -10**9
+            self._llm_last_wp_call_step = -10**9
+            self._llm_last_wp_assign = None
+            self._llm_cleanup_calls = 0
+            self._llm_cleanup_valid = 0
+            self._llm_wp_calls = 0
+            self._llm_wp_valid = 0
+            self._llm_cached_calls = 0
+            self._llm_uncached_calls = 0
+            self._llm_latency_ms_sum = 0.0
+            self._llm_prompt_tokens_sum = 0
+            self._llm_output_tokens_sum = 0
+        req_n = required_n_agents(task.kind)
+        if req_n is not None and int(self.n_agents) != int(req_n):
+            raise ValueError(f"Task {task.kind!r} requires n_agents={req_n}, got n_agents={self.n_agents}")
+        self.task_state = reset_task(self.rng, self.bounds_xyz, task, n_agents=int(self.n_agents))
+
+        if str(self.cfg.constraint_mode) != "off" and not bool(self.drift_info.has_land_mask):
+            raise ValueError(
+                "constraint_mode is enabled but drift cache is missing 'land_mask'. "
+                "Re-export the drift cache with land_mask or set constraint_mode=off."
+            )
+        if str(self.cfg.bathy_mode) == "hard" and not bool(self.drift_info.has_elevation):
+            raise ValueError(
+                "bathy_mode=hard but drift cache is missing 'elevation'. "
+                "Re-export the drift cache with elevation or set bathy_mode=off."
+            )
+
+        # Pick a dataset tile origin such that the sim tile maps inside the cached lat/lon extent.
+        lat_span_deg = float(self.tile_size_z_m) / METERS_PER_DEG_LAT
+        lon_span_deg = float(self.tile_size_x_m) / meters_per_deg_lon(self._dataset_lat_min)
+        lat0_min = self._dataset_lat_min
+        lat0_max = self._dataset_lat_max - lat_span_deg
+        if lat0_max < lat0_min:
+            lat0_max = lat0_min
+        self.origin_lat = float(self.rng.uniform(lat0_min, lat0_max))
+        lon0_min = self._dataset_lon_min
+        lon0_max = self._dataset_lon_max - lon_span_deg
+        if lon0_max < lon0_min:
+            lon0_max = lon0_min
+        self.origin_lon = float(self.rng.uniform(lon0_min, lon0_max))
+
+        lo, hi = self.bounds_xyz
+        for i in range(self.n_agents):
+            for _ in range(200):
+                p = self.rng.uniform(lo, hi).astype(np.float64)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+                    break
+            self._yaws[i] = float(self.rng.uniform(-math.pi, math.pi))
+            self._angles_rpy[i, 0] = 0.0
+            self._angles_rpy[i, 1] = 0.0
+            self._angles_rpy[i, 2] = float(self._yaws[i])
+            self._nu_body[i] = 0.0
+            self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
+
+        # Task-specific spawn adjustments to improve determinism and replay usability.
+        if task.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+            barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+            offsets = [
+                np.array([+3.0, 0.0, 0.0], dtype=np.float64),
+                np.array([-3.0, 0.0, 0.0], dtype=np.float64),
+                np.array([0.0, 0.0, +3.0], dtype=np.float64),
+                np.array([0.0, 0.0, -3.0], dtype=np.float64),
+                np.array([0.0, +3.0, 0.0], dtype=np.float64),
+            ]
+            for i in range(min(self.n_agents, len(offsets))):
+                p = barrel + offsets[i]
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+
+        if task.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            cen = np.mean(fish, axis=0)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            push = tgt - cen
+            push[1] = 0.0
+            nrm = float(np.linalg.norm(push))
+            push = push / max(1e-9, nrm)
+            back = -push
+            ring_center = cen + 14.0 * back
+            rr = 10.0
+            for i in range(self.n_agents):
+                ang = 2.0 * math.pi * (i / max(1, self.n_agents))
+                off = np.array([rr * math.cos(ang), 0.0, rr * math.sin(ang)], dtype=np.float64)
+                p = ring_center + off
+                p[1] = float(cen[1])
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+
+        if task.kind == "formation_transit_multiagent" and self.task_state.formation_offsets_xyz is not None:
+            # Spawn agents already in a formation around the episode start centroid.
+            offsets = np.asarray(self.task_state.formation_offsets_xyz, dtype=np.float64).reshape(self.n_agents, 3)
+            center = np.mean(self._positions, axis=0).astype(np.float64)
+            lo, hi = self.bounds_xyz
+            for i in range(self.n_agents):
+                jitter = self.rng.normal(scale=0.75, size=(3,))
+                jitter[1] = 0.0
+                p = center + offsets[i] + jitter
+                p[1] = float(center[1])
+                p = np.minimum(np.maximum(p, lo), hi)
+                if not self._violates_constraints(p):
+                    self._positions[i] = p
+            # Make the transit target distance scale with difficulty so the task isn't trivially
+            # solved at t=0. Keep the goal reachable within the time budget.
+            diff = str(task.difficulty)
+            if diff == "easy":
+                frac = 0.35
+            elif diff == "medium":
+                frac = 0.75
+            else:
+                frac = 1.00
+            travel_budget = float(task.max_steps) * float(self.cfg.dt_s) * float(self.cfg.max_speed_mps) * 0.55
+            tile_scale = 0.9 * float(min(self.tile_size_x_m, self.tile_size_z_m))
+            dist = float(np.clip(frac * travel_budget, 50.0, max(80.0, tile_scale)))
+            for _ in range(40):
+                ang = float(self.rng.uniform(0.0, 2.0 * math.pi))
+                dir_xz = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
+                g = center + dist * dir_xz
+                g[1] = float(center[1])
+                g = np.minimum(np.maximum(g, lo), hi)
+                if not self._violates_constraints(g):
+                    self.task_state.goal_xyz = g.astype(np.float64)
+                    break
+
+        # Waypoint-family tasks: re-sample a *reachable* polyline around the initial centroid.
+        # The default reset_task() samples endpoints uniformly over the full tile, which can be unreachable
+        # within max_steps at the capped max_speed. This makes smoke runs look "broken" even when logic is fine.
+        if task.kind in ("route_following_waypoints", "depth_profile_tracking", "pipeline_inspection_leak_detection"):
+            lo, hi = self.bounds_xyz
+            center = np.mean(self._positions, axis=0).astype(np.float64)
+            k = int(max(2, int(task.waypoints_n)))
+            ang = float(self.rng.uniform(0.0, 2.0 * math.pi))
+            dir_xz = np.array([math.cos(ang), 0.0, math.sin(ang)], dtype=np.float64)
+            # Conservative travel budget (policy won't drive at max speed all the time under currents).
+            travel_budget = float(task.max_steps) * float(self.cfg.dt_s) * float(self.cfg.max_speed_mps) * 0.55
+            # Keep inside the tile even on small cached slices.
+            tile_scale = 0.8 * float(min(self.tile_size_x_m, self.tile_size_z_m))
+            total_len = float(np.clip(0.75 * travel_budget, 40.0, max(60.0, tile_scale)))
+            p0 = center - 0.25 * total_len * dir_xz
+            p1 = center + 0.75 * total_len * dir_xz
+            p0 = np.minimum(np.maximum(p0, lo), hi)
+            p1 = np.minimum(np.maximum(p1, lo), hi)
+
+            ts = np.linspace(0.0, 1.0, k, dtype=np.float64)
+            wps = (1.0 - ts[:, None]) * p0[None, :] + ts[:, None] * p1[None, :]
+            wig = self.rng.normal(scale=0.05 * total_len, size=(k, 2))
+            wps[:, 0] = np.clip(wps[:, 0] + wig[:, 0], lo[0], hi[0])
+            wps[:, 2] = np.clip(wps[:, 2] + wig[:, 1], lo[2], hi[2])
+
+            if task.kind == "depth_profile_tracking":
+                amp = 0.35 * float(hi[1] - lo[1])
+                base = float(np.clip(center[1], lo[1], hi[1]))
+                # One smooth depth cycle along the route.
+                wps[:, 1] = np.clip(base + amp * np.sin(2.0 * math.pi * ts), lo[1], hi[1])
+            else:
+                wps[:, 1] = float(np.clip(center[1], lo[1], hi[1]))
+
+            self.task_state.waypoints_xyz = wps.astype(np.float64)
+            self.task_state.waypoint_index = 0
+            self.task_state.goal_xyz = wps[0].copy()
+
+            if task.kind == "pipeline_inspection_leak_detection":
+                self.task_state.pipeline_xyz = wps.astype(np.float64)
+                l = int(max(1, int(task.pipeline_leaks_n)))
+                leak = np.zeros((l, 3), dtype=np.float64)
+                for li in range(l):
+                    if k >= 3:
+                        wi = int(self.rng.integers(1, k - 1))
+                        leak[li] = wps[wi]
+                    else:
+                        seg = int(self.rng.integers(0, max(1, k - 1)))
+                        a = wps[seg]
+                        b = wps[min(k - 1, seg + 1)]
+                        tt = float(self.rng.uniform(0.2, 0.8))
+                        leak[li] = (1.0 - tt) * a + tt * b
+                self.task_state.leak_xyz = leak.astype(np.float64)
+                self.task_state.leak_detected = np.zeros((l,), dtype=bool)
+                self.task_state.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
+
+        # Task-specific goal/anchor choices.
+        if task.kind == "station_keeping":
+            self.task_state.goal_xyz = np.mean(self._positions, axis=0)
+        elif task.kind == "go_to_goal_current":
+            # Choose a reachable goal offset from the initial centroid (task-difficulty dependent).
+            center = np.mean(self._positions, axis=0)
+            dist = 90.0 if task.difficulty == "easy" else 160.0 if task.difficulty == "medium" else 240.0
+            for _ in range(200):
+                ang = float(self.rng.uniform(0, 2 * math.pi))
+                off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
+                goal = np.minimum(np.maximum(center + off, lo), hi)
+                if not self._violates_constraints(goal):
+                    self.task_state.goal_xyz = goal
+                    break
+        elif task.kind == "pollution_containment_multiagent":
+            self.task_state.goal_xyz = 0.5 * (lo + hi)
+        elif task.kind == "formation_transit_multiagent":
+            # Formation center goal is a reachable offset from the initial centroid.
+            center = np.mean(self._positions, axis=0)
+            dist = 120.0 if task.difficulty == "easy" else 200.0 if task.difficulty == "medium" else 280.0
+            for _ in range(200):
+                ang = float(self.rng.uniform(0, 2 * math.pi))
+                off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
+                goal = np.minimum(np.maximum(center + off, lo), hi)
+                if not self._violates_constraints(goal):
+                    self.task_state.goal_xyz = goal
+                    break
+        elif task.kind == "fish_herding_8uuv":
+            # Choose a reachable XZ goal relative to the fish centroid so a simple headless herding proxy can succeed.
+            if self.task_state.fish_xyz is not None:
+                fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+                cen = np.mean(fish, axis=0)
+                dist = 180.0 if task.difficulty == "easy" else 240.0 if task.difficulty == "medium" else 320.0
+                margin = 55.0
+                lo2 = lo.copy()
+                hi2 = hi.copy()
+                lo2[0] = min(lo2[0] + margin, hi2[0] - margin)
+                lo2[2] = min(lo2[2] + margin, hi2[2] - margin)
+                hi2[0] = max(hi2[0] - margin, lo2[0] + margin)
+                hi2[2] = max(hi2[2] - margin, lo2[2] + margin)
+                for _ in range(200):
+                    ang = float(self.rng.uniform(0, 2 * math.pi))
+                    off = np.array([math.cos(ang) * dist, 0.0, math.sin(ang) * dist], dtype=np.float64)
+                    goal = np.minimum(np.maximum(cen + off, lo2), hi2)
+                    goal[1] = float(lo[1] + 0.8)
+                    if not self._violates_constraints(goal):
+                        self.task_state.goal_xyz = goal
+                        init = float(np.linalg.norm((cen[[0, 2]] - goal[[0, 2]])))
+                        if np.isfinite(init) and init > 1e-6:
+                            self.task_state.fish_init_dist_to_goal_xz_m = init
+                        break
+        elif task.kind == "area_scan_terrain_recon":
+            # Define a region-of-interest grid around the initial centroid (instead of scanning the full tile).
+            center = np.mean(self._positions, axis=0)
+            roi = 220.0 if task.difficulty == "easy" else 340.0 if task.difficulty == "medium" else 420.0
+            cell = float(task.scan_cell_size_m)
+            w = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
+            h = int(max(3, math.ceil(float(roi) / max(1e-9, cell))))
+            ox = float(np.clip(float(center[0]) - 0.5 * roi, float(lo[0]), float(hi[0]) - float(w) * cell))
+            oz = float(np.clip(float(center[2]) - 0.5 * roi, float(lo[2]), float(hi[2]) - float(h) * cell))
+            self.task_state.scan_grid_hw = (h, w)
+            self.task_state.scan_grid_origin_xz = np.array([ox, oz], dtype=np.float64)
+            self.task_state.scan_visited = np.zeros((h, w), dtype=bool)
+
+            # Precompute a lawnmower scan path over the ROI grid.
+            pts = []
+            y = float(np.mean(self._positions[:, 1]))
+            rr = float(task.scan_radius_m)
+            stride = int(max(1, math.ceil((0.9 * rr) / max(1e-9, cell))))
+            for i in range(0, h, stride):
+                xs = range(0, w, stride) if ((i // stride) % 2 == 0) else range(w - 1, -1, -stride)
+                for j in xs:
+                    x = ox + (float(j) + 0.5) * cell
+                    z = oz + (float(i) + 0.5) * cell
+                    pts.append([float(np.clip(x, lo[0], hi[0])), y, float(np.clip(z, lo[2], hi[2]))])
+            self.task_state.waypoints_xyz = np.asarray(pts, dtype=np.float64)
+            self.task_state.waypoint_index = 0
+            if self.task_state.waypoints_xyz.size:
+                self.task_state.goal_xyz = np.asarray(self.task_state.waypoints_xyz[0], dtype=np.float64)
+        elif task.kind == "pipeline_inspection_leak_detection":
+            # Re-generate a reachable pipeline polyline around the initial centroid; keep it short enough to traverse.
+            k = int(max(3, task.waypoints_n))
+            center = np.mean(self._positions, axis=0)
+            length = 260.0 if task.difficulty == "easy" else 360.0 if task.difficulty == "medium" else 480.0
+            for _ in range(200):
+                ang = float(self.rng.uniform(0, 2 * math.pi))
+                a = center + np.array([math.cos(ang) * 0.5 * length, 0.0, math.sin(ang) * 0.5 * length], dtype=np.float64)
+                b = center - np.array([math.cos(ang) * 0.5 * length, 0.0, math.sin(ang) * 0.5 * length], dtype=np.float64)
+                a = np.minimum(np.maximum(a, lo), hi)
+                b = np.minimum(np.maximum(b, lo), hi)
+                if self._violates_constraints(a) or self._violates_constraints(b):
+                    continue
+                ts = np.linspace(0.0, 1.0, k, dtype=np.float64)
+                wps = (1.0 - ts[:, None]) * a[None, :] + ts[:, None] * b[None, :]
+                # Small lateral wiggle.
+                wig = self.rng.normal(scale=0.04 * length, size=(k, 2))
+                wps[:, 0] = np.clip(wps[:, 0] + wig[:, 0], lo[0], hi[0])
+                wps[:, 2] = np.clip(wps[:, 2] + wig[:, 1], lo[2], hi[2])
+                wps[:, 1] = np.clip(wps[:, 1], lo[1], hi[1])
+                self.task_state.waypoints_xyz = wps.astype(np.float64)
+                self.task_state.pipeline_xyz = wps.astype(np.float64)
+                self.task_state.waypoint_index = 0
+                self.task_state.goal_xyz = wps[0].copy()
+                l = int(max(1, task.pipeline_leaks_n))
+                leak = np.zeros((l, 3), dtype=np.float64)
+                for li in range(l):
+                    # Place leaks near waypoints for robust detection under drift (still on the pipeline polyline).
+                    if k >= 3:
+                        wi = int(self.rng.integers(1, k - 1))
+                        leak[li] = wps[wi]
+                    else:
+                        seg = int(self.rng.integers(0, max(1, k - 1)))
+                        aa = wps[seg]
+                        bb = wps[min(k - 1, seg + 1)]
+                        tt = float(self.rng.uniform(0.2, 0.8))
+                        leak[li] = (1.0 - tt) * aa + tt * bb
+                self.task_state.leak_xyz = leak.astype(np.float64)
+                self.task_state.leak_detected = np.zeros((l,), dtype=bool)
+                self.task_state.leak_first_detect_t = np.full((l,), np.nan, dtype=np.float64)
+                break
+        elif task.kind == "depth_profile_tracking":
+            # If waypoints exist, encode a depth profile into waypoint y (depth positive down).
+            if self.task_state.waypoints_xyz is not None:
+                wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+                amp = 2.0 if task.difficulty == "easy" else 3.5 if task.difficulty == "medium" else 5.0
+                base = float(np.clip(np.mean(self._positions[:, 1]), lo[1] + 0.5, hi[1] - 0.5))
+                for i in range(wps.shape[0]):
+                    wps[i, 1] = float(np.clip(base + amp * math.sin(2.0 * math.pi * (i / max(1, wps.shape[0] - 1))), lo[1] + 0.2, hi[1] - 0.2))
+                self.task_state.waypoints_xyz = wps
+                self.task_state.goal_xyz = wps[int(np.clip(self.task_state.waypoint_index, 0, wps.shape[0] - 1))].copy()
+
+        self._t = 0.0
+        self._energy = 0.0
+        self._constraint_violations = 0
+        self._time_to_success_s = None
+        self._metric_step_count = 0
+        self._station_err_sum = 0.0
+        self._station_err2_sum = 0.0
+        self._station_err_count = 0
+        self._wp_err_sum = 0.0
+        self._wp_err2_sum = 0.0
+        self._wp_err_count = 0
+        self._min_pairwise_dist_m = float("inf")
+        self._collision_steps = 0
+        self.pollution_meta = self.pollution.reset(self.rng, bounds_xyz=self.bounds_xyz)
+
+        # Track an initial mass proxy (for containment task success definition).
+        self._initial_pollution_mass = None
+        if hasattr(self.pollution, "model"):
+            try:
+                conc = self.pollution.model.pollutant_fields[self.pollution.pollutant].get_concentration(self.pollution.pollutant)
+                self._initial_pollution_mass = float(np.sum(conc))
+            except Exception:
+                self._initial_pollution_mass = None
+
+        meta = {
+            "seed": int(self.seed),
+            "n_agents": int(self.n_agents),
+            "env_config": self.cfg.to_dict(),
+            "task": task.to_dict(),
+            "controller": controller.to_dict(),
+            "drift_cache": self.drift_info.to_dict(),
+            "pollution": self.pollution_meta,
+            "tile": {
+                "tile_size_x_m": float(self.tile_size_x_m),
+                "tile_size_z_m": float(self.tile_size_z_m),
+                "origin_lat": float(self.origin_lat),
+                "origin_lon": float(self.origin_lon),
+                "projection_note": "x=east meters, z=north meters; lat/lon from tangent-plane approx around origin_lat/lon (nearest-neighbor sampling on cached grid).",
+            },
+            "bounds_xyz": {"lo": lo.tolist(), "hi": hi.tolist()},
+        }
+        # v2 contract snapshot for paper-facing reproducibility (separate stable file).
+        try:
+            spec = build_spec_snapshot(env_cfg=self.cfg, controller=controller)
+            (self.out_dir / "spec_snapshot.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
+            meta["spec_snapshot"] = {"schema_version": "v2", "path": str((self.out_dir / "spec_snapshot.json").resolve())}
+        except Exception as e:
+            meta["spec_snapshot_error"] = f"{type(e).__name__}: {e}"
+        self.rec.write_run_meta(meta)
+        return meta
+
+    def step(self) -> tuple[bool, dict[str, Any]]:
+        assert self.task_cfg is not None and self.task_state is not None and self.controller_cfg is not None
+
+        # Observations for controller.
+        probe = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
+        step_i = int(round(self._t / max(1e-9, float(self.cfg.dt_s))))
+
+        if self.task_cfg.kind == "pollution_containment_multiagent":
+            # Estimate plume center from probes (weighted centroid). If probes are near-flat, keep last goal.
+            w = np.maximum(probe, 0.0)
+            s = float(np.sum(w))
+            if s > 1e-12:
+                est = np.sum(self._positions * (w[:, None] / s), axis=0)
+                self.task_state.goal_xyz = est.astype(np.float64)
+        # Default goal is broadcast; some tasks override with per-agent targets.
+        goal: np.ndarray
+        goal = np.asarray(self.task_state.goal_xyz, dtype=np.float64)
+        if self.task_cfg.kind == "formation_transit_multiagent" and self.task_state.formation_offsets_xyz is not None:
+            offsets = np.asarray(self.task_state.formation_offsets_xyz, dtype=np.float64).reshape(self.n_agents, 3)
+            goal = goal.reshape(1, 3) + offsets
+        elif self.task_cfg.kind == "surface_pollution_cleanup_multiagent" and self.task_state.cleanup_sources_xyz is not None and self.task_state.cleanup_done is not None:
+            srcs = np.asarray(self.task_state.cleanup_sources_xyz, dtype=np.float64)
+            done = np.asarray(self.task_state.cleanup_done, dtype=bool)
+            if self.task_state.cleanup_assigned_source is None:
+                self.task_state.cleanup_assigned_source = np.full((self.n_agents,), -1, dtype=np.int64)
+            # Baseline: pick nearest unfinished per agent. Optional: LLM can propose a global assignment.
+            use_llm = str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None
+            assigned: np.ndarray | None = None
+            if use_llm and not np.all(done):
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                # Only call the LLM at a fixed stride. Calling on every DONE-mask change can be
+                # prohibitively slow for larger local models (and can starve the simulation loop).
+                need_call = self._llm_last_done_mask is None
+                if (step_i - int(self._llm_last_call_step)) >= stride:
+                    need_call = True
+                if need_call:
+                    self._llm_cleanup_calls += 1
+                    llm_stats: dict[str, Any] = {}
+                    plan = self._llm_planner.plan_cleanup_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        sources_xyz=srcs,
+                        done_mask=done,
+                        n_agents=int(self.n_agents),
+                        stats_out=llm_stats,
+                    )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                    self._llm_last_call_step = int(step_i)
+                    self._llm_last_done_mask = done.copy()
+                    if plan is not None:
+                        self._llm_cleanup_valid += 1
+                        assigned = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+
+            if assigned is None:
+                assigned = np.asarray(self.task_state.cleanup_assigned_source, dtype=np.int64).reshape(self.n_agents)
+                req = int(max(1, int(getattr(self.task_cfg, "cleanup_required_agents", 1))))
+                if req > 1:
+                    cand = np.where(~done)[0]
+                    if cand.size == 0:
+                        assigned[:] = -1
+                    else:
+                        # Deterministic team grouping: agents are partitioned into teams of size `req`,
+                        # each team targets one unfinished source.
+                        for ai in range(self.n_agents):
+                            team = int(ai // req)
+                            assigned[ai] = int(cand[team % int(cand.size)])
+                else:
+                    for ai in range(self.n_agents):
+                        cur = int(assigned[ai])
+                        if cur >= 0 and cur < int(done.size) and not bool(done[cur]):
+                            continue
+                        if np.all(done):
+                            assigned[ai] = -1
+                            continue
+                        cand = np.where(~done)[0]
+                        dists = np.linalg.norm(srcs[cand] - self._positions[ai][None, :], axis=1)
+                        assigned[ai] = int(cand[int(np.argmin(dists))])
+            self.task_state.cleanup_assigned_source = assigned.astype(np.int64)
+            goals = np.repeat(goal.reshape(1, 3), self.n_agents, axis=0)
+            for ai in range(self.n_agents):
+                si = int(self.task_state.cleanup_assigned_source[ai])
+                if si >= 0:
+                    goals[ai] = srcs[si]
+            goal = goals
+        elif self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+            barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+            goals = np.repeat(barrel.reshape(1, 3), self.n_agents, axis=0)
+            # Side attachments for the first 4 agents; the 5th aims from below.
+            r = 2.5
+            offsets = [
+                np.array([+r, 0.0, 0.0], dtype=np.float64),
+                np.array([-r, 0.0, 0.0], dtype=np.float64),
+                np.array([0.0, 0.0, +r], dtype=np.float64),
+                np.array([0.0, 0.0, -r], dtype=np.float64),
+                np.array([0.0, +r, 0.0], dtype=np.float64),
+            ]
+            for i in range(min(self.n_agents, len(offsets))):
+                goals[i] = barrel + offsets[i]
+            # During lift phases, bias upward to approach surface.
+            if str(self.task_state.lift_phase) in {"lift_off", "join5", "to_surface"}:
+                # Difficulty-dependent ascent rate (harder => slower ascent).
+                dd = str(self.task_cfg.difficulty)
+                dy = 0.9 if dd == "easy" else 0.6 if dd == "medium" else 0.45
+                goals[:, 1] = max(float(self.bounds_xyz[0][1]) + 0.6, float(barrel[1]) - float(dy))
+            goal = goals
+        elif self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            cen = np.mean(fish, axis=0)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            push = tgt - cen
+            push[1] = 0.0
+            nrm = float(np.linalg.norm(push))
+            if not np.isfinite(nrm) or nrm < 1e-9:
+                push = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+            else:
+                push = push / nrm
+            # Place agents on a ring "behind" the fish (opposite push direction).
+            back = -push
+            ring_center = cen + 12.0 * back
+            rr = 10.0
+            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+            for i in range(self.n_agents):
+                ang = 2.0 * math.pi * (i / max(1, self.n_agents))
+                off = np.array([rr * math.cos(ang), 0.0, rr * math.sin(ang)], dtype=np.float64)
+                goals[i] = ring_center + off
+                goals[i, 1] = float(cen[1])
+            goal = goals
+        elif self.task_cfg.kind == "area_scan_terrain_recon" and self.task_state.waypoints_xyz is not None:
+            wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(self.task_state.waypoint_index), 0, wps.shape[0] - 1))
+            # Advance lawnmower target when agent0 reaches the current cell center.
+            if i < (wps.shape[0] - 1):
+                if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
+                    self.task_state.waypoint_index = i + 1
+                    i = int(self.task_state.waypoint_index)
+            lo, hi = self.bounds_xyz
+            # Multi-agent scan: default deterministic spreading. Optional: LLM can assign waypoint indices.
+            use_llm = str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None
+            k = int(wps.shape[0])
+            assign = None
+            if use_llm:
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                if (step_i - int(self._llm_last_wp_call_step)) >= stride:
+                    self._llm_wp_calls += 1
+                    llm_stats = {}
+                    plan = self._llm_planner.plan_waypoint_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        waypoints_xyz=wps,
+                        n_agents=int(self.n_agents),
+                        detected_mask=None,
+                        stats_out=llm_stats,
+                    )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                    self._llm_last_wp_call_step = int(step_i)
+                    if plan is not None:
+                        self._llm_wp_valid += 1
+                        self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+                assign = self._llm_last_wp_assign
+
+            if assign is None:
+                delta = int(max(1, round(0.5 * float(k) / max(1.0, float(self.n_agents)))))
+                assign = np.asarray([(i + ai * delta) % k for ai in range(self.n_agents)], dtype=np.int64)
+
+            goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+            grid_n = int(max(1, math.ceil(math.sqrt(self.n_agents))))
+            spacing = float(max(2.0, 0.55 * float(self.task_cfg.scan_cell_size_m)))
+            for ai in range(self.n_agents):
+                ii = int(np.clip(int(assign[ai]), 0, k - 1))
+                base = wps[ii]
+                r = int(ai // grid_n)
+                c = int(ai % grid_n)
+                dx = (float(c) - 0.5 * float(grid_n - 1)) * spacing
+                dz = (float(r) - 0.5 * float(grid_n - 1)) * spacing
+                p = base + np.array([dx, 0.0, dz], dtype=np.float64)
+                p = np.minimum(np.maximum(p, lo), hi)
+                if self._violates_constraints(p):
+                    p = base
+                goals[ai] = p
+            goal = goals
+        elif self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.waypoints_xyz is not None:
+            wps = np.asarray(self.task_state.waypoints_xyz, dtype=np.float64)
+            i = int(np.clip(int(self.task_state.waypoint_index), 0, wps.shape[0] - 1))
+            if i < (wps.shape[0] - 1):
+                if float(np.linalg.norm(self._positions[0] - wps[i])) <= float(self.task_cfg.success_radius_m):
+                    self.task_state.waypoint_index = i + 1
+                    i = int(self.task_state.waypoint_index)
+            self.task_state.goal_xyz = wps[i].copy()
+            goal = self.task_state.goal_xyz
+            # Optional: LLM splits pipeline waypoints among agents to speed inspection.
+            if str(self.controller_cfg.kind) == "llm_planner" and self._llm_planner is not None:
+                stride = int(max(1, int(self.controller_cfg.llm_call_stride_steps)))
+                if (step_i - int(self._llm_last_wp_call_step)) >= stride:
+                    det = None
+                    if self.task_state.leak_detected is not None:
+                        det = np.asarray(self.task_state.leak_detected, dtype=bool)
+                    self._llm_wp_calls += 1
+                    llm_stats = {}
+                    plan = self._llm_planner.plan_waypoint_assignment(
+                        task_kind=str(self.task_cfg.kind),
+                        step_index=int(step_i),
+                        positions_xyz=self._positions,
+                        waypoints_xyz=wps,
+                        n_agents=int(self.n_agents),
+                        detected_mask=det,
+                        stats_out=llm_stats,
+                    )
+                    if bool(llm_stats.get("cached", 0)):
+                        self._llm_cached_calls += 1
+                    else:
+                        self._llm_uncached_calls += 1
+                        try:
+                            self._llm_latency_ms_sum += float(llm_stats.get("latency_ms", 0.0) or 0.0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_prompt_tokens_sum += int(llm_stats.get("prompt_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                        try:
+                            self._llm_output_tokens_sum += int(llm_stats.get("output_tokens", 0) or 0)
+                        except Exception:
+                            pass
+                    self._llm_last_wp_call_step = int(step_i)
+                    if plan is not None:
+                        self._llm_wp_valid += 1
+                        self._llm_last_wp_assign = np.asarray(plan, dtype=np.int64).reshape(self.n_agents)
+                if self._llm_last_wp_assign is not None:
+                    assign = np.asarray(self._llm_last_wp_assign, dtype=np.int64).reshape(self.n_agents)
+                    goals = np.zeros((self.n_agents, 3), dtype=np.float64)
+                    k = int(wps.shape[0])
+                    for ai in range(self.n_agents):
+                        ii = int(np.clip(int(assign[ai]), 0, k - 1))
+                        goals[ai] = wps[ii]
+                    goal = goals
+
+        # Currents are part of the environment state; sample them before computing actions so learned controllers
+        # (e.g., BC) can condition on local flow.
+        currents = np.zeros((self.n_agents, 3), dtype=np.float64)
+        for i in range(self.n_agents):
+            cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
+            currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
+
+        act = compute_actions(
+            self.controller_cfg,
+            step_index=step_i,
+            positions_xyz=self._positions,
+            goal_xyz=goal,
+            pollution_probe=probe,
+            local_currents_xyz=currents,
+            rng=self.rng,
+            task_kind=str(self.task_cfg.kind),
+        )
+        # Clip actions to max speed.
+        for i in range(self.n_agents):
+            sp = float(np.linalg.norm(act[i]))
+            if sp > float(self.cfg.max_speed_mps):
+                act[i] = act[i] * (float(self.cfg.max_speed_mps) / sp)
+
+        # State update.
+        lat_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        lon_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        elev_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        mask_arr = np.zeros((self.n_agents,), dtype=np.float64)
+        lo, hi = self.bounds_xyz
+        dt = float(self.cfg.dt_s)
+        mode = str(self.cfg.dynamics_model)
+
+        if mode == "kinematic":
+            for i in range(self.n_agents):
+                new_p = self._positions[i] + (act[i] + currents[i]) * dt
+                new_p = np.minimum(np.maximum(new_p, lo), hi)
+                if self._violates_constraints(new_p):
+                    new_p = self._positions[i]
+                    self._constraint_violations += 1
+                self._positions[i] = new_p
+
+                if float(np.linalg.norm(act[i])) > 1e-6:
+                    self._yaws[i] = float(math.atan2(act[i, 2], act[i, 0]))
+                self._angles_rpy[i, 0] = 0.0
+                self._angles_rpy[i, 1] = 0.0
+                self._angles_rpy[i, 2] = float(self._yaws[i])
+                self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
+                # Record a body-relative velocity proxy derived from the commanded action.
+                R = rotmat_yaw_roll_pitch(yaw_y=float(self._yaws[i]), roll_x=0.0, pitch_z=0.0)
+                v_body = (R.T @ act[i].reshape(3)).reshape(3)
+                self._nu_body[i] = np.array([float(v_body[0]), float(v_body[1]), float(v_body[2]), 0.0, 0.0, 0.0], dtype=np.float64)
+
+                lat_arr[i] = float(self.origin_lat + (float(self._positions[i, 2]) / METERS_PER_DEG_LAT))
+                lon_arr[i] = float(self.origin_lon + (float(self._positions[i, 0]) / meters_per_deg_lon(self.origin_lat)))
+                elev = self.drift_field.sample_elevation_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                elev_arr[i] = float(np.nan if elev is None else elev)
+                m = self.drift_field.sample_land_mask_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                mask_arr[i] = float(np.nan if m is None else m)
+                self._energy += float(np.dot(act[i], act[i])) * dt
+        else:
+            # 3dof/6dof: integrate relative body velocity with a minimal diagonal model.
+            m_lin = np.array([float(x) for x in self.cfg.dyn_mass_linear], dtype=np.float64).reshape(3)
+            m_ang = np.array([float(x) for x in self.cfg.dyn_mass_angular], dtype=np.float64).reshape(3)
+            d_lin = np.array([float(x) for x in self.cfg.dyn_damping_linear], dtype=np.float64).reshape(3)
+            d_ang = np.array([float(x) for x in self.cfg.dyn_damping_angular], dtype=np.float64).reshape(3)
+            kp_lin = np.array([float(x) for x in self.cfg.dyn_kp_linear], dtype=np.float64).reshape(3)
+            kp_ang = np.array([float(x) for x in self.cfg.dyn_kp_angular], dtype=np.float64).reshape(3)
+            kd_ang = np.array([float(x) for x in self.cfg.dyn_kd_angular], dtype=np.float64).reshape(3)
+            wmax = np.array([float(x) for x in self.cfg.dyn_max_angular_rate_rps], dtype=np.float64).reshape(3)
+
+            for i in range(self.n_agents):
+                roll = float(self._angles_rpy[i, 0])
+                pitch = float(self._angles_rpy[i, 1])
+                yaw = float(self._angles_rpy[i, 2])
+                R = rotmat_yaw_roll_pitch(yaw_y=yaw, roll_x=roll, pitch_z=pitch)
+
+                # High-level command: desired relative velocity in world frame.
+                cmd_world = act[i].reshape(3)
+                cmd_body = (R.T @ cmd_world).reshape(3)
+
+                # Desired angular-rate commands.
+                # For yaw, align to the commanded horizontal direction (if any).
+                horiz = float(np.linalg.norm(cmd_world[[0, 2]]))
+                yaw_des = float(math.atan2(float(cmd_world[2]), float(cmd_world[0]))) if horiz > 1e-6 else yaw
+                yaw_err = wrap_pi(yaw_des - yaw)
+                q_cmd = float(np.clip(float(self.cfg.dyn_yaw_rate_kp) * yaw_err, -wmax[1], wmax[1]))
+                p_cmd = float(np.clip(-float(self.cfg.dyn_attitude_rate_kp) * roll, -wmax[0], wmax[0]))
+                r_cmd = float(np.clip(-float(self.cfg.dyn_attitude_rate_kp) * pitch, -wmax[2], wmax[2]))
+
+                nu_cmd = np.array([cmd_body[0], cmd_body[1], cmd_body[2], p_cmd, q_cmd, r_cmd], dtype=np.float64)
+                nu = np.asarray(self._nu_body[i], dtype=np.float64).reshape(6)
+
+                # Velocity tracking -> generalized force/torque (diagonal PID-lite).
+                tau = np.zeros((6,), dtype=np.float64)
+                tau[:3] = kp_lin * (nu_cmd[:3] - nu[:3])
+                tau[3:] = kp_ang * (nu_cmd[3:] - nu[3:]) - kd_ang * nu[3:]
+
+                nu_dot = np.zeros((6,), dtype=np.float64)
+                nu_dot[:3] = (tau[:3] - d_lin * nu[:3]) / np.maximum(1e-6, m_lin)
+                nu_dot[3:] = (tau[3:] - d_ang * nu[3:]) / np.maximum(1e-6, m_ang)
+                nu = nu + nu_dot * dt
+
+                # 3dof mode: suppress roll/pitch dynamics (keep only yaw about +y).
+                if mode == "3dof":
+                    nu[3] = 0.0
+                    nu[5] = 0.0
+                    roll = 0.0
+                    pitch = 0.0
+
+                # Clip relative speed.
+                sp = float(np.linalg.norm(nu[:3]))
+                if sp > float(self.cfg.max_speed_mps) and sp > 1e-9:
+                    nu[:3] = nu[:3] * (float(self.cfg.max_speed_mps) / sp)
+                nu[3:] = np.clip(nu[3:], -wmax, wmax)
+
+                # Integrate pose.
+                v_world_rel = (R @ nu[:3].reshape(3)).reshape(3)
+                new_p = self._positions[i] + (v_world_rel + currents[i]) * dt
+                new_p = np.minimum(np.maximum(new_p, lo), hi)
+                if self._violates_constraints(new_p):
+                    new_p = self._positions[i]
+                    # Rejecting invalid states: cancel the linear relative velocity.
+                    nu[:3] = 0.0
+                    self._constraint_violations += 1
+                self._positions[i] = new_p
+
+                # Update angles (small-angle approximation; roll/pitch should remain small by design).
+                roll = float(np.clip(roll + float(nu[3]) * dt, -float(self.cfg.dyn_max_tilt_rad), float(self.cfg.dyn_max_tilt_rad)))
+                yaw = wrap_pi(yaw + float(nu[4]) * dt)
+                pitch = float(np.clip(pitch + float(nu[5]) * dt, -float(self.cfg.dyn_max_tilt_rad), float(self.cfg.dyn_max_tilt_rad)))
+                if mode == "3dof":
+                    roll = 0.0
+                    pitch = 0.0
+
+                self._angles_rpy[i, 0] = roll
+                self._angles_rpy[i, 1] = pitch
+                self._angles_rpy[i, 2] = yaw
+                self._yaws[i] = yaw
+                self._nu_body[i] = nu
+                self._quats_xyzw[i] = quat_from_yaw_roll_pitch(yaw_y=yaw, roll_x=roll, pitch_z=pitch)
+
+                lat_arr[i] = float(self.origin_lat + (float(self._positions[i, 2]) / METERS_PER_DEG_LAT))
+                lon_arr[i] = float(self.origin_lon + (float(self._positions[i, 0]) / meters_per_deg_lon(self.origin_lat)))
+                elev = self.drift_field.sample_elevation_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                elev_arr[i] = float(np.nan if elev is None else elev)
+                m = self.drift_field.sample_land_mask_xz(
+                    x_m=float(self._positions[i, 0]),
+                    z_m=float(self._positions[i, 2]),
+                    origin_lat=self.origin_lat,
+                    origin_lon=self.origin_lon,
+                )
+                mask_arr[i] = float(np.nan if m is None else m)
+                self._energy += float(np.dot(act[i], act[i])) * dt
+
+        # Episode-level metric accumulators (computed on the post-update state).
+        self._metric_step_count += 1
+        if self.n_agents >= 2:
+            min_d = float("inf")
+            for i in range(self.n_agents):
+                for j in range(i + 1, self.n_agents):
+                    d = float(np.linalg.norm(self._positions[i] - self._positions[j]))
+                    if d < min_d:
+                        min_d = d
+            if np.isfinite(min_d):
+                self._min_pairwise_dist_m = float(min(self._min_pairwise_dist_m, min_d))
+                if min_d <= float(self.cfg.collision_radius_m):
+                    self._collision_steps += 1
+
+        if self.task_cfg.kind == "station_keeping":
+            g = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            d = np.linalg.norm(self._positions - g[None, :], axis=1)
+            mean_d = float(np.mean(d))
+            self._station_err_sum += mean_d
+            self._station_err2_sum += float(mean_d * mean_d)
+            self._station_err_count += 1
+
+        if self.task_cfg.kind in ("route_following_waypoints", "depth_profile_tracking", "pipeline_inspection_leak_detection", "area_scan_terrain_recon"):
+            try:
+                g = np.asarray(goal, dtype=np.float64)
+                if g.shape == (3,):
+                    g = np.repeat(g.reshape(1, 3), self.n_agents, axis=0)
+                else:
+                    g = g.reshape(self.n_agents, 3)
+                d = np.linalg.norm(self._positions - g, axis=1)
+                mean_d = float(np.mean(d))
+                self._wp_err_sum += mean_d
+                self._wp_err2_sum += float(mean_d * mean_d)
+                self._wp_err_count += 1
+            except Exception:
+                pass
+
+        # Update pollution field.
+        if hasattr(self.pollution, "advect_center"):
+            # Advect the Gaussian plume center using the current at its center.
+            cpos = getattr(self.pollution, "center_xyz", None)
+            if cpos is not None:
+                cx, cz = self._sample_current(float(cpos[0]), float(cpos[2]))
+                self.pollution.advect_center(np.array([cx, cz], dtype=np.float64), float(self.cfg.dt_s))
+        self.pollution.step(float(self.cfg.dt_s))
+        if hasattr(self.pollution, "apply_agent_sink") and self.task_cfg.kind in ("pollution_containment_multiagent",):
+            # both Gaussian and OCPNet expose this method (signature differs; use kwargs best-effort)
+            try:
+                self.pollution.apply_agent_sink(self._positions, dt_s=float(self.cfg.dt_s))
+            except TypeError:
+                self.pollution.apply_agent_sink(self._positions)
+
+        # Update task-side semantics (fish/barrel) after the physics step.
+        if self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+            fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+            # Drift fish with current + deterministic herding proxy (move away from nearest agent).
+            cen = np.mean(fish, axis=0)
+            cx, cz = self._sample_current(float(cen[0]), float(cen[2]))
+            drift = np.array([cx, 0.0, cz], dtype=np.float64) * float(self.cfg.dt_s)
+            diff = str(self.task_cfg.difficulty)
+            if diff == "easy":
+                noise_scale = 0.12
+                fish_speed = 0.95
+                flee_close = 0.75
+                flee_far = 0.15
+                flee_thresh_m = 40.0
+                drift_scale = 0.06
+            elif diff == "medium":
+                noise_scale = 0.20
+                fish_speed = 1.20
+                flee_close = 0.88
+                flee_far = 0.35
+                flee_thresh_m = 55.0
+                drift_scale = 0.08
+            else:
+                noise_scale = 0.28
+                fish_speed = 1.45
+                flee_close = 0.95
+                flee_far = 0.55
+                flee_thresh_m = 70.0
+                drift_scale = 0.10
+
+            noise = self.rng.normal(scale=float(noise_scale), size=fish.shape).astype(np.float64)
+            noise[:, 1] = 0.0
+
+            # Nearest-agent repulsion provides the main "herding" motion.
+            agents = np.asarray(self._positions, dtype=np.float64).reshape(self.n_agents, 3)
+            tgt = np.asarray(self.task_state.goal_xyz, dtype=np.float64).reshape(3)
+            f = int(fish.shape[0])
+            # Vectorized nearest-agent lookup (F,N,3).
+            d = agents[None, :, :] - fish[:, None, :]
+            d[:, :, 1] = 0.0
+            r2 = d[:, :, 0] ** 2 + d[:, :, 2] ** 2
+            j = np.argmin(r2, axis=1)
+            di = d[np.arange(f), j, :]
+            v = -di
+            v[:, 1] = 0.0
+            nrm = np.linalg.norm(v[:, [0, 2]], axis=1)
+            dist = np.sqrt(np.min(r2, axis=1))
+
+            dir_goal = tgt[None, :] - fish
+            dir_goal[:, 1] = 0.0
+            gn = np.linalg.norm(dir_goal[:, [0, 2]], axis=1)
+            gn_safe = np.where((gn > 1e-9) & np.isfinite(gn), gn, 1.0)
+            dir_goal = dir_goal / gn_safe[:, None]
+            bad_goal = ~((gn > 1e-9) & np.isfinite(gn))
+            if np.any(bad_goal):
+                dir_goal[bad_goal] = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+
+            nrm_safe = np.where((nrm > 1e-9) & np.isfinite(nrm), nrm, 1.0)
+            rep = v / nrm_safe[:, None]
+            bad_rep = ~((nrm > 1e-9) & np.isfinite(nrm))
+            if np.any(bad_rep):
+                rep[bad_rep] = dir_goal[bad_rep]
+                dist[bad_rep] = float("inf")
+
+            flee = np.where(dist <= float(flee_thresh_m), float(flee_close), float(flee_far))
+            move = flee[:, None] * rep + (1.0 - flee)[:, None] * dir_goal
+            mn = np.linalg.norm(move[:, [0, 2]], axis=1)
+            mn_safe = np.where(mn > 1e-9, mn, 1.0)
+            move = move / mn_safe[:, None]
+            speed = float(fish_speed)
+            fish_next = fish + speed * move * float(self.cfg.dt_s) + float(drift_scale) * drift[None, :] + noise
+
+            fish = fish_next
+            lo, hi = self.bounds_xyz
+            fish = np.minimum(np.maximum(fish, lo[None, :]), hi[None, :])
+            self.task_state.fish_xyz = fish
+
+        if self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None and self.task_state.lift_attached is not None:
+            # Payload motion model: only move the barrel once the full team is attached.
+            # This prevents a single early attachment from dragging the payload trivially.
+            attached = np.asarray(self.task_state.lift_attached, dtype=bool).reshape(self.n_agents)
+            attached_count = int(np.count_nonzero(attached))
+            phase = str(getattr(self.task_state, "lift_phase", "approach"))
+            if phase in {"lift_off", "join5", "to_surface"} and attached_count >= 4:
+                barrel = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).reshape(3)
+                mean = np.mean(self._positions[attached], axis=0)
+                barrel[0] = float(mean[0])
+                barrel[2] = float(mean[2])
+                barrel[1] = float(mean[1])
+                self.task_state.lift_barrel_xyz = barrel
+
+        # Recompute probes for logging/metrics.
+        probe2 = np.array([float(self.pollution.sample(self._positions[i])) for i in range(self.n_agents)], dtype=np.float64)
+        stride = int(max(1, int(self.rec.cfg.step_stride)))
+        if step_i % stride == 0:
+            self.rec.step(
+                self._t,
+                positions_xyz=self._positions,
+                quats_xyzw=self._quats_xyzw,
+                body_vel_uvw_pqr=self._nu_body,
+                actions_xyz=act,
+                currents_xyz=currents,
+                pollution_probe=probe2,
+                latitude=lat_arr,
+                longitude=lon_arr,
+                elevation=elev_arr,
+                land_mask=mask_arr,
+            )
+            self.rec.write_environment_sample(self._t, dataset_time_index=self.dataset_time_index, dataset_depth_index=self.dataset_depth_index)
+
+        # Optional semantic stream (downsample to reduce file size).
+        if step_i % 5 == 0:
+            payload: dict[str, Any] = {"task": str(self.task_cfg.kind)}
+            payload["controller"] = str(self.controller_cfg.kind)
+            # Goal used for action computation (helps downstream BC / audits).
+            try:
+                g = np.asarray(goal, dtype=np.float64)
+                if g.shape == (3,):
+                    payload["goal_for_action_xyz"] = g.tolist()
+                else:
+                    payload["goal_for_action_xyz"] = g.reshape(-1, 3).tolist()
+            except Exception:
+                payload["goal_for_action_xyz"] = None
+            if self.task_cfg.kind == "surface_pollution_cleanup_multiagent" and self.task_state.cleanup_sources_xyz is not None and self.task_state.cleanup_done is not None:
+                payload["cleanup_sources_xyz"] = np.asarray(self.task_state.cleanup_sources_xyz, dtype=np.float64).tolist()
+                payload["cleanup_done"] = np.asarray(self.task_state.cleanup_done, dtype=bool).astype(int).tolist()
+                if self.task_state.cleanup_assigned_source is not None:
+                    payload["cleanup_assigned_source"] = np.asarray(self.task_state.cleanup_assigned_source, dtype=np.int64).tolist()
+            if self.task_cfg.kind == "underwater_pollution_lift_5uuv" and self.task_state.lift_barrel_xyz is not None:
+                payload["barrel_xyz"] = np.asarray(self.task_state.lift_barrel_xyz, dtype=np.float64).tolist()
+                payload["lift_phase"] = str(self.task_state.lift_phase)
+                if self.task_state.lift_attached is not None:
+                    payload["lift_attached"] = np.asarray(self.task_state.lift_attached, dtype=bool).astype(int).tolist()
+            if self.task_cfg.kind == "fish_herding_8uuv" and self.task_state.fish_xyz is not None:
+                fish = np.asarray(self.task_state.fish_xyz, dtype=np.float64).reshape(-1, 3)
+                payload["fish_centroid_xyz"] = np.mean(fish, axis=0).tolist()
+                payload["fish_stage"] = int(self.task_state.fish_stage)
+            if self.task_cfg.kind == "pipeline_inspection_leak_detection" and self.task_state.leak_xyz is not None and self.task_state.leak_detected is not None:
+                payload["leak_xyz"] = np.asarray(self.task_state.leak_xyz, dtype=np.float64).tolist()
+                payload["leak_detected"] = np.asarray(self.task_state.leak_detected, dtype=bool).astype(int).tolist()
+            self.rec.write_semantics(self._t, payload)
+
+        # Success checks.
+        pollution_src = np.array(self.pollution_meta.get("source_xyz"), dtype=np.float64) if "source_xyz" in self.pollution_meta else None
+        mass_frac = None
+        if hasattr(self.pollution, "mass_fraction"):
+            try:
+                mass_frac = float(self.pollution.mass_fraction())
+            except Exception:
+                mass_frac = None
+        elif hasattr(self.pollution, "model") and self._initial_pollution_mass is not None and self._initial_pollution_mass > 1e-12:
+            conc = self.pollution.model.pollutant_fields[self.pollution.pollutant].get_concentration(self.pollution.pollutant)
+            mass_frac = float(np.sum(conc) / self._initial_pollution_mass)
+
+        success, extra = compute_success(
+            self.task_cfg,
+            step_index=int(round(self._t / max(1e-9, float(self.cfg.dt_s)))),
+            dt_s=float(self.cfg.dt_s),
+            positions_xyz=self._positions,
+            task_state=self.task_state,
+            pollution_source_xyz=pollution_src,
+            pollution_total_mass=mass_frac,
+        )
+        info = {
+            "t": float(self._t),
+            "probe_max": float(np.max(probe2)),
+            "probe_mean": float(np.mean(probe2)),
+            "energy_proxy": float(self._energy),
+            "constraint_violations": int(self._constraint_violations),
+            **extra,
+        }
+        if self.task_cfg.kind == "station_keeping":
+            if self._station_err_count > 0:
+                info["station_mean_error_m"] = float(self._station_err_sum / float(self._station_err_count))
+                info["station_rms_error_m"] = float(math.sqrt(self._station_err2_sum / float(self._station_err_count)))
+            else:
+                info["station_mean_error_m"] = None
+                info["station_rms_error_m"] = None
+        if self._wp_err_count > 0:
+            info["waypoint_track_mean_error_m"] = float(self._wp_err_sum / float(self._wp_err_count))
+            info["waypoint_track_rms_error_m"] = float(math.sqrt(self._wp_err2_sum / float(self._wp_err_count)))
+        else:
+            info["waypoint_track_mean_error_m"] = None
+            info["waypoint_track_rms_error_m"] = None
+        info["min_pairwise_dist_m"] = None if self.n_agents < 2 or not np.isfinite(self._min_pairwise_dist_m) else float(self._min_pairwise_dist_m)
+        info["collision_steps"] = int(self._collision_steps)
+        info["collision_rate"] = float(self._collision_steps) / float(max(1, int(self._metric_step_count)))
+        info["llm_cleanup_calls"] = int(self._llm_cleanup_calls)
+        info["llm_cleanup_valid"] = int(self._llm_cleanup_valid)
+        info["llm_wp_calls"] = int(self._llm_wp_calls)
+        info["llm_wp_valid"] = int(self._llm_wp_valid)
+        info["llm_cached_calls"] = int(self._llm_cached_calls)
+        info["llm_uncached_calls"] = int(self._llm_uncached_calls)
+        info["llm_prompt_tokens_total"] = int(self._llm_prompt_tokens_sum)
+        info["llm_output_tokens_total"] = int(self._llm_output_tokens_sum)
+        info["llm_latency_ms_total"] = float(self._llm_latency_ms_sum)
+        info["llm_latency_ms_mean"] = None
+        if int(self._llm_uncached_calls) > 0:
+            info["llm_latency_ms_mean"] = float(self._llm_latency_ms_sum) / float(int(self._llm_uncached_calls))
+        self._t += float(self.cfg.dt_s)
+        # Termination by time horizon.
+        done = bool(success)
+        if not done and int(round(self._t / max(1e-9, float(self.cfg.dt_s)))) >= int(self.task_cfg.max_steps):
+            done = True
+            info["time_limit"] = True
+        info["success"] = bool(success) and not bool(info.get("time_limit", False))
+        if info["success"] and self._time_to_success_s is None:
+            self._time_to_success_s = float(self._t)
+        return bool(done), info
+
+    def close(self) -> None:
+        self.rec.close()

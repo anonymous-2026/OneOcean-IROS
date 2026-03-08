@@ -25,7 +25,7 @@ This file is the single source of truth for **what changed**, **why**, and **how
    - Consequence: any “3D” environment built from this source becomes effectively 2.5D (single depth).
 
 2) **Historical bbox bug: lon/lat got swapped**, producing a scientifically incorrect water dataset:
-   - Old `OceanEnv/Data_pipeline/Data/GOPAF/combined_gopaf_data.nc` contained:
+   - Old `Data_pipeline/Data/GOPAF/combined_gopaf_data.nc` contained:
      - latitude around `[-66, -65]`
      - longitude around `[32, 33]`
    - But the intended region was (as used by terrain crop and pipeline defaults):
@@ -50,7 +50,7 @@ This file is the single source of truth for **what changed**, **why**, and **how
      - `COPERNICUSMARINE_PASSWORD`
 
 4) **New combined dataset successfully regenerated**
-   - Output: `OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc`
+   - Output: `Data_pipeline/Data/Combined/combined_environment.nc`
    - Key properties (scene-quality default):
      - dims: `time=30`, `depth=26`, `latitude=240`, `longitude=240`
      - vars: `so`, `thetao`, `uo`, `vo`, `zos`, `elevation`, `land_mask`
@@ -59,13 +59,13 @@ This file is the single source of truth for **what changed**, **why**, and **how
 
 ### Current outputs (what to use right now)
 - Canonical (default) combined:
-  - `OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc` (multi-depth, no tides by default)
+  - `Data_pipeline/Data/Combined/combined_environment.nc` (multi-depth, no tides by default)
 - Canonical (default) water subset used by the canonical combined:
-  - `OceanEnv/Data_pipeline/Data/GOPAF/combined_gopaf_data.nc`
+  - `Data_pipeline/Data/GOPAF/combined_gopaf_data.nc`
 - Multi-size variants:
-  - `OceanEnv/Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc`
-  - `OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc`
-  - `OceanEnv/Data_pipeline/Data/Combined/variants/public/combined/combined_environment.nc`
+  - `Data_pipeline/Data/Combined/variants/tiny/combined/combined_environment.nc`
+  - `Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc`
+  - `Data_pipeline/Data/Combined/variants/public/combined/combined_environment.nc`
 
 ### Notes for paper / experiments (what to cite or describe)
 - The “single depth” issue was not a bug in interpolation; it was a property of the previously used CMEMS dataset selection.
@@ -78,19 +78,19 @@ This file is the single source of truth for **what changed**, **why**, and **how
 - Validate depth behavior of the old dataset:
   - After activating your environment: `python tools/test_cmems_depths.py`
 - Fetch correct water subset (multi-depth):
-  - Run `OceanEnv/Data_pipeline/run_pipeline.py` (defaults updated)
+  - Run `Data_pipeline/run_pipeline.py` (defaults updated)
 - Generate tiny/scene/public variants:
-  - After activating your environment: `python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite`
+  - After activating your environment: `python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite`
 
 ### One-click generation & reuse
 - Canonical (default) one-click:
-  - `python OceanEnv/Data_pipeline/run_pipeline.py --overwrite`
+  - `python Data_pipeline/run_pipeline.py --overwrite`
 - Canonical reuse (skip refetch):
-  - `python OceanEnv/Data_pipeline/run_pipeline.py --skip-water-fetch --water-file OceanEnv/Data_pipeline/Data/GOPAF/combined_gopaf_data.nc --overwrite`
+  - `python Data_pipeline/run_pipeline.py --skip-water-fetch --water-file Data_pipeline/Data/GOPAF/combined_gopaf_data.nc --overwrite`
 - Variants one-click:
-  - `python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite`
+  - `python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite`
 - Variants reuse (skip recrop/refetch if cached files exist in each variant folder):
-  - `python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite --reuse-existing`
+  - `python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite --reuse-existing`
 
 ### Depth fallback note (per-depth stacking)
 - If the basic dataset depth-range request ever returns only one level, the pipeline can fall back to requesting a list of depths and stacking them.
@@ -156,7 +156,7 @@ This file is the single source of truth for **what changed**, **why**, and **how
   - elevation NaNs are filled with 0.0 and the original NaN locations are retained in `land_mask`
 
 ### Where variant files are written
-- `OceanEnv/Data_pipeline/Data/Combined/variants/<variant>/combined/combined_environment.nc`
+- `Data_pipeline/Data/Combined/variants/<variant>/combined/combined_environment.nc`
 - Each variant folder also contains:
   - `terrain/filtered_data.tif`
   - `water/combined_gopaf_data.nc`
@@ -168,10 +168,10 @@ This file is the single source of truth for **what changed**, **why**, and **how
 - Old `combined_environment.nc.bak.*` backups under each variant were deleted to avoid wasting disk space and confusing “latest” selection.
 
 ### Disk usage snapshot (as of 2026-02-22)
-- Canonical combined file: `OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc` ≈ 331 MiB
-- `tiny` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/tiny` ≈ 2 MiB (combined file ≈ 1.7 MiB)
-- `scene` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/scene` ≈ 572 MiB (combined file ≈ 569 MiB)
-- `public` variant folder: `OceanEnv/Data_pipeline/Data/Combined/variants/public` ≈ 183 MiB (combined file ≈ 22 MiB)
+- Canonical combined file: `Data_pipeline/Data/Combined/combined_environment.nc` ≈ 331 MiB
+- `tiny` variant folder: `Data_pipeline/Data/Combined/variants/tiny` ≈ 2 MiB (combined file ≈ 1.7 MiB)
+- `scene` variant folder: `Data_pipeline/Data/Combined/variants/scene` ≈ 572 MiB (combined file ≈ 569 MiB)
+- `public` variant folder: `Data_pipeline/Data/Combined/variants/public` ≈ 183 MiB (combined file ≈ 22 MiB)
 
 ### Environment snapshot (as of 2026-02-22)
 - python: 3.13.11

@@ -12,33 +12,32 @@ From repository root:
 
 ```bash
 # Activate an environment that has xarray/netCDF4/matplotlib installed.
-. /data/private/user2/workspace/ocean/.venv_ocean/bin/activate
 PYTHONPATH=. python -m OCPNet.pollution.cli run-synthetic
 ```
 
 ```bash
 PYTHONPATH=. python -m OCPNet.pollution.cli render-currents \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc
 ```
 
 ```bash
 PYTHONPATH=. python -m OCPNet.pollution.cli analyze-nc \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc
 ```
 
 ```bash
 PYTHONPATH=. python -m OCPNet.pollution.cli run-dataset-suite \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
 ```
 
 ```bash
 PYTHONPATH=. python -m OCPNet.pollution.cli run-dataset-multi \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
 ```
 
 ```bash
 PYTHONPATH=. python -m OCPNet.pollution.cli run-dataset-multi-suite \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc
 ```
 
 ## Output layout

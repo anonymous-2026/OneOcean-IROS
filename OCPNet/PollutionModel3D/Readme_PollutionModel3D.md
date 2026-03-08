@@ -27,7 +27,7 @@ The command writes:
 
 ```bash
 python -m OCPNet.pollution.cli render-currents \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc \
+  --nc-path Data_pipeline/Data/Combined/combined_environment.nc \
   --output-dir OCPNet/output/pollution_refactor/current_viz
 ```
 
@@ -40,7 +40,7 @@ This generates:
 
 ```bash
 python -m OCPNet.pollution.cli run-dataset-driven \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --nc-path Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
   --output-dir OCPNet/output/pollution_refactor/dataset_diffusion
 ```
 
@@ -53,5 +53,5 @@ This generates:
 
 ```bash
 python -m OCPNet.pollution.cli analyze-nc \
-  --nc-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc
+  --nc-path Data_pipeline/Data/Combined/combined_environment.nc
 ```

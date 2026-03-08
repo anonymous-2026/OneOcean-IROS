@@ -27,7 +27,7 @@ def main() -> int:
     username = _require_env("COPERNICUSMARINE_USERNAME")
     password = _require_env("COPERNICUSMARINE_PASSWORD")
 
-    out_dir = Path("OceanEnv/Data_pipeline/Data/GOPAF/_depth_test")
+    out_dir = Path("Data_pipeline/Data/GOPAF/_depth_test")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Small bbox/time for a quick test.

@@ -8,7 +8,9 @@ numpy
 scipy
 pandas
 dask
-mujoco
 matplotlib
 imageio
-msgpack-rpc-python
+Pillow
+opencv-python
+mujoco
+pytest

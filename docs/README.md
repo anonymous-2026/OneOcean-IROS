@@ -1,25 +1,13 @@
-# OneOcean Web Surfaces (E1)
+# Web Documentation
 
-This folder hosts website (1) and website (2) for the Ocean project.
+`docs/` contains the public website sources for the project and platform pages.
 
-## Pages
+- `index.html`: landing page.
+- `project/index.html`: paper-facing project page.
+- `platform/index.html`: code and usage page.
+- `static/`: shared CSS and JavaScript assets.
 
-- `index.html`: entry hub linking all web surfaces.
-- `project/index.html`: project website (problem, method, results placeholders).
-- `platform/index.html`: platform website (quickstart, workflow, integration hooks).
-
-## Shared assets
-
-- `static/css/site.css`: shared visual system and responsive layout.
-- `static/js/site.js`: lightweight page-specific background behavior.
-
-## Integration placeholders
-
-- Lane A/H media: project page "Media Placeholder".
-- Lane C metrics/plots: project page "Results Placeholder".
-- Lane F release/citation text: project page "Data Availability Placeholder".
-
-## Local preview
+Local preview:
 
 ```bash
 cd docs

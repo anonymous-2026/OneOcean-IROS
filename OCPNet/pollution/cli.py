@@ -18,17 +18,35 @@ from .viz import (
 
 
 def _default_combined_nc() -> str:
-    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/combined_environment.nc"
+    return str(Path(__file__).resolve().parents[2] / "Data_pipeline" / "Data" / "Combined" / "combined_environment.nc")
 
 
 def _default_scene_nc() -> str:
-    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc"
+    return str(
+        Path(__file__).resolve().parents[2]
+        / "Data_pipeline"
+        / "Data"
+        / "Combined"
+        / "variants"
+        / "scene"
+        / "combined"
+        / "combined_environment.nc"
+    )
 
 
 def _default_public_nc() -> str:
     # Latest public variant that includes 2025 monthly frames (surface-only).
     # Coastal-heavy region so land + coastline are visible for spill/diffusion visuals.
-    return "/data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/public25_japan_surface/combined/combined_environment.nc"
+    return str(
+        Path(__file__).resolve().parents[2]
+        / "Data_pipeline"
+        / "Data"
+        / "Combined"
+        / "variants"
+        / "public25_japan_surface"
+        / "combined"
+        / "combined_environment.nc"
+    )
 
 
 def _cmd_run_synthetic(args: argparse.Namespace) -> int:

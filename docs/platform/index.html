@@ -33,8 +33,8 @@
       <article class="content-card reveal delay-1">
         <h2>Quickstart</h2>
         <p>Run data generation and the first navigation task with local variants.</p>
-        <pre><code>python OceanEnv/Data_pipeline/run_pipeline.py --overwrite
-python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
+        <pre><code>python Data_pipeline/run_pipeline.py --overwrite
+python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
 python -m oneocean_sim.cli.run_navigation_task --variant tiny --episodes 3 --output-dir runs/e1_smoke</code></pre>
       </article>
 

@@ -1,219 +1,139 @@
-# OneOcean (IROS 2026) — Code
+# OneOcean
 
-This repository contains the **ocean environment data pipeline** used to generate `combined_environment.nc` for simulation, experiments, and (eventually) public releases.
+<a href="https://anonymous-2026.github.io/OneOcean-demo-IROS"><img src="https://img.shields.io/badge/Online%20Demo-GitHub%20Pages-0EA5E9.svg" alt="Online Demo"></a>
+<a href="docs/oneocean_paper.pdf"><img src="https://img.shields.io/badge/Paper-PDF-DC2626.svg" alt="Paper PDF"></a>
+<a href="https://zenodo.org/records/18837700"><img src="https://img.shields.io/badge/Zenodo-Dataset-2563EB.svg" alt="Zenodo Dataset"></a>
+<a href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset"><img src="https://img.shields.io/badge/HuggingFace-Dataset-F59E0B.svg" alt="HuggingFace Dataset"></a>
+<a href="https://drive.google.com/drive/folders/1EvK_OkdLqaZkPoNPcyibpjaflZ3TATwZ?usp=sharing"><img src="https://img.shields.io/badge/Supplement-Materials-16A34A.svg" alt="Supplementary Materials"></a>
 
-## What to run
+This repository is the cleaned public codebase for the final OneOcean paper submission.
+It keeps only the code paths used by the paper:
 
-Prerequisites:
-- Set CMEMS credentials in your environment:
-  - `export COPERNICUSMARINE_USERNAME=...`
-  - `export COPERNICUSMARINE_PASSWORD=...`
+- `Data_pipeline/`: ocean-environment data pipeline and dataset-variant generation.
+- `OCPNet/`: pollution-field and current-aware pollution modeling code.
+- `benchmark_core/`: core quantitative benchmark used for the large evaluation tables.
+- `tracks/oceangym_benchmark/`: OceanGym and HoloOcean benchmark used for scene-grounded underwater evaluation and media generation.
+- `tests/`: lightweight regression tests for the final benchmark surfaces.
 
-### Canonical combined dataset (default)
-```bash
-python OceanEnv/Data_pipeline/run_pipeline.py --overwrite
+Exploratory branches, deprecated simulators, internal planning notes, and cached run outputs are intentionally excluded from version control.
+
+## Repository layout
+
+```text
+OneOcean-IROS/
+├── Data_pipeline/
+├── OCPNet/
+├── benchmark_core/
+├── tracks/
+│   └── oceangym_benchmark/
+├── tests/
+├── tools/
+├── docs/
+└── DATA_PIPELINE_LOG.md
 ```
 
-### Multi-size datasets (tiny / scene / public)
-```bash
-python OceanEnv/Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
-```
+## Environment
 
-See `DATA_PIPELINE_LOG.md` for the full rationale, assumptions (tides), and reproducibility notes.
+Base Python dependencies are listed in `requirements.txt`.
 
-## S1 3D Tasks (MuJoCo primary track; quality-gate compliant)
+Notes:
+- The data pipeline requires Copernicus Marine credentials in the environment:
+  - `COPERNICUSMARINE_USERNAME`
+  - `COPERNICUSMARINE_PASSWORD`
+- The OceanGym benchmark requires a working HoloOcean and Ocean package installation. That dependency is managed separately from the base requirements.
+- BC training and some local planner backends in `benchmark_core/` require extra ML dependencies such as `torch`.
 
-Fetch underwater textures (local cache; do not commit):
+## Quickstart
 
-```bash
-cd oneocean(iros-2026-code)
-/data/private/user2/workspace/robosuite_learning/.venv/bin/python \
-  -m oneocean_sim.cli.fetch_underwater_assets
-```
-
-Run a 3D underwater scene + task with dataset-driven currents:
+### 1. Build the combined environment dataset
 
 ```bash
-cd oneocean(iros-2026-code)
-MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
-  -m oneocean_sim.cli.run_3d_task \
-  --task nav_obstacles_3d \
-  --controller compensated \
-  --variant scene \
-  --episodes 2 \
-  --seed 42
+python Data_pipeline/run_pipeline.py --overwrite
+python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
 ```
 
-Multi-agent task (2 vehicles):
+The pipeline rationale, depth-handling decisions, and reproducibility notes are recorded in `DATA_PIPELINE_LOG.md`.
+
+### 2. Run the benchmark core
+
+Export a drift cache from the combined dataset:
 
 ```bash
-cd oneocean(iros-2026-code)
-MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
-  -m oneocean_sim.cli.run_3d_task \
-  --task plume_source_localization_3d \
-  --controller compensated \
-  --variant scene \
-  --episodes 2 \
-  --seed 9
+python -m benchmark_core.cli.export_drift_cache \
+  --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --u-var utotal \
+  --v-var vtotal \
+  --time-index 0 \
+  --depth-index 0 \
+  --out runs/benchmark_core/_cache/drift_scene_t0_d0.npz
 ```
 
-Key outputs are written under `runs/oneocean_<task>_3d_<timestamp>/` (or `--output-dir`):
-- `metrics.csv`, `metrics.json`
-- `run_config.json`
-- `trajectories/episode_*_agent*.csv`
-- `media/episode_000_start.png`, `media/episode_000_end.png`, `media/episode_000.mp4`
-- `media_manifest.json`
-
-Run the compact S1 3D quality-gate suite (tasks × controller):
+Run one benchmark episode:
 
 ```bash
-cd oneocean(iros-2026-code)
-MUJOCO_GL=egl /data/private/user2/workspace/robosuite_learning/.venv/bin/python \
-  -m oneocean_sim.experiments.run_s1_3d_quality_gate \
-  --output-root runs/s1_3d_quality_v1 \
-  --variant scene \
-  --episodes 2
+python -m benchmark_core.cli.run \
+  --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
+  --task go_to_goal_current \
+  --difficulty medium \
+  --controller go_to_goal \
+  --pollution-model gaussian \
+  --n-agents 1 \
+  --seed 0 \
+  --dynamics-model 6dof \
+  --constraint-mode hard \
+  --bathy-mode hard \
+  --validate
 ```
 
-Detailed CLI arguments: `oneocean_sim/README.md`.
-
-Legacy note:
-- The older S1 2D point-mass runner + matrix/robustness scripts remain for debugging, but do not satisfy the 3D quality gate.
-
-## S2 Habitat Visual Track (parallel differentiated track)
-
-Run the Habitat-Lab prototype with coarse drift injection (for qualitative visuals and demo material):
+Run a sweep:
 
 ```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_habitat_ocean_proxy \
-  --episodes 1 \
-  --max-steps 120
+python -m benchmark_core.cli.run_matrix \
+  --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
+  --preset paper_v1 \
+  --dynamics-model 6dof \
+  --constraint-mode hard \
+  --bathy-mode hard \
+  --validate
 ```
 
-Use a compact capture preset for faster E2/web handoff:
+### 3. Run the OceanGym benchmark
+
+Render baseline scene media:
 
 ```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_habitat_ocean_proxy \
-  --preset compact \
-  --episodes 1 \
-  --max-steps 120
+python tracks/oceangym_benchmark/render_scene_media.py \
+  --preset ocean_worlds_camera
 ```
 
-Optional dataset-driven drift cache (instead of synthetic drift):
+Export a data-grounded current time series:
 
 ```bash
-/home/shuaijun/miniconda3/bin/python -m oneocean_sim_habitat.cli.prepare_drift_cache \
-  --dataset-path /data/private/user2/workspace/ocean/OceanEnv/Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
-  --output-path runs/s2_drift_cache_scene_t0_d0.npz \
-  --time-index 0 --depth-index 0
+python tracks/oceangym_benchmark/export_current_series_npz.py \
+  --dataset Data_pipeline/Data/Combined/combined_environment.nc \
+  --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
 ```
+
+Run the OceanGym task suite:
 
 ```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_habitat_ocean_proxy \
-  --preset compact \
-  --drift-cache-path runs/s2_drift_cache_scene_t0_d0.npz \
-  --episodes 1 \
-  --max-steps 120
+python tracks/oceangym_benchmark/run_task_suite.py \
+  --preset ocean_worlds_camera \
+  --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz \
+  --episodes 3
 ```
 
-Optional mask-based obstacle proxy (requires a cache generated with bathymetry, default behavior):
+## Documentation
+
+- `Data_pipeline/README.md`: data pipeline usage and dataset assembly details.
+- `benchmark_core/README.md`: quantitative benchmark protocol and CLI usage.
+- `tracks/oceangym_benchmark/README.md`: OceanGym benchmark usage, media generation, and external-scene notes.
+- `docs/`: project and platform website sources.
+
+## Testing
+
+Run the lightweight regression suite with:
 
 ```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_habitat_ocean_proxy \
-  --preset compact \
-  --drift-cache-path runs/s2_drift_cache_scene_t0_d0.npz \
-  --obstacle-proxy-mode terminate \
-  --episodes 1 \
-  --max-steps 120
+pytest
 ```
-
-Key outputs are written under `runs/oneocean_habitat_s2_<timestamp>/`:
-- `metrics.json` (episode summary)
-- `run_config.json` (runtime and drift config)
-- `trajectories/episode_*.csv` (position/action/drift traces)
-- `screenshots/*.png`, `topdown/*.png`, `videos/episode_*.mp4`
-
-Export S2 outputs for `demo_ref`-compatible front-end ingestion:
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.export_demo_assets \
-  --run-dir runs/oneocean_habitat_s2_smoke \
-  --episode 0
-```
-
-Build a compact bundle for demo integration:
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.build_compact_bundle \
-  --run-dir runs/oneocean_habitat_s2_smoke
-```
-
-Publish S2 JSON directly into demo default data files:
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.publish_e2_demo_assets \
-  --run-dir runs/oneocean_habitat_s2_smoke \
-  --target-dir /data/private/user2/workspace/ocean/demo/assets/data
-```
-
-One-command run + export + bundle:
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_and_package \
-  --preset compact \
-  --build-media-package \
-  --publish-e2 \
-  --e2-target-dir /data/private/user2/workspace/ocean/demo/assets/data \
-  --episodes 1 \
-  --max-steps 60
-```
-
-Build media package from an existing S2 run:
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.build_media_package \
-  --run-dir runs/oneocean_habitat_s2_smoke
-```
-
-Batch robustness regression (multi-case S2 run matrix):
-
-```bash
-PYTHONPATH=. /home/shuaijun/miniconda3/envs/habitat/bin/python \
-  -m oneocean_sim_habitat.cli.run_batch_regression \
-  --cases synthetic_compact,cache_compact,cache_obstacle \
-  --drift-cache-path runs/s2_drift_cache_scene_t0_d0_bathy.npz \
-  --episodes 1 \
-  --max-steps 20 \
-  --no-video \
-  --bundle-no-video \
-  --build-best-media-package \
-  --publish-best-e2 \
-  --e2-target-dir /data/private/user2/workspace/ocean/demo/assets/data
-```
-
-## Websites (E1 lane)
-
-Static website artifacts live in `docs/`:
-- `docs/index.html`: web hub
-- `docs/project/index.html`: project website (paper-facing)
-- `docs/platform/index.html`: platform website (usage-facing)
-
-Local preview:
-```bash
-cd docs
-python -m http.server 8000
-```
-
-Then open:
-- `http://localhost:8000/`
-- `http://localhost:8000/project/`
-- `http://localhost:8000/platform/`

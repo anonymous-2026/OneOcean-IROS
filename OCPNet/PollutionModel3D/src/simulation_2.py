@@ -356,7 +356,7 @@ def predict_current_distribution(data):
 def main():
     # Set data path
     workspace_root = Path(__file__).parent.parent.parent.parent
-    data_folder = workspace_root / 'MOPD_pipeline' / 'Data' / 'GMB' / 'cleaned_marine_dataset_final'
+    data_folder = workspace_root / 'OceanEnv' / 'Data_pipeline' / 'Data' / 'GMB' / 'cleaned_marine_dataset_final'
     
     print(f"Searching for data in: {data_folder}")
     
