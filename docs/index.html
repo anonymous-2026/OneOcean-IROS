@@ -53,7 +53,7 @@
               </div>
 
               <p class="hero-tagline">
-                Unified ocean-environment data, canonical multi-agent marine tasks, and cross-backend evaluation from scalable quantitative benchmarking to scene-backed underwater deployment.
+                Unified ocean-environment data, canonical multi-agent marine tasks, and cross-backend evaluation from scalable quantitative benchmarking to underwater scene deployment.
               </p>
 
               <div class="publication-links oneocean-links">
@@ -153,7 +153,7 @@
               <div class="column is-6">
                 <div class="content overview-copy">
                   <p class="has-text-justified">OneOcean treats <strong>ocean conditions as a reusable product</strong>. A unified NetCDF environment dataset harmonizes GEBCO bathymetry, Copernicus/GOPAF currents, optional tide terms, and derived masks. The same grounded environment then drives a canonical benchmark suite instead of being tied to a single simulator implementation.</p>
-                  <p class="has-text-justified">The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first, paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded currents, so qualitative scene evidence and quantitative results still share task semantics and provenance. Together, these two backends support reproducible evaluation across navigation, sensing, coordination, and pollution-related marine-robotics tasks.</p>
+                  <p class="has-text-justified">The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, high-throughput evaluation with paper-ready outputs. The <strong>external underwater scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded currents, so qualitative scene evidence and quantitative results still share task semantics and provenance. Together, these two backends support reproducible evaluation across navigation, sensing, coordination, and pollution-related marine-robotics tasks.</p>
                 </div>
               </div>
             </div>
@@ -188,7 +188,7 @@
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Method and Benchmark Design</h2>
             <div class="content method-lead">
-              <p class="has-text-justified">OneOcean is organized around a simple contract: treat the ocean environment as a reusable data product, export that product into backend-friendly disturbance signals, and evaluate methods on a canonical task ladder with shared success criteria and logged provenance. The environment product is regenerated for a chosen region, time window, and resolution; the benchmark then reuses the same grounding across fast quantitative experiments and scene-backed underwater deployment.</p>
+              <p class="has-text-justified">OneOcean is organized around a simple contract: treat the ocean environment as a reusable data product, export that product into backend-friendly disturbance signals, and evaluate methods on a canonical task ladder with shared success criteria and logged provenance. The environment product is regenerated for a chosen region, time window, and resolution; the benchmark then reuses the same grounding across fast quantitative experiments and underwater scene deployment.</p>
             </div>
 
             <div class="columns is-multiline is-variable is-5 benchmark-pillars">
@@ -204,7 +204,7 @@
                 <article class="hf-card card method-card benchmark-card">
                   <div class="card-content">
                     <h3 class="title is-5">Two Backends</h3>
-                    <p>The core benchmark backend provides deterministic, throughput-first rollouts and paper-ready tables. The external underwater-scene backend reuses packaged underwater scenes while injecting the same OneOcean current signals for transfer and qualitative evidence.</p>
+                    <p>The core benchmark backend provides deterministic, high-throughput rollouts and paper-ready tables. The external underwater scene backend reuses packaged underwater scenes while injecting the same OneOcean current signals for transfer and qualitative evidence.</p>
                   </div>
                 </article>
               </div>
@@ -595,7 +595,7 @@
                   </div>
                   <div class="card-content">
                     <h4 class="title is-5">OpenWater Formation Deployment</h4>
-                    <p>Scene-backed multi-agent formation deployment, illustrating portability beyond the throughput-first benchmark backend.</p>
+                    <p>Multi-agent formation deployment in an underwater scene, illustrating portability beyond the high-throughput benchmark backend.</p>
                   </div>
                 </article>
               </div>
