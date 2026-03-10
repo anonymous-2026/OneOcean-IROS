@@ -2,14 +2,14 @@
 
 <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS"><img src="https://img.shields.io/badge/Online%20Demo-GitHub%20Pages-0EA5E9.svg" alt="Online Demo"></a>
 <a href="https://youtu.be/Fz2medRUxwo"><img src="https://img.shields.io/badge/Intro%20Video-YouTube-FF0000.svg" alt="Intro Video"></a>
+<a href="https://drive.google.com/drive/folders/1EvK_OkdLqaZkPoNPcyibpjaflZ3TATwZ?usp=sharing"><img src="https://img.shields.io/badge/Supplement-Materials-16A34A.svg" alt="Supplementary Materials"></a>
 <a href="docs/oneocean_paper.pdf"><img src="https://img.shields.io/badge/Paper-PDF-DC2626.svg" alt="Paper PDF"></a>
 <a href="https://zenodo.org/records/18837700"><img src="https://img.shields.io/badge/Zenodo-Dataset-2563EB.svg" alt="Zenodo Dataset"></a>
 <a href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset"><img src="https://img.shields.io/badge/HuggingFace-Dataset-F59E0B.svg" alt="HuggingFace Dataset"></a>
-<a href="https://drive.google.com/drive/folders/1EvK_OkdLqaZkPoNPcyibpjaflZ3TATwZ?usp=sharing"><img src="https://img.shields.io/badge/Supplement-Materials-16A34A.svg" alt="Supplementary Materials"></a>
 <a href="https://holoocean.readthedocs.io/"><img src="https://img.shields.io/badge/HoloOcean-Underwater%20Sim-0F766E.svg" alt="HoloOcean"></a>
 <a href="https://marine.copernicus.eu/"><img src="https://img.shields.io/badge/Copernicus-Marine-2563EB.svg" alt="Copernicus Marine"></a>
-<a href="https://www.gebco.net/"><img src="https://img.shields.io/badge/GEBCO-Bathymetry-1D4ED8.svg" alt="GEBCO"></a>
 <a href="https://gdal.org/en/stable/drivers/raster/gtiff.html"><img src="https://img.shields.io/badge/GeoTIFF-Terrain%20Raster-7C3AED.svg" alt="GeoTIFF"></a>
+<a href="https://www.gebco.net/"><img src="https://img.shields.io/badge/GEBCO-Bathymetry-1D4ED8.svg" alt="GEBCO"></a>
 
 This repository is the cleaned public codebase for the final OneOcean paper submission.
 It keeps only the code paths used by the paper:
