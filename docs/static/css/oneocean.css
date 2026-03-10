@@ -81,6 +81,7 @@
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
+  text-align: center;
 }
 
 .overview-main-figure {
@@ -109,17 +110,27 @@
 .mini-point {
   font-size: 0.94rem;
   line-height: 1.58;
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  text-align: justify;
-  text-justify: inter-word;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  row-gap: 0.5rem;
+  align-content: start;
+  text-align: left;
 }
 
-.mini-point strong {
+.mini-point-label {
   display: block;
-  margin-bottom: 0.28rem;
   font-weight: 800;
+  font-size: 0.94rem;
+  line-height: 1.2;
+  color: var(--oneocean-blue);
+}
+
+.mini-point-body {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.58;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .method-lead {
@@ -164,12 +175,16 @@
 
 .benchmark-card p,
 .family-card p,
-.demo-card .card-content p,
-.hf-caption {
+.demo-card .card-content p {
   font-size: 0.94rem;
   line-height: 1.58;
   text-align: justify;
   text-justify: inter-word;
+}
+
+.hf-caption {
+  font-size: 0.94rem;
+  line-height: 1.58;
 }
 
 .task-families-wrap {
@@ -316,6 +331,10 @@ code {
   .family-card p,
   .demo-card .card-content p,
   .hf-caption {
+    font-size: 0.9rem;
+  }
+
+  .mini-point-body {
     font-size: 0.9rem;
   }
 }
