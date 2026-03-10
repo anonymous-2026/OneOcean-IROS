@@ -23,8 +23,8 @@
 
   <link rel="icon" type="image/png" href="static/logo.png">
   <link rel="apple-touch-icon" href="static/logo.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <link rel="stylesheet" href="static/css/bulma.min.css">
-  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
   <link rel="stylesheet" href="static/css/index.css">
   <link rel="stylesheet" href="static/css/oneocean.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -56,7 +56,7 @@
                 Unified ocean-environment data, canonical multi-agent marine tasks, and cross-backend evaluation from scalable quantitative benchmarking to scene-backed underwater deployment.
               </p>
 
-              <div class="publication-links">
+              <div class="publication-links oneocean-links">
                 <span class="link-block">
                   <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
                     <span class="icon"><i class="fas fa-play-circle"></i></span>
@@ -109,7 +109,7 @@
     <section class="section video-intro-section">
       <div class="container is-max-widescreen">
         <div class="columns is-centered">
-          <div class="column is-four-fifths">
+          <div class="column is-four-fifths video-column">
             <div class="video-embed-card">
               <div class="video-embed-shell">
                 <iframe
@@ -131,19 +131,7 @@
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Abstract</h2>
             <div class="content">
-              <p class="has-text-justified">
-                Simulation is essential for marine robotics, yet existing platforms often trade off between visually realistic worlds,
-                high-throughput experimentation, and ocean-condition realism grounded in real data. <strong>OneOcean</strong> is a
-                data-grounded simulation suite and benchmark built around a unified spatiotemporal ocean-environment product that harmonizes
-                bathymetry with data-driven currents and tides, with optional pollution fields for cleanup-related evaluation.
-              </p>
-              <p class="has-text-justified">
-                On top of this environment representation, OneOcean defines a task ladder spanning navigation and station-keeping under currents,
-                waypoint and route following, depth-profile tracking, area scanning, pipeline inspection, and multi-agent coordination,
-                including formation transit, fish protection/herding, and surface pollution localization, containment, and cleanup.
-                The suite supports teams of 2-10 vehicles, standardizes metrics and run manifests, and exposes meaningful differences among
-                heuristic baselines, behavior-cloning policies, and LLM-based planners under realistic, data-grounded disturbances.
-              </p>
+              <p class="has-text-justified">Simulation is essential for marine robotics, yet existing platforms often trade off between visually realistic worlds, high-throughput experimentation, and ocean-condition realism grounded in real data. We present OneOcean, a data-grounded simulation suite and benchmark built around a unified spatiotemporal ocean-environment product that harmonizes bathymetry with data-driven currents and tides, with optional pollution fields for cleanup-related evaluation. On top of this environment representation, OneOcean defines a task ladder spanning navigation and station-keeping under currents, waypoint and route following, depth-profile tracking, area scanning, pipeline inspection, and multi-agent coordination, including formation transit, fish protection/patrol (herding), and surface pollution localization, containment, and cleanup. The suite supports multi-agent settings with 2–10 vehicles. Our simulator supports 3–6 DoF vehicle dynamics and produces standardized metrics and reproducible run manifests, enabling consistent aggregation across tasks, difficulties, and scaling settings. Experiments across dataset variants and scenes systematically stress planning and control under realistic, data-driven disturbances and reveal trade-offs among heuristic baselines, behavior-cloning policies, and an LLM-based planner.</p>
             </div>
           </div>
         </div>
@@ -155,31 +143,29 @@
         <div class="columns is-centered">
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Overview</h2>
-            <div class="columns is-vcentered is-variable is-6">
-              <div class="column is-5">
-                <figure class="image hf-figure">
-                  <img class="hf-media hf-workflow" src="static/images/paper/overview_abstract.png" alt="OneOcean overview" loading="lazy">
+            <div class="columns is-vcentered is-variable is-6 overview-top-row">
+              <div class="column is-6 overview-figure-column">
+                <figure class="image hf-figure overview-figure-card">
+                  <img class="hf-media hf-workflow overview-main-figure" src="static/images/paper/overview_abstract.png" alt="OneOcean overview" loading="lazy">
                 </figure>
-                <p class="hf-caption">Overview figure from the paper. The repository also keeps the original vector version at <code>static/images/paper/overview_abstract.pdf</code>.</p>
+                <p class="hf-caption">OneOcean overview. A unified ocean-environment product grounds a canonical multi-task benchmark and two complementary execution backends, enabling reproducible evaluation across navigation, sensing, coordination, and pollution-related marine-robotics tasks.</p>
               </div>
-              <div class="column is-7">
-                <div class="content">
-                  <p class="has-text-justified">
-                    OneOcean treats <strong>ocean conditions as a reusable product</strong>. A unified NetCDF environment dataset harmonizes GEBCO bathymetry,
-                    Copernicus/GOPAF currents, optional tide terms, and derived masks. The same grounded environment then drives a canonical benchmark suite
-                    instead of being tied to a single simulator implementation.
-                  </p>
-                  <p class="has-text-justified">
-                    The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first,
-                    paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded
-                    currents, so qualitative scene evidence and quantitative results still share task semantics and provenance.
-                  </p>
-                  <div class="mini-points">
-                    <div class="mini-point"><strong>Data:</strong> unified ocean-environment product with currents, bathymetry, masks, and task-grounding metadata.</div>
-                    <div class="mini-point"><strong>Tasks:</strong> 10 canonical tasks spanning navigation, sensing, coordination, and pollution-response scenarios.</div>
-                    <div class="mini-point"><strong>Evaluation:</strong> shared metrics, tiered difficulty, auditable manifests, and support for 2-10 vehicles.</div>
-                  </div>
+              <div class="column is-6">
+                <div class="content overview-copy">
+                  <p class="has-text-justified">OneOcean treats <strong>ocean conditions as a reusable product</strong>. A unified NetCDF environment dataset harmonizes GEBCO bathymetry, Copernicus/GOPAF currents, optional tide terms, and derived masks. The same grounded environment then drives a canonical benchmark suite instead of being tied to a single simulator implementation.</p>
+                  <p class="has-text-justified">The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first, paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded currents, so qualitative scene evidence and quantitative results still share task semantics and provenance.</p>
                 </div>
+              </div>
+            </div>
+            <div class="columns is-multiline is-variable is-4 mini-points-row">
+              <div class="column is-4">
+                <div class="mini-point"><strong>Data.</strong> Unified ocean-environment product with currents, bathymetry, masks, and task-grounding metadata.</div>
+              </div>
+              <div class="column is-4">
+                <div class="mini-point"><strong>Tasks.</strong> 10 canonical tasks spanning navigation, sensing, coordination, and pollution-response scenarios.</div>
+              </div>
+              <div class="column is-4">
+                <div class="mini-point"><strong>Evaluation.</strong> Shared metrics, tiered difficulty, auditable manifests, and support for 2-10 vehicles.</div>
               </div>
             </div>
           </div>
@@ -192,65 +178,60 @@
         <div class="columns is-centered">
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Method and Benchmark Design</h2>
-            <div class="columns is-multiline method-cards">
+            <div class="content method-lead">
+              <p class="has-text-justified">OneOcean is organized around a simple contract: treat the ocean environment as a reusable data product, export that product into backend-friendly disturbance signals, and evaluate methods on a canonical task ladder with shared success criteria and logged provenance. The environment product is regenerated for a chosen region, time window, and resolution; the benchmark then reuses the same grounding across fast quantitative experiments and scene-backed underwater deployment.</p>
+            </div>
+
+            <div class="columns is-multiline is-variable is-5 benchmark-pillars">
               <div class="column is-4">
-                <article class="hf-card card method-card">
+                <article class="hf-card card method-card benchmark-card">
                   <div class="card-content">
-                    <h3 class="title is-5">Unified Environment Product</h3>
-                    <p>
-                      The data pipeline produces a combined environment dataset with latitude, longitude, time, depth, currents, elevation,
-                      and validity information. Variants support fast local iteration, scene construction, and public release without changing task semantics.
-                    </p>
+                    <h3 class="title is-5">Environment Product</h3>
+                    <p>The data pipeline merges GEBCO bathymetry with Copernicus/GOPAF currents and optional tides into a combined NetCDF environment. Variant exports keep the schema fixed while changing coverage and resolution for tiny, scene, and public releases.</p>
                   </div>
                 </article>
               </div>
               <div class="column is-4">
-                <article class="hf-card card method-card">
+                <article class="hf-card card method-card benchmark-card">
                   <div class="card-content">
-                    <h3 class="title is-5">Canonical Task Ladder</h3>
-                    <p>
-                      OneOcean defines a 10-task ladder covering goal reaching, station keeping, route following, depth tracking, area scan,
-                      leak inspection, formation transit, fish protection/herding, and pollution localization/containment/cleanup.
-                    </p>
+                    <h3 class="title is-5">Two Backends</h3>
+                    <p>The core benchmark backend provides deterministic, throughput-first rollouts and paper-ready tables. The external underwater-scene backend reuses packaged underwater scenes while injecting the same OneOcean current signals for transfer and qualitative evidence.</p>
                   </div>
                 </article>
               </div>
               <div class="column is-4">
-                <article class="hf-card card method-card">
+                <article class="hf-card card method-card benchmark-card">
                   <div class="card-content">
-                    <h3 class="title is-5">Cross-Backend Execution</h3>
-                    <p>
-                      A throughput-first core backend generates large, reproducible experiment tables, while a scene-backed underwater backend reuses external scenes
-                      and injects the same data-grounded currents for qualitative validation in realistic underwater-looking environments.
-                    </p>
+                    <h3 class="title is-5">Evaluation Contract</h3>
+                    <p>Tasks share tiered difficulty, standardized success and efficiency metrics, and auditable run manifests. The simulator supports 3–6 DoF dynamics, while the official quantitative study uses the 6DoF setting with recorded constraints and dataset grounding.</p>
                   </div>
                 </article>
               </div>
             </div>
 
-            <div class="columns is-multiline task-family-grid">
-              <div class="column is-3">
-                <div class="task-family-card">
-                  <h4>Navigation</h4>
-                  <p>Go-to-goal, station keeping, route following, depth-profile tracking.</p>
+            <div class="task-families-wrap">
+              <h3 class="title is-4 has-text-left">Canonical task families</h3>
+              <div class="columns is-multiline is-variable is-5 task-family-grid task-family-grid-three">
+                <div class="column is-4">
+                  <div class="task-family-card family-card">
+                    <h4>Navigation and Tracking</h4>
+                    <p class="family-abbr">G2G, SK, RF, DPT</p>
+                    <p>Go-to-Goal under Currents, Station Keeping, Route Following, and Depth-Profile Tracking test disturbance rejection and sustained tracking under data-grounded drift.</p>
+                  </div>
                 </div>
-              </div>
-              <div class="column is-3">
-                <div class="task-family-card">
-                  <h4>Sensing</h4>
-                  <p>Area scan and pipeline inspection under drift and terrain constraints.</p>
+                <div class="column is-4">
+                  <div class="task-family-card family-card">
+                    <h4>Sensing and Inspection</h4>
+                    <p class="family-abbr">AS, PI</p>
+                    <p>Area Scan and Pipeline Inspection stress coverage, event localization, and terrain-aware operation under the same grounded flow conditions.</p>
+                  </div>
                 </div>
-              </div>
-              <div class="column is-3">
-                <div class="task-family-card">
-                  <h4>Coordination</h4>
-                  <p>Formation transit and fish protection/herding with multi-agent constraints.</p>
-                </div>
-              </div>
-              <div class="column is-3">
-                <div class="task-family-card">
-                  <h4>Pollution Response</h4>
-                  <p>Localization, containment, cleanup, and underwater lift tasks grounded by task probes.</p>
+                <div class="column is-4">
+                  <div class="task-family-card family-card">
+                    <h4>Coordination and Pollution</h4>
+                    <p class="family-abbr">FT, SPC, UPL, FH</p>
+                    <p>Formation Transit, Surface Pollution Cleanup, Underwater Pollution Lift, and Fish Herding emphasize team-size scaling, constraint satisfaction, localization, containment, and cleanup.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -265,21 +246,13 @@
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Highlighted Results</h2>
             <div class="content">
-              <p class="has-text-justified">
-                The core benchmark backend is designed to be <strong>non-saturated</strong>: Tier 2 remains useful for routine evaluation, while Tier 3 exposes large gaps
-                in disturbance rejection, coordination, and task completion. This is exactly the behavior needed from a benchmark that is supposed to separate planning
-                and control quality instead of collapsing to all-success or all-failure regimes.
-              </p>
-              <p class="has-text-justified">
-                The results below show three distinct capabilities: (i) the benchmark separates strong heuristics from learned policies on the full task ladder,
-                (ii) planning-sensitive tasks expose meaningful differences among local LLM planners and behavior cloning, and (iii) the same task semantics remain useful
-                when moved into packaged underwater scenes with data-grounded current injection.
-              </p>
+              <p class="has-text-justified">The core benchmark backend is designed to be <strong>non-saturated</strong>: Tier 2 remains useful for routine evaluation, while Tier 3 exposes large gaps in disturbance rejection, coordination, and task completion. This is the property a benchmark needs if it is supposed to separate method quality instead of collapsing to all-success or all-failure regimes.</p>
+              <p class="has-text-justified"><strong>Heuristic</strong> denotes the deterministic task-specific controller used as the strongest built-in baseline. <strong>BC</strong> is a behavior-cloning policy trained to imitate heuristic actions. <strong>LLM planners</strong> produce high-level decisions such as assignments or waypoint choices, while deterministic low-level control and safety checks remain unchanged.</p>
             </div>
 
             <div class="table-panel">
               <h3 class="title is-4 has-text-left">Core benchmark headline results</h3>
-              <p class="table-caption">Macro results over the 10-task suite plus Tier 3 key-task metrics. Higher is better for success/coverage/cleanup; lower is better for energy and collision ratio.</p>
+              <p class="table-caption">Macro results over the 10-task suite plus Tier 3 key-task metrics. Higher is better for success, coverage, inspection score, and cleanup rate; lower is better for energy and collision ratio.</p>
               <div class="table-scroll">
                 <table class="paper-table compact">
                   <thead>
@@ -340,19 +313,19 @@
                 <figure class="image hf-figure">
                   <img class="hf-media hf-plot" src="static/images/paper/difficulty_ladder_dualpanel.png" alt="Difficulty ladder summary" loading="lazy">
                 </figure>
-                <p class="hf-caption">Difficulty ladder on representative tasks. Tier 3 remains strongly discriminative instead of saturating.</p>
+                <p class="hf-caption">Difficulty-ladder summary on representative tasks. Tier 3 remains strongly discriminative instead of saturating.</p>
               </div>
               <div class="column is-6">
                 <figure class="image hf-figure">
                   <img class="hf-media hf-plot" src="static/images/paper/cleanup_scaling_dualpanel.png" alt="Cleanup scaling summary" loading="lazy">
                 </figure>
-                <p class="hf-caption">Surface-cleanup scaling shows the trade-off between improved cleanup and higher coordination cost.</p>
+                <p class="hf-caption">Surface-cleanup scaling shows the trade-off between improved cleanup outcomes and higher coordination cost.</p>
               </div>
             </div>
 
             <div class="table-panel">
-              <h3 class="title is-4 has-text-left">Planning-sensitive tasks: heuristic, BC, and local LLM planners</h3>
-              <p class="table-caption">Tier 2 planning suite under stronger currents. The LLMs act at the high level only; low-level control and safety checks remain deterministic.</p>
+              <h3 class="title is-4 has-text-left">Planning-sensitive tasks: heuristic, BC, and LLM planners</h3>
+              <p class="table-caption">Tier 2 planning suite under stronger currents. The LLM planner provides high-level assignments or waypoint choices; low-level control and safety checks remain deterministic.</p>
               <div class="table-scroll">
                 <table class="paper-table">
                   <thead>
@@ -552,10 +525,7 @@
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">Demos</h2>
             <div class="content">
-              <p class="has-text-justified">
-                The core backend provides compact, reproducible task renderings, while the external scene backend shows that the same OneOcean tasks can be deployed in richer underwater scenes.
-                The media below are representative examples from both ends of the suite.
-              </p>
+              <p class="has-text-justified">The core backend provides compact, reproducible task renderings, while the external scene backend shows that the same OneOcean tasks can be deployed in richer underwater scenes. The media below are representative examples from both ends of the suite.</p>
             </div>
 
             <h3 class="title is-4 has-text-left">Core benchmark examples</h3>
@@ -569,7 +539,7 @@
                   </div>
                   <div class="card-content">
                     <h4 class="title is-5">Fish Protection / Herding</h4>
-                    <p>Representative multi-agent control in the core benchmark backend, using the same data-grounded disturbance model as the paper experiments.</p>
+                    <p>Representative multi-agent execution in the core benchmark backend under the same data-grounded disturbance model used by the quantitative study.</p>
                   </div>
                 </article>
               </div>
@@ -582,7 +552,7 @@
                   </div>
                   <div class="card-content">
                     <h4 class="title is-5">Formation Transit</h4>
-                    <p>Multi-agent formation execution from the core backend, used to study how coordination difficulty scales with team size and drift.</p>
+                    <p>Multi-agent formation behavior from the core backend, illustrating how OneOcean evaluates coordination under drift and team-size constraints.</p>
                   </div>
                 </article>
               </div>
@@ -597,7 +567,7 @@
                   </div>
                   <div class="card-content">
                     <h4 class="title is-5">PierHarbor Plume Containment</h4>
-                    <p>Scene-backed containment behavior with OneOcean current injection in a packaged underwater harbor scene.</p>
+                    <p>Containment behavior in a packaged underwater harbor scene with OneOcean current injection.</p>
                   </div>
                 </article>
               </div>
@@ -619,24 +589,9 @@
                   </div>
                   <div class="card-content">
                     <h4 class="title is-5">OpenWater Formation Deployment</h4>
-                    <p>Keyframe from the scene-backed multi-agent formation task, illustrating portability beyond the throughput-first benchmark backend.</p>
+                    <p>Scene-backed multi-agent formation deployment, illustrating portability beyond the throughput-first benchmark backend.</p>
                   </div>
                 </article>
-              </div>
-            </div>
-
-            <div class="columns is-variable is-6 supplemental-gallery">
-              <div class="column is-6">
-                <figure class="image hf-figure">
-                  <img class="hf-media" src="static/images/paper/task1_ui_off.png" alt="Surface cleanup benchmark snapshot" loading="lazy">
-                </figure>
-                <p class="hf-caption">Surface pollution cleanup in the core benchmark backend.</p>
-              </div>
-              <div class="column is-6">
-                <figure class="image hf-figure">
-                  <img class="hf-media" src="static/images/paper/task3_ui_off.png" alt="Fish herding benchmark snapshot" loading="lazy">
-                </figure>
-                <p class="hf-caption">Fish protection / herding task snapshot from the paper.</p>
               </div>
             </div>
           </div>

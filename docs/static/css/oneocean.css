@@ -1,16 +1,49 @@
+:root {
+  --oneocean-blue: #0d3b66;
+  --oneocean-blue-deep: #082a49;
+  --oneocean-surface: #f8fbff;
+}
+
+::selection {
+  background: #cfe5ff;
+  color: #0b1f33;
+}
+
+.paper-table thead ::selection,
+.paper-table thead th::selection,
+.paper-table thead td::selection {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--oneocean-blue);
+}
+
 .oneocean-hero {
   background: linear-gradient(180deg, #f8fbff 0%, #edf6ff 100%);
 }
 
+.oneocean-hero .hero-body {
+  padding-top: 4.25rem;
+  padding-bottom: 4.75rem;
+}
+
 .hero-tagline {
   max-width: 980px;
-  margin: 1.1rem auto 0;
+  margin: 1.2rem auto 0;
   font-size: 1.08rem;
   color: var(--text-secondary);
 }
 
+.oneocean-links {
+  margin-top: 2.25rem;
+}
+
 .video-intro-section {
-  padding-top: 0;
+  padding-top: 2.5rem;
+  padding-bottom: 3.5rem;
+  background: #f4f8fc;
+}
+
+.video-column {
+  margin-top: 0.35rem;
 }
 
 .video-embed-card {
@@ -35,41 +68,81 @@
   border: 0;
 }
 
-.mini-points {
-  display: grid;
-  gap: 0.85rem;
-  margin-top: 1rem;
+.overview-top-row {
+  align-items: flex-start;
+}
+
+.overview-figure-card {
+  max-width: none !important;
+}
+
+.overview-main-figure {
+  max-height: 640px !important;
+  width: 100%;
+  object-fit: contain;
+}
+
+.overview-copy {
+  padding-top: 0.25rem;
+}
+
+.mini-points-row {
+  margin-top: 0.65rem;
 }
 
 .mini-point,
 .task-family-card {
-  padding: 0.95rem 1rem;
+  height: 100%;
+  padding: 1rem 1.05rem;
   border-radius: 14px;
   background: #f8fbff;
   border: 1px solid #d8e5f3;
 }
 
-.method-card {
+.method-lead {
+  margin-bottom: 1.25rem;
+}
+
+.benchmark-pillars,
+.task-family-grid {
+  margin-top: 0.35rem;
+}
+
+.method-card,
+.family-card {
   height: 100%;
 }
 
-.method-card .card-content p:last-child {
+.method-card .card-content,
+.family-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.benchmark-card .card-content {
+  height: 100%;
+}
+
+.benchmark-card h3,
+.family-card h4 {
+  margin-bottom: 0.55rem;
+}
+
+.benchmark-card p:last-child,
+.family-card p:last-child {
   margin-bottom: 0;
 }
 
-.task-family-grid {
-  margin-top: 0.75rem;
-}
-
-.task-family-card h4 {
-  margin-bottom: 0.45rem;
-  font-size: 1rem;
+.family-abbr {
+  display: inline-block;
+  margin-bottom: 0.65rem;
   font-weight: 700;
+  color: var(--oneocean-blue);
+  letter-spacing: 0.02em;
 }
 
-.task-family-card p {
-  margin: 0;
-  color: var(--text-secondary);
+.task-families-wrap {
+  margin-top: 1.8rem;
 }
 
 .table-panel {
@@ -104,8 +177,8 @@
 }
 
 .paper-table thead {
-  background: #0d3b66;
-  color: white;
+  background: var(--oneocean-blue);
+  color: #ffffff;
 }
 
 .paper-table th,
@@ -151,10 +224,6 @@
   margin-bottom: 0;
 }
 
-.supplemental-gallery {
-  margin-top: 1rem;
-}
-
 code {
   white-space: nowrap;
 }
@@ -166,8 +235,22 @@ code {
 }
 
 @media (max-width: 768px) {
+  .oneocean-hero .hero-body {
+    padding-top: 3.5rem;
+    padding-bottom: 4rem;
+  }
+
   .hero-tagline {
     font-size: 1rem;
+  }
+
+  .oneocean-links {
+    margin-top: 1.75rem;
+  }
+
+  .video-intro-section {
+    padding-top: 1.75rem;
+    padding-bottom: 2.5rem;
   }
 
   .paper-table th,
@@ -178,6 +261,6 @@ code {
 
   .mini-point,
   .task-family-card {
-    padding: 0.85rem 0.9rem;
+    padding: 0.9rem;
   }
 }
