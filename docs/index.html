@@ -148,12 +148,12 @@
                 <figure class="image hf-figure overview-figure-card">
                   <img class="hf-media hf-workflow overview-main-figure" src="static/images/paper/overview_abstract.png" alt="OneOcean overview" loading="lazy">
                 </figure>
-                <p class="hf-caption">OneOcean overview. A unified ocean-environment product grounds a canonical multi-task benchmark and two complementary execution backends, enabling reproducible evaluation across navigation, sensing, coordination, and pollution-related marine-robotics tasks.</p>
+                <p class="hf-caption">OneOcean overview.</p>
               </div>
               <div class="column is-6">
                 <div class="content overview-copy">
                   <p class="has-text-justified">OneOcean treats <strong>ocean conditions as a reusable product</strong>. A unified NetCDF environment dataset harmonizes GEBCO bathymetry, Copernicus/GOPAF currents, optional tide terms, and derived masks. The same grounded environment then drives a canonical benchmark suite instead of being tied to a single simulator implementation.</p>
-                  <p class="has-text-justified">The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first, paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded currents, so qualitative scene evidence and quantitative results still share task semantics and provenance.</p>
+                  <p class="has-text-justified">The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first, paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded currents, so qualitative scene evidence and quantitative results still share task semantics and provenance. Together, these two backends support reproducible evaluation across navigation, sensing, coordination, and pollution-related marine-robotics tasks.</p>
                 </div>
               </div>
             </div>
@@ -203,7 +203,7 @@
                 <article class="hf-card card method-card benchmark-card">
                   <div class="card-content">
                     <h3 class="title is-5">Evaluation Contract</h3>
-                    <p>Tasks share tiered difficulty, standardized success and efficiency metrics, and auditable run manifests. The simulator supports 3–6 DoF dynamics, while the official quantitative study uses the 6DoF setting with recorded constraints and dataset grounding.</p>
+                    <p>Tasks share tiered difficulty, standardized success and efficiency metrics, and auditable run manifests. The simulator supports 3–6 DoF dynamics, while the quantitative study uses the 6DoF setting with recorded constraints and dataset grounding.</p>
                   </div>
                 </article>
               </div>
@@ -215,22 +215,19 @@
                 <div class="column is-4">
                   <div class="task-family-card family-card">
                     <h4>Navigation and Tracking</h4>
-                    <p class="family-abbr">G2G, SK, RF, DPT</p>
-                    <p>Go-to-Goal under Currents, Station Keeping, Route Following, and Depth-Profile Tracking test disturbance rejection and sustained tracking under data-grounded drift.</p>
+                    <p>Go-to-Goal under Currents (G2G), Station Keeping (SK), Route Following (RF), and Depth-Profile Tracking (DPT) test disturbance rejection and sustained tracking under data-grounded drift.</p>
                   </div>
                 </div>
                 <div class="column is-4">
                   <div class="task-family-card family-card">
                     <h4>Sensing and Inspection</h4>
-                    <p class="family-abbr">AS, PI</p>
-                    <p>Area Scan and Pipeline Inspection stress coverage, event localization, and terrain-aware operation under the same grounded flow conditions.</p>
+                    <p>Area Scan (AS) and Pipeline Inspection (PI) stress coverage, event localization, and terrain-aware operation under the same grounded flow conditions.</p>
                   </div>
                 </div>
                 <div class="column is-4">
                   <div class="task-family-card family-card">
                     <h4>Coordination and Pollution</h4>
-                    <p class="family-abbr">FT, SPC, UPL, FH</p>
-                    <p>Formation Transit, Surface Pollution Cleanup, Underwater Pollution Lift, and Fish Herding emphasize team-size scaling, constraint satisfaction, localization, containment, and cleanup.</p>
+                    <p>Formation Transit (FT), Surface Pollution Cleanup (SPC), Underwater Pollution Lift (UPL), and Fish Herding (FH) emphasize team-size scaling, constraint satisfaction, localization, containment, and cleanup.</p>
                   </div>
                 </div>
               </div>

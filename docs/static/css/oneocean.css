@@ -76,6 +76,13 @@
   max-width: none !important;
 }
 
+.overview-figure-column .hf-caption {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .overview-main-figure {
   max-height: 640px !important;
   width: 100%;
@@ -97,6 +104,14 @@
   border-radius: 14px;
   background: #f8fbff;
   border: 1px solid #d8e5f3;
+}
+
+.mini-point {
+  font-size: 0.94rem;
+  line-height: 1.58;
+  display: flex;
+  align-items: center;
+  text-align: left;
 }
 
 .method-lead {
@@ -121,6 +136,8 @@
 
 .benchmark-card .card-content {
   height: 100%;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .benchmark-card h3,
@@ -133,12 +150,12 @@
   margin-bottom: 0;
 }
 
-.family-abbr {
-  display: inline-block;
-  margin-bottom: 0.65rem;
-  font-weight: 700;
-  color: var(--oneocean-blue);
-  letter-spacing: 0.02em;
+.benchmark-card p,
+.family-card p,
+.demo-card .card-content p,
+.hf-caption {
+  font-size: 0.94rem;
+  line-height: 1.58;
 }
 
 .task-families-wrap {
@@ -190,6 +207,11 @@
   font-size: 0.95rem;
 }
 
+.paper-table thead th,
+.paper-table thead td {
+  color: #ffffff !important;
+}
+
 .paper-table th:first-child,
 .paper-table td:first-child {
   text-align: left;
@@ -222,6 +244,17 @@
 
 .demo-card .card-content p:last-child {
   margin-bottom: 0;
+}
+
+.demo-card .card-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.demo-card .title.is-5 {
+  font-size: 1.02rem;
 }
 
 code {
@@ -262,5 +295,13 @@ code {
   .mini-point,
   .task-family-card {
     padding: 0.9rem;
+  }
+
+  .mini-point,
+  .benchmark-card p,
+  .family-card p,
+  .demo-card .card-content p,
+  .hf-caption {
+    font-size: 0.9rem;
   }
 }
