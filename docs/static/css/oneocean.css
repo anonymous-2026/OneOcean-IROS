@@ -110,9 +110,16 @@
   font-size: 0.94rem;
   line-height: 1.58;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
   text-align: justify;
   text-justify: inter-word;
+}
+
+.mini-point strong {
+  display: block;
+  margin-bottom: 0.28rem;
+  font-weight: 800;
 }
 
 .method-lead {
@@ -144,6 +151,10 @@
 .benchmark-card h3,
 .family-card h4 {
   margin-bottom: 0.55rem;
+}
+
+.family-card h4 {
+  font-weight: 800;
 }
 
 .benchmark-card p:last-child,
