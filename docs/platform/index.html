@@ -14,8 +14,8 @@
   <header class="top-nav">
     <a class="brand" href="../">OneOcean</a>
     <nav>
-      <a href="../project/">Project</a>
-      <a href="#" aria-disabled="true">Demo (pending)</a>
+      <a href="../">Project</a>
+      <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS">Demo</a>
       <a href="../">Hub</a>
     </nav>
   </header>
@@ -35,7 +35,7 @@
         <p>Run data generation and the first navigation task with local variants.</p>
         <pre><code>python Data_pipeline/run_pipeline.py --overwrite
 python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
-python -m oneocean_sim.cli.run_navigation_task --variant tiny --episodes 3 --output-dir runs/e1_smoke</code></pre>
+python -m benchmark_core.cli.run --task go_to_goal_current --variant tiny --episodes 3 --out runs/benchmark_core/quickstart</code></pre>
       </article>
 
       <article class="content-card reveal delay-2">
@@ -51,18 +51,18 @@ python -m oneocean_sim.cli.run_navigation_task --variant tiny --episodes 3 --out
         <h2>Task Development Flow</h2>
         <ol>
           <li>Load variant and resolve schema contract.</li>
-          <li>Select simulator adapter (S1 primary / S3 backup / S2 visual).</li>
+          <li>Select a backend: core benchmark or the scene-backed OceanGym path.</li>
           <li>Run task with fixed seed and export metrics.</li>
         </ol>
       </article>
 
       <article class="content-card reveal delay-4">
         <h2>Integration Hooks</h2>
-        <p>Cross-lane placeholders to be filled as artifacts arrive.</p>
+        <p>Current integration points exposed by the released repository.</p>
         <ul>
-          <li>Lane A/H: media showcase and scenario clips</li>
-          <li>Lane C: benchmark cards and plots</li>
-          <li>Lane F: release policy, DOI, citation block</li>
+          <li>Project page: paper-facing demos and highlighted benchmark media</li>
+          <li>Benchmark core: quantitative experiments and paper tables</li>
+          <li>Data pipeline: combined dataset generation and variant export</li>
         </ul>
       </article>
     </section>

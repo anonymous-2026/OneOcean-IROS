@@ -3,44 +3,646 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OneOcean | Web Hub</title>
-  <meta name="description" content="OneOcean web hub linking project website, platform website, and online demo.">
+  <meta name="title" content="OneOcean: A Data-Grounded Simulation Suite and Benchmark for Marine Robotics">
+  <meta name="description" content="OneOcean is a data-grounded simulation suite and benchmark for marine robotics, built on a unified ocean-environment dataset and evaluated across core benchmark and external underwater-scene backends.">
+  <meta name="keywords" content="marine robotics, underwater robotics, ocean simulation, benchmark, HoloOcean, GEBCO, Copernicus Marine, pollution cleanup, multi-agent systems">
+  <meta name="author" content="Anonymous">
+  <meta name="robots" content="index, follow">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="OneOcean">
+  <meta property="og:title" content="OneOcean: A Data-Grounded Simulation Suite and Benchmark for Marine Robotics">
+  <meta property="og:description" content="Unified ocean-environment data, a 10-task marine robotics benchmark, and cross-backend evaluation from fast core experiments to underwater-scene deployment.">
+  <meta property="og:image" content="static/images/paper/overview_abstract.png">
+  <meta property="og:image:alt" content="OneOcean overview figure">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OneOcean: A Data-Grounded Simulation Suite and Benchmark for Marine Robotics">
+  <meta name="twitter:description" content="Data-grounded marine robotics benchmark with unified ocean data, canonical tasks, and cross-backend evaluation.">
+  <meta name="twitter:image" content="static/images/paper/overview_abstract.png">
+  <meta name="theme-color" content="#0d3b66">
+  <title>OneOcean | Project Page</title>
+
+  <link rel="icon" type="image/png" href="static/logo.png">
+  <link rel="apple-touch-icon" href="static/logo.png">
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+  <link rel="stylesheet" href="static/css/oneocean.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="static/css/site.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script defer src="static/js/index.js"></script>
 </head>
-<body class="hub-body">
-  <main class="hub-main">
-    <section class="hero-card reveal">
-      <p class="eyebrow">OneOcean IROS 2026</p>
-      <h1>Web Hub</h1>
-      <p class="lead">
-        Unified entry for the project narrative, platform documentation, and interactive demo.
-      </p>
+<body>
+  <button class="scroll-to-top" onclick="scrollToTop()" title="Scroll to top" aria-label="Scroll to top">
+    <i class="fas fa-chevron-up"></i>
+  </button>
+
+  <main id="main-content">
+    <section class="hero oneocean-hero">
+      <div class="hero-body">
+        <div class="container is-max-widescreen">
+          <div class="columns is-centered">
+            <div class="column has-text-centered">
+              <div class="title-with-logo">
+                <img src="static/logo.png" alt="OneOcean logo" class="publication-logo">
+                <h1 class="title is-1 publication-title">OneOcean: A Data-Grounded Simulation Suite and Benchmark for Marine Robotics</h1>
+              </div>
+
+              <div class="is-size-5 publication-authors">
+                <span class="author-block">Anonymous authors</span>
+              </div>
+
+              <p class="hero-tagline">
+                Unified ocean-environment data, canonical multi-agent marine tasks, and cross-backend evaluation from scalable quantitative benchmarking to scene-backed underwater deployment.
+              </p>
+
+              <div class="publication-links">
+                <span class="link-block">
+                  <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-play-circle"></i></span>
+                    <span>Online Demo</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fab fa-github"></i></span>
+                    <span>Code</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="oneocean_paper.pdf" target="_blank" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                    <span>Paper</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="platform/" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-layer-group"></i></span>
+                    <span>Platform</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://zenodo.org/records/18837700" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-database"></i></span>
+                    <span>Zenodo</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-box-open"></i></span>
+                    <span>Hugging Face</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://drive.google.com/drive/folders/1EvK_OkdLqaZkPoNPcyibpjaflZ3TATwZ" target="_blank" rel="noopener" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-folder-open"></i></span>
+                    <span>Supplementary</span>
+                  </a>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="card-grid">
-      <article class="nav-card reveal delay-1">
-        <h2>Project Website</h2>
-        <p>Paper-focused story: motivation, method, results, and supplementary links.</p>
-        <a class="btn" href="project/">Open Project Site</a>
-      </article>
+    <section class="section video-intro-section">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-four-fifths">
+            <div class="video-embed-card">
+              <div class="video-embed-shell">
+                <iframe
+                  src="https://www.youtube.com/embed/Fz2medRUxwo"
+                  title="OneOcean overview video"
+                  loading="lazy"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowfullscreen></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <article class="nav-card reveal delay-2">
-        <h2>Platform Website</h2>
-        <p>How to run the data pipeline, use datasets, and build ocean robotics tasks.</p>
-        <a class="btn" href="platform/">Open Platform Site</a>
-      </article>
+    <section class="section hero is-light" id="abstract">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-five-sixths">
+            <h2 class="title is-3 has-text-left">Abstract</h2>
+            <div class="content">
+              <p class="has-text-justified">
+                Simulation is essential for marine robotics, yet existing platforms often trade off between visually realistic worlds,
+                high-throughput experimentation, and ocean-condition realism grounded in real data. <strong>OneOcean</strong> is a
+                data-grounded simulation suite and benchmark built around a unified spatiotemporal ocean-environment product that harmonizes
+                bathymetry with data-driven currents and tides, with optional pollution fields for cleanup-related evaluation.
+              </p>
+              <p class="has-text-justified">
+                On top of this environment representation, OneOcean defines a task ladder spanning navigation and station-keeping under currents,
+                waypoint and route following, depth-profile tracking, area scanning, pipeline inspection, and multi-agent coordination,
+                including formation transit, fish protection/herding, and surface pollution localization, containment, and cleanup.
+                The suite supports teams of 2-10 vehicles, standardizes metrics and run manifests, and exposes meaningful differences among
+                heuristic baselines, behavior-cloning policies, and LLM-based planners under realistic, data-grounded disturbances.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <article class="nav-card reveal delay-3">
-        <h2>Online Demo</h2>
-        <p>Interactive demo (separate repo) for fast task and scene understanding.</p>
-        <a class="btn secondary" href="#" aria-disabled="true">Demo URL Pending (Lane E2)</a>
-      </article>
+    <section class="section" id="overview">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-five-sixths">
+            <h2 class="title is-3 has-text-left">Overview</h2>
+            <div class="columns is-vcentered is-variable is-6">
+              <div class="column is-5">
+                <figure class="image hf-figure">
+                  <img class="hf-media hf-workflow" src="static/images/paper/overview_abstract.png" alt="OneOcean overview" loading="lazy">
+                </figure>
+                <p class="hf-caption">Overview figure from the paper. The repository also keeps the original vector version at <code>static/images/paper/overview_abstract.pdf</code>.</p>
+              </div>
+              <div class="column is-7">
+                <div class="content">
+                  <p class="has-text-justified">
+                    OneOcean treats <strong>ocean conditions as a reusable product</strong>. A unified NetCDF environment dataset harmonizes GEBCO bathymetry,
+                    Copernicus/GOPAF currents, optional tide terms, and derived masks. The same grounded environment then drives a canonical benchmark suite
+                    instead of being tied to a single simulator implementation.
+                  </p>
+                  <p class="has-text-justified">
+                    The benchmark is executed in two complementary modes. The <strong>core benchmark backend</strong> prioritizes deterministic, throughput-first,
+                    paper-ready evaluation. The <strong>external underwater-scene backend</strong> reuses packaged underwater scenes while injecting the same data-grounded
+                    currents, so qualitative scene evidence and quantitative results still share task semantics and provenance.
+                  </p>
+                  <div class="mini-points">
+                    <div class="mini-point"><strong>Data:</strong> unified ocean-environment product with currents, bathymetry, masks, and task-grounding metadata.</div>
+                    <div class="mini-point"><strong>Tasks:</strong> 10 canonical tasks spanning navigation, sensing, coordination, and pollution-response scenarios.</div>
+                    <div class="mini-point"><strong>Evaluation:</strong> shared metrics, tiered difficulty, auditable manifests, and support for 2-10 vehicles.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section hero is-light" id="method">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-five-sixths">
+            <h2 class="title is-3 has-text-left">Method and Benchmark Design</h2>
+            <div class="columns is-multiline method-cards">
+              <div class="column is-4">
+                <article class="hf-card card method-card">
+                  <div class="card-content">
+                    <h3 class="title is-5">Unified Environment Product</h3>
+                    <p>
+                      The data pipeline produces a combined environment dataset with latitude, longitude, time, depth, currents, elevation,
+                      and validity information. Variants support fast local iteration, scene construction, and public release without changing task semantics.
+                    </p>
+                  </div>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="hf-card card method-card">
+                  <div class="card-content">
+                    <h3 class="title is-5">Canonical Task Ladder</h3>
+                    <p>
+                      OneOcean defines a 10-task ladder covering goal reaching, station keeping, route following, depth tracking, area scan,
+                      leak inspection, formation transit, fish protection/herding, and pollution localization/containment/cleanup.
+                    </p>
+                  </div>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="hf-card card method-card">
+                  <div class="card-content">
+                    <h3 class="title is-5">Cross-Backend Execution</h3>
+                    <p>
+                      A throughput-first core backend generates large, reproducible experiment tables, while a scene-backed underwater backend reuses external scenes
+                      and injects the same data-grounded currents for qualitative validation in realistic underwater-looking environments.
+                    </p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="columns is-multiline task-family-grid">
+              <div class="column is-3">
+                <div class="task-family-card">
+                  <h4>Navigation</h4>
+                  <p>Go-to-goal, station keeping, route following, depth-profile tracking.</p>
+                </div>
+              </div>
+              <div class="column is-3">
+                <div class="task-family-card">
+                  <h4>Sensing</h4>
+                  <p>Area scan and pipeline inspection under drift and terrain constraints.</p>
+                </div>
+              </div>
+              <div class="column is-3">
+                <div class="task-family-card">
+                  <h4>Coordination</h4>
+                  <p>Formation transit and fish protection/herding with multi-agent constraints.</p>
+                </div>
+              </div>
+              <div class="column is-3">
+                <div class="task-family-card">
+                  <h4>Pollution Response</h4>
+                  <p>Localization, containment, cleanup, and underwater lift tasks grounded by task probes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="results">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-five-sixths">
+            <h2 class="title is-3 has-text-left">Highlighted Results</h2>
+            <div class="content">
+              <p class="has-text-justified">
+                The core benchmark backend is designed to be <strong>non-saturated</strong>: Tier 2 remains useful for routine evaluation, while Tier 3 exposes large gaps
+                in disturbance rejection, coordination, and task completion. This is exactly the behavior needed from a benchmark that is supposed to separate planning
+                and control quality instead of collapsing to all-success or all-failure regimes.
+              </p>
+              <p class="has-text-justified">
+                The results below show three distinct capabilities: (i) the benchmark separates strong heuristics from learned policies on the full task ladder,
+                (ii) planning-sensitive tasks expose meaningful differences among local LLM planners and behavior cloning, and (iii) the same task semantics remain useful
+                when moved into packaged underwater scenes with data-grounded current injection.
+              </p>
+            </div>
+
+            <div class="table-panel">
+              <h3 class="title is-4 has-text-left">Core benchmark headline results</h3>
+              <p class="table-caption">Macro results over the 10-task suite plus Tier 3 key-task metrics. Higher is better for success/coverage/cleanup; lower is better for energy and collision ratio.</p>
+              <div class="table-scroll">
+                <table class="paper-table compact">
+                  <thead>
+                    <tr>
+                      <th>Method</th>
+                      <th>T2 Suite SR (%)</th>
+                      <th>T2 E</th>
+                      <th>T2 Coll (%)</th>
+                      <th>T3 Suite SR (%)</th>
+                      <th>T3 E</th>
+                      <th>T3 Coll (%)</th>
+                      <th>Go2Goal SR (%)</th>
+                      <th>Route SR (%)</th>
+                      <th>Station RMS</th>
+                      <th>Scan cov.</th>
+                      <th>Pipe score</th>
+                      <th>Cleanup rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Heuristic</strong></td>
+                      <td class="best">84.6</td>
+                      <td>1842.3</td>
+                      <td class="best">5.68</td>
+                      <td class="best">29.0</td>
+                      <td>3352.4</td>
+                      <td>8.19</td>
+                      <td class="best">74.0</td>
+                      <td class="best">54.0</td>
+                      <td class="best">1.07</td>
+                      <td class="best">0.89</td>
+                      <td class="best">0.78</td>
+                      <td class="best">0.56</td>
+                    </tr>
+                    <tr>
+                      <td>BC</td>
+                      <td>58.6</td>
+                      <td class="best">1271.2</td>
+                      <td>9.72</td>
+                      <td>6.0</td>
+                      <td class="best">1635.1</td>
+                      <td class="best">6.41</td>
+                      <td>34.0</td>
+                      <td>0.0</td>
+                      <td>26.52</td>
+                      <td>0.89</td>
+                      <td>0.67</td>
+                      <td>0.06</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="columns is-variable is-6 result-figures">
+              <div class="column is-6">
+                <figure class="image hf-figure">
+                  <img class="hf-media hf-plot" src="static/images/paper/difficulty_ladder_dualpanel.png" alt="Difficulty ladder summary" loading="lazy">
+                </figure>
+                <p class="hf-caption">Difficulty ladder on representative tasks. Tier 3 remains strongly discriminative instead of saturating.</p>
+              </div>
+              <div class="column is-6">
+                <figure class="image hf-figure">
+                  <img class="hf-media hf-plot" src="static/images/paper/cleanup_scaling_dualpanel.png" alt="Cleanup scaling summary" loading="lazy">
+                </figure>
+                <p class="hf-caption">Surface-cleanup scaling shows the trade-off between improved cleanup and higher coordination cost.</p>
+              </div>
+            </div>
+
+            <div class="table-panel">
+              <h3 class="title is-4 has-text-left">Planning-sensitive tasks: heuristic, BC, and local LLM planners</h3>
+              <p class="table-caption">Tier 2 planning suite under stronger currents. The LLMs act at the high level only; low-level control and safety checks remain deterministic.</p>
+              <div class="table-scroll">
+                <table class="paper-table">
+                  <thead>
+                    <tr>
+                      <th>Method</th>
+                      <th>SR avg (%)</th>
+                      <th>Cleanup SR (%)</th>
+                      <th>Cleanup rate</th>
+                      <th>Scan SR (%)</th>
+                      <th>Scan cov.</th>
+                      <th>Pipe SR (%)</th>
+                      <th>Pipe score</th>
+                      <th>T (s)</th>
+                      <th>E</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Heuristic</strong></td>
+                      <td class="best">65.8</td>
+                      <td>60.0</td>
+                      <td class="best">0.87</td>
+                      <td class="best">77.5</td>
+                      <td>0.80</td>
+                      <td class="best">60.0</td>
+                      <td class="best">0.69</td>
+                      <td class="best">776.8</td>
+                      <td>9132.4</td>
+                    </tr>
+                    <tr>
+                      <td>BC</td>
+                      <td>45.0</td>
+                      <td>10.0</td>
+                      <td>0.32</td>
+                      <td>67.5</td>
+                      <td>0.79</td>
+                      <td>57.5</td>
+                      <td>0.61</td>
+                      <td>921.6</td>
+                      <td class="best">6908.2</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-ChatGLM3-6B</td>
+                      <td>55.0</td>
+                      <td>60.0</td>
+                      <td class="best">0.87</td>
+                      <td>77.5</td>
+                      <td class="best">0.82</td>
+                      <td>27.5</td>
+                      <td>0.54</td>
+                      <td>860.3</td>
+                      <td>9671.5</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-Qwen2.5-7B</td>
+                      <td>47.5</td>
+                      <td>57.5</td>
+                      <td>0.81</td>
+                      <td>57.5</td>
+                      <td>0.78</td>
+                      <td>27.5</td>
+                      <td>0.57</td>
+                      <td>1077.2</td>
+                      <td>11703.8</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-Qwen2-7B</td>
+                      <td>45.0</td>
+                      <td>57.5</td>
+                      <td>0.86</td>
+                      <td>67.5</td>
+                      <td class="best">0.81</td>
+                      <td>10.0</td>
+                      <td>0.51</td>
+                      <td>991.4</td>
+                      <td>10422.1</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-Mistral-7B</td>
+                      <td>42.5</td>
+                      <td>55.0</td>
+                      <td>0.82</td>
+                      <td>55.0</td>
+                      <td>0.78</td>
+                      <td>17.5</td>
+                      <td>0.52</td>
+                      <td>1044.2</td>
+                      <td>11288.9</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-Llama3-8B</td>
+                      <td>44.2</td>
+                      <td class="best">67.5</td>
+                      <td>0.84</td>
+                      <td>47.5</td>
+                      <td>0.77</td>
+                      <td>17.5</td>
+                      <td>0.59</td>
+                      <td>1099.1</td>
+                      <td>11614.2</td>
+                    </tr>
+                    <tr>
+                      <td>LLM-Llama2-7B</td>
+                      <td>30.8</td>
+                      <td>55.0</td>
+                      <td class="best">0.87</td>
+                      <td>27.5</td>
+                      <td>0.75</td>
+                      <td>10.0</td>
+                      <td>0.46</td>
+                      <td>1156.4</td>
+                      <td>11654.3</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="table-panel">
+              <h3 class="title is-4 has-text-left">External underwater-scene transfer</h3>
+              <p class="table-caption">Route-following after moving the same task semantics into four packaged underwater scenes with OneOcean current injection.</p>
+              <div class="table-scroll narrow">
+                <table class="paper-table compact">
+                  <thead>
+                    <tr>
+                      <th rowspan="2">Scene</th>
+                      <th colspan="3">Tier 2</th>
+                      <th colspan="3">Tier 3</th>
+                    </tr>
+                    <tr>
+                      <th>SR (%)</th>
+                      <th>Waypoints</th>
+                      <th>CTE (m)</th>
+                      <th>SR (%)</th>
+                      <th>Waypoints</th>
+                      <th>CTE (m)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Dam</td>
+                      <td>0.0</td>
+                      <td>1.0</td>
+                      <td>3.06</td>
+                      <td>0.0</td>
+                      <td>0.0</td>
+                      <td class="best">0.87</td>
+                    </tr>
+                    <tr>
+                      <td>OpenWater</td>
+                      <td>20.0</td>
+                      <td>3.1</td>
+                      <td>2.50</td>
+                      <td>0.0</td>
+                      <td>0.0</td>
+                      <td>1.91</td>
+                    </tr>
+                    <tr>
+                      <td>PierHarbor</td>
+                      <td>56.7</td>
+                      <td>3.5</td>
+                      <td class="best">2.22</td>
+                      <td>0.0</td>
+                      <td>2.0</td>
+                      <td>1.41</td>
+                    </tr>
+                    <tr>
+                      <td>SimpleUnderwater</td>
+                      <td class="best">100.0</td>
+                      <td class="best">4.0</td>
+                      <td>3.04</td>
+                      <td class="best">96.7</td>
+                      <td class="best">3.0</td>
+                      <td>2.16</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Mean over scenes</strong></td>
+                      <td>44.2</td>
+                      <td>2.92</td>
+                      <td>2.70</td>
+                      <td>24.2</td>
+                      <td>1.25</td>
+                      <td>1.59</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section hero is-light" id="demos">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-five-sixths">
+            <h2 class="title is-3 has-text-left">Demos</h2>
+            <div class="content">
+              <p class="has-text-justified">
+                The core backend provides compact, reproducible task renderings, while the external scene backend shows that the same OneOcean tasks can be deployed in richer underwater scenes.
+                The media below are representative examples from both ends of the suite.
+              </p>
+            </div>
+
+            <h3 class="title is-4 has-text-left">Core benchmark examples</h3>
+            <div class="columns is-variable is-5">
+              <div class="column is-6">
+                <article class="hf-card card demo-card">
+                  <div class="card-image">
+                    <video class="hf-video-inline" controls muted loop playsinline preload="metadata">
+                      <source src="static/media/core/task3_10s.mp4" type="video/mp4">
+                    </video>
+                  </div>
+                  <div class="card-content">
+                    <h4 class="title is-5">Fish Protection / Herding</h4>
+                    <p>Representative multi-agent control in the core benchmark backend, using the same data-grounded disturbance model as the paper experiments.</p>
+                  </div>
+                </article>
+              </div>
+              <div class="column is-6">
+                <article class="hf-card card demo-card">
+                  <div class="card-image">
+                    <video class="hf-video-inline" controls muted loop playsinline preload="metadata">
+                      <source src="static/media/core/task6_10s.mp4" type="video/mp4">
+                    </video>
+                  </div>
+                  <div class="card-content">
+                    <h4 class="title is-5">Formation Transit</h4>
+                    <p>Multi-agent formation execution from the core backend, used to study how coordination difficulty scales with team size and drift.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <h3 class="title is-4 has-text-left">External underwater-scene examples</h3>
+            <div class="columns is-multiline is-variable is-5">
+              <div class="column is-4">
+                <article class="hf-card card demo-card">
+                  <div class="card-image">
+                    <img class="hf-media" src="static/media/external/pierharbor_plume_containment_viewport.gif" alt="PierHarbor plume containment demo" loading="lazy">
+                  </div>
+                  <div class="card-content">
+                    <h4 class="title is-5">PierHarbor Plume Containment</h4>
+                    <p>Scene-backed containment behavior with OneOcean current injection in a packaged underwater harbor scene.</p>
+                  </div>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="hf-card card demo-card">
+                  <div class="card-image">
+                    <img class="hf-media" src="static/media/external/pierharbor_plume_localization_viewport.gif" alt="PierHarbor plume localization demo" loading="lazy">
+                  </div>
+                  <div class="card-content">
+                    <h4 class="title is-5">PierHarbor Plume Localization</h4>
+                    <p>Localization under drifting plume observations, showing that pollution-related task semantics survive transfer to external scenes.</p>
+                  </div>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="hf-card card demo-card">
+                  <div class="card-image">
+                    <img class="hf-media" src="static/media/external/openwater_formation_keyframe.png" alt="OpenWater formation keyframe" loading="lazy">
+                  </div>
+                  <div class="card-content">
+                    <h4 class="title is-5">OpenWater Formation Deployment</h4>
+                    <p>Keyframe from the scene-backed multi-agent formation task, illustrating portability beyond the throughput-first benchmark backend.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="columns is-variable is-6 supplemental-gallery">
+              <div class="column is-6">
+                <figure class="image hf-figure">
+                  <img class="hf-media" src="static/images/paper/task1_ui_off.png" alt="Surface cleanup benchmark snapshot" loading="lazy">
+                </figure>
+                <p class="hf-caption">Surface pollution cleanup in the core benchmark backend.</p>
+              </div>
+              <div class="column is-6">
+                <figure class="image hf-figure">
+                  <img class="hf-media" src="static/images/paper/task3_ui_off.png" alt="Fish herding benchmark snapshot" loading="lazy">
+                </figure>
+                <p class="hf-caption">Fish protection / herding task snapshot from the paper.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
-
-  <script src="static/js/site.js" defer></script>
 </body>
 </html>

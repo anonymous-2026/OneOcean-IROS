@@ -1,0 +1,183 @@
+.oneocean-hero {
+  background: linear-gradient(180deg, #f8fbff 0%, #edf6ff 100%);
+}
+
+.hero-tagline {
+  max-width: 980px;
+  margin: 1.1rem auto 0;
+  font-size: 1.08rem;
+  color: var(--text-secondary);
+}
+
+.video-intro-section {
+  padding-top: 0;
+}
+
+.video-embed-card {
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  background: #08121f;
+}
+
+.video-embed-shell {
+  position: relative;
+  width: 100%;
+  padding-top: 56.25%;
+}
+
+.video-embed-shell iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.mini-points {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.mini-point,
+.task-family-card {
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #d8e5f3;
+}
+
+.method-card {
+  height: 100%;
+}
+
+.method-card .card-content p:last-child {
+  margin-bottom: 0;
+}
+
+.task-family-grid {
+  margin-top: 0.75rem;
+}
+
+.task-family-card h4 {
+  margin-bottom: 0.45rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.task-family-card p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.table-panel {
+  margin-top: 2rem;
+}
+
+.table-caption {
+  color: var(--text-secondary);
+  margin-bottom: 0.85rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.paper-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.table-scroll.narrow .paper-table {
+  min-width: 760px;
+}
+
+.paper-table.compact {
+  min-width: 880px;
+}
+
+.paper-table thead {
+  background: #0d3b66;
+  color: white;
+}
+
+.paper-table th,
+.paper-table td {
+  padding: 0.8rem 0.75rem;
+  border-bottom: 1px solid #e7edf3;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 0.95rem;
+}
+
+.paper-table th:first-child,
+.paper-table td:first-child {
+  text-align: left;
+}
+
+.paper-table tbody tr:nth-child(even) {
+  background: #f8fbff;
+}
+
+.paper-table tbody tr:hover {
+  background: #eef6ff;
+}
+
+.paper-table .best {
+  color: #b42318;
+  font-weight: 800;
+}
+
+.result-figures {
+  margin-top: 1.25rem;
+}
+
+.demo-card {
+  height: 100%;
+}
+
+.demo-card .card-image {
+  background: #091625;
+}
+
+.demo-card .card-content p:last-child {
+  margin-bottom: 0;
+}
+
+.supplemental-gallery {
+  margin-top: 1rem;
+}
+
+code {
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .publication-links {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-tagline {
+    font-size: 1rem;
+  }
+
+  .paper-table th,
+  .paper-table td {
+    padding: 0.65rem 0.6rem;
+    font-size: 0.88rem;
+  }
+
+  .mini-point,
+  .task-family-card {
+    padding: 0.85rem 0.9rem;
+  }
+}
