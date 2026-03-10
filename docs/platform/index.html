@@ -3,71 +3,393 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OneOcean | Platform Website</title>
-  <meta name="description" content="OneOcean platform website: pipeline usage, task setup, and reproducible workflows.">
+  <title>OneOcean | Platform</title>
+  <meta name="description" content="OneOcean platform: customize the ocean-environment dataset, export variants, and run marine-robotics tasks across quantitative and scene-backed backends.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#0d3b66">
+
+  <link rel="icon" type="image/png" href="../static/logo.png">
+  <link rel="apple-touch-icon" href="../static/logo.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="../static/css/bulma.min.css">
+  <link rel="stylesheet" href="../static/css/index.css">
+  <link rel="stylesheet" href="../static/css/oneocean.css">
+  <link rel="stylesheet" href="../static/css/platform.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../static/css/site.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-  <header class="top-nav">
-    <a class="brand" href="../">OneOcean</a>
-    <nav>
-      <a href="../">Project</a>
-      <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS">Demo</a>
-      <a href="../">Hub</a>
-    </nav>
-  </header>
+  <nav class="navbar platform-navbar" role="navigation" aria-label="main navigation">
+    <div class="container is-max-widescreen">
+      <div class="navbar-brand">
+        <a class="navbar-item platform-brand" href="../" aria-label="Back to OneOcean project page">
+          <img src="../static/logo.png" alt="OneOcean logo" class="platform-logo">
+          <span class="platform-brand-text">OneOcean</span>
+        </a>
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="platformNavbarMenu">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </a>
+      </div>
 
-  <main class="page">
-    <section class="hero-card reveal">
-      <p class="eyebrow">Website (2)</p>
-      <h1>Platform Website</h1>
-      <p class="lead">
-        Practical guide for using the OneOcean data pipeline and environment/task stack.
-      </p>
+      <div id="platformNavbarMenu" class="navbar-menu">
+        <div class="navbar-end">
+          <a class="navbar-item" href="../">Project Page</a>
+          <a class="navbar-item" href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener">Online Demo</a>
+          <a class="navbar-item" href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener">Code</a>
+          <a class="navbar-item" href="../oneocean_paper.pdf" target="_blank" rel="noopener">Paper</a>
+          <div class="navbar-item has-dropdown is-hoverable">
+            <a class="navbar-link">Dataset</a>
+            <div class="navbar-dropdown is-right">
+              <a class="navbar-item" href="https://zenodo.org/records/18837700" target="_blank" rel="noopener">Zenodo</a>
+              <a class="navbar-item" href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset" target="_blank" rel="noopener">Hugging Face</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main-content">
+    <section class="hero platform-hero">
+      <div class="hero-body">
+        <div class="container is-max-widescreen">
+          <div class="columns is-centered">
+            <div class="column is-10 has-text-centered">
+              <h1 class="title is-2 platform-title">Platform Guide</h1>
+              <p class="subtitle is-5 platform-subtitle">
+                Customize the ocean-environment dataset, export portable variants, and run marine-robotics tasks across quantitative and scene-backed backends.
+              </p>
+              <div class="platform-cta-row">
+                <a class="button is-rounded is-dark" href="#quickstart">
+                  <span class="icon"><i class="fas fa-rocket"></i></span>
+                  <span>Quickstart</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#pipeline">
+                  <span class="icon"><i class="fas fa-project-diagram"></i></span>
+                  <span>Pipeline</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#backends">
+                  <span class="icon"><i class="fas fa-cubes"></i></span>
+                  <span>Backends</span>
+                </a>
+                <a class="button is-rounded is-dark" href="#publish">
+                  <span class="icon"><i class="fas fa-share-alt"></i></span>
+                  <span>Publish</span>
+                </a>
+              </div>
+              <p class="platform-note">
+                Tip: you can either <strong>download the released dataset</strong> (recommended for starting) or <strong>generate a custom dataset</strong> with the pipeline below.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="content-grid">
-      <article class="content-card reveal delay-1">
-        <h2>Quickstart</h2>
-        <p>Run data generation and the first navigation task with local variants.</p>
-        <pre><code>python Data_pipeline/run_pipeline.py --overwrite
-python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
-python -m benchmark_core.cli.run --task go_to_goal_current --variant tiny --episodes 3 --out runs/benchmark_core/quickstart</code></pre>
-      </article>
+    <section id="quickstart" class="section platform-section">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-10">
+            <h2 class="title is-3">Quickstart</h2>
+            <p class="platform-lead">
+              This is the shortest path from a dataset file to a first benchmark run. All commands are run from the repository root.
+            </p>
 
-      <article class="content-card reveal delay-2">
-        <h2>Dataset Tiers</h2>
-        <ul>
-          <li><strong>tiny</strong>: fast iteration and sanity checks</li>
-          <li><strong>scene</strong>: main simulation/task construction tier</li>
-          <li><strong>public</strong>: distribution-oriented, larger coverage</li>
-        </ul>
-      </article>
+            <div class="columns is-multiline is-variable is-5">
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-download"></i></span>
+                    Start from the released dataset
+                  </h3>
+                  <p>
+                    Download a prebuilt <code>combined_environment.nc</code> from Zenodo or Hugging Face and place it under:
+                    <code>Data_pipeline/Data/Combined/</code>.
+                  </p>
+                  <div class="platform-links">
+                    <a href="https://zenodo.org/records/18837700" target="_blank" rel="noopener">Zenodo</a>
+                    <span class="dot">·</span>
+                    <a href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset" target="_blank" rel="noopener">Hugging Face</a>
+                  </div>
+                </article>
+              </div>
 
-      <article class="content-card reveal delay-3">
-        <h2>Task Development Flow</h2>
-        <ol>
-          <li>Load variant and resolve schema contract.</li>
-          <li>Select a backend: core benchmark or the scene-backed OceanGym path.</li>
-          <li>Run task with fixed seed and export metrics.</li>
-        </ol>
-      </article>
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-play"></i></span>
+                    Run a first core-backend task
+                  </h3>
+                  <p>
+                    Export a drift cache from the dataset, then run a canonical navigation task.
+                  </p>
+                  <pre class="platform-pre"><code>python -m benchmark_core.cli.export_drift_cache \\
+  --nc Data_pipeline/Data/Combined/combined_environment.nc \\
+  --u-var utotal --v-var vtotal --time-index 0 --depth-index 0 \\
+  --out runs/benchmark_core/_cache/drift_t0_d0.npz
 
-      <article class="content-card reveal delay-4">
-        <h2>Integration Hooks</h2>
-        <p>Current integration points exposed by the released repository.</p>
-        <ul>
-          <li>Project page: paper-facing demos and highlighted benchmark media</li>
-          <li>Benchmark core: quantitative experiments and paper tables</li>
-          <li>Data pipeline: combined dataset generation and variant export</li>
-        </ul>
-      </article>
+python -m benchmark_core.cli.run \\
+  --drift-npz runs/benchmark_core/_cache/drift_t0_d0.npz \\
+  --task go_to_goal_current \\
+  --controller go_to_goal \\
+  --difficulty medium \\
+  --n-agents 1 \\
+  --episodes 10 \\
+  --seed 0 \\
+  --out-dir runs/benchmark_core/quickstart</code></pre>
+                  <p class="platform-footnote">
+                    If your dataset does not include tides, replace <code>utotal/vtotal</code> with <code>uo/vo</code> in the drift-cache export command.
+                  </p>
+                </article>
+              </div>
+            </div>
+
+            <div class="platform-callout">
+              <p><strong>Where do the dataset files live?</strong> The pipeline writes to <code>Data_pipeline/Data/</code>. The released dataset mirrors that layout so you can run without refetching upstream data.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pipeline" class="section platform-section platform-section-alt">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-10">
+            <h2 class="title is-3">Pipeline</h2>
+            <p class="platform-lead">
+              The OneOcean pipeline produces a canonical <code>combined_environment.nc</code> (terrain + currents + masks), then exports portable variants for debugging, scene grounding, and public release.
+            </p>
+
+            <div class="platform-diagram">
+              <div class="platform-diagram-col">
+                <div class="platform-diagram-box">
+                  <div class="platform-diagram-title"><i class="fas fa-water"></i> CMEMS ocean fields</div>
+                  <div class="platform-diagram-sub">so, thetao, uo, vo, zos (+ optional tides)</div>
+                </div>
+                <div class="platform-diagram-arrow">→</div>
+                <div class="platform-diagram-box">
+                  <div class="platform-diagram-title"><i class="fas fa-mountain"></i> GEBCO GeoTIFF</div>
+                  <div class="platform-diagram-sub">bathymetry / terrain crop</div>
+                </div>
+              </div>
+              <div class="platform-diagram-col platform-diagram-mid">
+                <div class="platform-diagram-box platform-diagram-box-strong">
+                  <div class="platform-diagram-title"><i class="fas fa-cogs"></i> Data_pipeline/run_pipeline.py</div>
+                  <div class="platform-diagram-sub">align · interpolate · merge · compress</div>
+                </div>
+                <div class="platform-diagram-arrow">→</div>
+                <div class="platform-diagram-box">
+                  <div class="platform-diagram-title"><i class="fas fa-file-alt"></i> combined_environment.nc</div>
+                  <div class="platform-diagram-sub">time × depth × lat × lon</div>
+                </div>
+              </div>
+              <div class="platform-diagram-col">
+                <div class="platform-diagram-box">
+                  <div class="platform-diagram-title"><i class="fas fa-layer-group"></i> generate_variants.py</div>
+                  <div class="platform-diagram-sub">tiny · scene · public</div>
+                </div>
+                <div class="platform-diagram-arrow">→</div>
+                <div class="platform-diagram-box">
+                  <div class="platform-diagram-title"><i class="fas fa-robot"></i> Tasks + backends</div>
+                  <div class="platform-diagram-sub">benchmark_core + OceanGym scenes</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="columns is-multiline is-variable is-5">
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-sliders-h"></i></span>
+                    Customize region, time, depth
+                  </h3>
+                  <p>
+                    Use <code>--lat-min/--lat-max/--lon-min/--lon-max</code> and <code>--start/--end</code> to define the spatiotemporal slice. Depth can be specified as a range or a concrete list.
+                  </p>
+                  <pre class="platform-pre"><code>python Data_pipeline/run_pipeline.py --overwrite \\
+  --lat-min 32.0 --lat-max 33.0 --lon-min -66.5 --lon-max -65.5 \\
+  --start 2024-06-01T00:00:00 --end 2024-06-30T00:00:00 \\
+  --depths \"0,10,20,50,100,200\" \\
+  --include-tides</code></pre>
+                  <p class="platform-footnote">
+                    If tides are surface-only, the pipeline applies a configurable depth profile (default: exponential decay). This is an engineering approximation.
+                  </p>
+                </article>
+              </div>
+
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-layer-group"></i></span>
+                    Export dataset variants
+                  </h3>
+                  <p>
+                    Variants are written under <code>Data_pipeline/Data/Combined/variants/</code>. Each variant includes a small <code>variant.json</code> manifest for auditability.
+                  </p>
+                  <pre class="platform-pre"><code>python Data_pipeline/generate_variants.py \\
+  --which tiny,scene,public \\
+  --overwrite</code></pre>
+                  <div class="platform-mini-grid">
+                    <div class="platform-mini">
+                      <div class="platform-mini-k">tiny</div>
+                      <div class="platform-mini-v">fast iteration + web assets</div>
+                    </div>
+                    <div class="platform-mini">
+                      <div class="platform-mini-k">scene</div>
+                      <div class="platform-mini-v">main scene/task grounding tier</div>
+                    </div>
+                    <div class="platform-mini">
+                      <div class="platform-mini-k">public</div>
+                      <div class="platform-mini-v">broader coverage, lighter resolution</div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="platform-callout">
+              <p><strong>Credentials:</strong> CMEMS access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF tiles must be available under <code>Data_pipeline/Data/</code>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="backends" class="section platform-section">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-10">
+            <h2 class="title is-3">Backends: quantitative + scene-backed</h2>
+            <p class="platform-lead">
+              OneOcean supports a fast quantitative backend for scalable benchmarking and a packaged scene-backed backend for underwater deployment and media generation.
+            </p>
+
+            <div class="columns is-variable is-5 is-multiline">
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
+                    Core benchmark backend (benchmark_core)
+                  </h3>
+                  <p>
+                    Export a <em>drift cache</em> (<code>.npz</code>) from <code>combined_environment.nc</code>, then run tasks with shared metrics and reproducible manifests.
+                  </p>
+                  <pre class="platform-pre"><code>python -m benchmark_core.cli.export_drift_cache \\
+  --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \\
+  --u-var utotal --v-var vtotal --time-index 0 --depth-index 0 \\
+  --out runs/benchmark_core/_cache/drift_scene_t0_d0.npz
+
+python -m benchmark_core.cli.run_matrix \\
+  --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \\
+  --preset paper_v1 \\
+  --dynamics-model 6dof \\
+  --constraint-mode hard \\
+  --bathy-mode hard \\
+  --validate</code></pre>
+                </article>
+              </div>
+
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-city"></i></span>
+                    OceanGym scene backend (tracks/oceangym_benchmark)
+                  </h3>
+                  <p>
+                    Export a time series of data-grounded currents (<code>.npz</code>) and run the scene task suite (e.g., plume localization/containment, multi-agent formation).
+                  </p>
+                  <pre class="platform-pre"><code>python tracks/oceangym_benchmark/export_current_series_npz.py \\
+  --dataset Data_pipeline/Data/Combined/combined_environment.nc \\
+  --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
+
+python tracks/oceangym_benchmark/run_task_suite.py \\
+  --preset ocean_worlds_camera \\
+  --episodes 3 \\
+  --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz</code></pre>
+                  <p class="platform-footnote">
+                    This backend assumes you have a working HoloOcean client and packaged worlds installed locally.
+                  </p>
+                </article>
+              </div>
+            </div>
+
+            <div class="platform-callout">
+              <p><strong>Choosing a backend:</strong> use <code>benchmark_core</code> for scalable comparisons and paper tables; use <code>oceangym_benchmark</code> when you need scene semantics, screenshots, GIFs, and MP4s.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="publish" class="section platform-section platform-section-alt">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column is-10">
+            <h2 class="title is-3">Publish & reuse</h2>
+            <p class="platform-lead">
+              The safest way to help others reproduce your results is to share (1) dataset artifacts, (2) the run manifests produced by the backends, and (3) the exact commands you used.
+            </p>
+
+            <div class="columns is-variable is-5 is-multiline">
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-box"></i></span>
+                    Recommended artifact bundle
+                  </h3>
+                  <ul class="platform-ul">
+                    <li><code>combined_environment.nc</code> (or the relevant variant)</li>
+                    <li><code>variants/&lt;tier&gt;/variant.json</code> manifest</li>
+                    <li><code>runs/benchmark_core/**/results_manifest.json</code></li>
+                    <li><code>runs/oceangym_benchmark/**/media/</code> screenshots, GIFs, MP4s</li>
+                  </ul>
+                </article>
+              </div>
+
+              <div class="column is-6">
+                <article class="platform-card">
+                  <h3 class="title is-5">
+                    <span class="icon"><i class="fas fa-globe"></i></span>
+                    Deploy this page on GitHub Pages
+                  </h3>
+                  <p>
+                    This repository serves the website from <code>docs/</code>. Updating <code>docs/index.html</code> and <code>docs/platform/index.html</code> is enough to publish changes.
+                  </p>
+                  <p class="platform-footnote">
+                    If the page looks stale after pushing, wait a few minutes for Pages to rebuild, then hard-refresh the browser cache.
+                  </p>
+                </article>
+              </div>
+            </div>
+
+            <div class="platform-footer">
+              <a href="../" class="button is-dark is-rounded">
+                <span class="icon"><i class="fas fa-arrow-left"></i></span>
+                <span>Back to project page</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
-  <script src="../static/js/site.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const burgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+      burgers.forEach((burger) => {
+        burger.addEventListener('click', () => {
+          const target = burger.dataset.target;
+          const menu = document.getElementById(target);
+          burger.classList.toggle('is-active');
+          menu.classList.toggle('is-active');
+        });
+      });
+    });
+  </script>
 </body>
 </html>
