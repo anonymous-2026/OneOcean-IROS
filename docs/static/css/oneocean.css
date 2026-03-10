@@ -111,7 +111,8 @@
   line-height: 1.58;
   display: flex;
   align-items: center;
-  text-align: left;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .method-lead {
@@ -156,6 +157,8 @@
 .hf-caption {
   font-size: 0.94rem;
   line-height: 1.58;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .task-families-wrap {
