@@ -250,10 +250,31 @@
       <div class="container is-max-widescreen">
         <div class="columns is-centered">
           <div class="column is-five-sixths">
-            <h2 class="title is-3 has-text-left">Highlighted Results</h2>
+            <h2 class="title is-3 has-text-left">What the results show</h2>
             <div class="content">
-              <p class="has-text-justified">The core benchmark backend is designed to be <strong>non-saturated</strong>: Tier 2 remains useful for routine evaluation, while Tier 3 exposes large gaps in disturbance rejection, coordination, and task completion. This is the property a benchmark needs if it is supposed to separate method quality instead of collapsing to all-success or all-failure regimes.</p>
-              <p class="has-text-justified"><strong>Heuristic</strong> denotes the deterministic task-specific controller used as the strongest built-in baseline. <strong>BC</strong> is a behavior-cloning policy trained to imitate heuristic actions. <strong>LLM planners</strong> produce high-level decisions such as assignments or waypoint choices, while deterministic low-level control and safety checks remain unchanged.</p>
+              <p class="has-text-justified">The paper claim is not “some red numbers are larger.” The point of the benchmark is that it stays <strong>non-saturated</strong>, reuses the same environment grounding across backends, and exposes complementary failure modes in navigation, coordination, and pollution-response tasks. The tables below support those benchmark-design claims.</p>
+              <p class="has-text-justified"><strong>Heuristic</strong> denotes the deterministic task-specific controller used as the strongest built-in baseline. <strong>BC</strong> is a behavior-cloning policy trained to imitate heuristic actions. <strong>LLM planners</strong> produce high-level decisions such as assignments or waypoint choices, while deterministic low-level control and safety checks remain unchanged. <strong>Red entries</strong> are a quick visual cue for the numerically best value in a column; they are not themselves the paper’s contribution.</p>
+            </div>
+
+            <div class="columns is-multiline is-variable is-4 results-takeaway-grid">
+              <div class="column is-4">
+                <article class="results-takeaway-card">
+                  <h3>Benchmark discrimination</h3>
+                  <p>Tier 2 is usable for routine comparisons, while Tier 3 still separates methods instead of collapsing into all-success or all-failure behavior.</p>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="results-takeaway-card">
+                  <h3>Shared environment grounding</h3>
+                  <p>The same data product drives both quantitative runs and scene-backed deployment, so media and tables describe the same disturbances and task semantics.</p>
+                </article>
+              </div>
+              <div class="column is-4">
+                <article class="results-takeaway-card">
+                  <h3>Different failure modes matter</h3>
+                  <p>Navigation, inspection, and pollution-response tasks stress different weaknesses, which is why the suite is useful for judging model quality instead of one-off task tuning.</p>
+                </article>
+              </div>
             </div>
 
             <div class="table-panel">

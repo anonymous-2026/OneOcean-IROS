@@ -195,6 +195,33 @@
   margin-top: 2rem;
 }
 
+.results-takeaway-grid {
+  margin-top: 1rem;
+}
+
+.results-takeaway-card {
+  height: 100%;
+  padding: 1rem 1.05rem;
+  border-radius: 14px;
+  background: #f8fbff;
+  border: 1px solid #d8e5f3;
+}
+
+.results-takeaway-card h3 {
+  margin-bottom: 0.55rem;
+  color: var(--oneocean-blue);
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+
+.results-takeaway-card p {
+  margin-bottom: 0;
+  font-size: 0.9rem;
+  line-height: 1.58;
+  text-align: justify;
+  text-justify: inter-word;
+}
+
 .table-caption {
   color: var(--text-secondary);
   margin-bottom: 0.85rem;
