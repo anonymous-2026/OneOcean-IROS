@@ -22,15 +22,19 @@
         <span>OneOcean</span>
       </a>
       <nav class="platform-nav" aria-label="Platform navigation">
-        <a href="../">Project Page</a>
-        <a href="#overview">Overview</a>
-        <a href="#explorer">Explorer</a>
-        <a href="#resolution">Resolution</a>
-        <a href="#pipeline">Pipeline</a>
-        <a href="#backends">Backends</a>
-        <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener">Online Demo</a>
-        <a href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener">Code</a>
-        <a href="../oneocean_paper.pdf" target="_blank" rel="noopener">Paper</a>
+        <div class="platform-nav-group platform-nav-group-local">
+          <a href="#overview">Overview</a>
+          <a href="#explorer">Explorer</a>
+          <a href="#resolution">Resolution</a>
+          <a href="#pipeline">Pipeline</a>
+          <a href="#backends">Backends</a>
+        </div>
+        <div class="platform-nav-group platform-nav-group-global">
+          <a href="../">Project Page</a>
+          <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener">Online Demo</a>
+          <a href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener">Code</a>
+          <a href="../oneocean_paper.pdf" target="_blank" rel="noopener">Paper</a>
+        </div>
       </nav>
     </div>
   </header>
@@ -39,37 +43,19 @@
     <section class="platform-hero">
       <div class="platform-shell platform-hero-inner">
         <p class="platform-kicker">Platform Guide</p>
-        <h1>Inspect the environment product, ship a lightweight ocean preview, and drive both benchmark backends from the same data grounding.</h1>
+        <h1>Inspect and reuse the OneOcean environment product.</h1>
         <p class="platform-hero-copy">
-          OneOcean is organized around a reusable ocean-environment product rather than a simulator-only artifact. The same grounded data contract supports the quantitative benchmark, the scene-backed underwater backend, and a static GitHub Pages explorer.
+          OneOcean is organized around a reusable ocean-environment product. The same grounded data contract supports the quantitative benchmark, the scene-backed underwater backend, and a static browser demo that can be hosted on GitHub Pages.
         </p>
         <div class="platform-hero-actions">
           <a class="platform-button platform-button-primary" href="#explorer">Open explorer</a>
           <a class="platform-button" href="#pipeline">View pipeline</a>
           <a class="platform-button" href="#backends">View backends</a>
         </div>
-        <div class="platform-metric-row">
-          <article class="platform-metric">
-            <span class="metric-label">Canonical asset</span>
-            <span class="metric-value"><code>combined_environment.nc</code></span>
-          </article>
-          <article class="platform-metric">
-            <span class="metric-label">Schema</span>
-            <span class="metric-value">time × depth × lat × lon</span>
-          </article>
-          <article class="platform-metric">
-            <span class="metric-label">Execution targets</span>
-            <span class="metric-value"><code>benchmark_core</code> and <code>oceangym_benchmark</code></span>
-          </article>
-          <article class="platform-metric">
-            <span class="metric-label">Browser preview</span>
-            <span class="metric-value">static public-data subset</span>
-          </article>
-        </div>
       </div>
     </section>
 
-    <section id="overview" class="platform-section">
+    <section id="overview" class="platform-section platform-section-overlap">
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Overview</p>
@@ -101,11 +87,19 @@
     <section id="explorer" class="platform-section platform-section-tinted">
       <div class="platform-shell">
         <div class="platform-section-head">
-          <p class="platform-kicker">Interactive Subset</p>
-          <h2>GitHub Pages ocean explorer</h2>
+          <p class="platform-kicker">Data Subset Example</p>
+          <h2>Small browser-safe sample from the released dataset</h2>
           <p>
-            This browser module is intentionally static. It uses a downsampled subset exported from the public release so visitors can filter time, depth, and geographic range in the browser without downloading the full NetCDF environment file.
+            This is not the full OneOcean dataset. The browser demo only uses a very small static subset sampled from the public release so GitHub Pages can load it quickly while still showing time, depth, and spatial filtering plus multiple ocean variables.
           </p>
+        </div>
+
+        <div class="platform-mini-strip">
+          <div class="platform-mini-card"><span class="platform-mini-k">Source</span><span class="platform-mini-v">public release</span></div>
+          <div class="platform-mini-card"><span class="platform-mini-k">Sampled dates</span><span class="platform-mini-v">13</span></div>
+          <div class="platform-mini-card"><span class="platform-mini-k">Sampled depths</span><span class="platform-mini-v">4</span></div>
+          <div class="platform-mini-card"><span class="platform-mini-k">Grid</span><span class="platform-mini-v">21 × 21</span></div>
+          <div class="platform-mini-card"><span class="platform-mini-k">Variables</span><span class="platform-mini-v">currents, temperature, salinity, SSH, bathymetry</span></div>
         </div>
 
         <div class="platform-explorer-card">
@@ -114,17 +108,17 @@
               <div class="platform-panel-head">
                 <div>
                   <h3>Controls</h3>
-                  <p class="platform-subnote">Filter the web subset before rendering the current field.</p>
+                  <p class="platform-subnote">Filter the subset before rendering the field view.</p>
                 </div>
                 <button id="explorerReset" class="platform-button platform-button-small" type="button">Reset</button>
               </div>
               <div class="platform-control-grid">
                 <label class="platform-field">
-                  <span>Time window start</span>
+                  <span>Time start</span>
                   <select id="timeStart" class="platform-select"></select>
                 </label>
                 <label class="platform-field">
-                  <span>Time window end</span>
+                  <span>Time end</span>
                   <select id="timeEnd" class="platform-select"></select>
                 </label>
                 <label class="platform-field">
@@ -132,12 +126,15 @@
                   <select id="depthSelect" class="platform-select"></select>
                 </label>
                 <label class="platform-field">
-                  <span>Surface shading</span>
+                  <span>Displayed variable</span>
                   <select id="fieldMode" class="platform-select">
                     <option value="speed">Current speed</option>
-                    <option value="bathymetry">Bathymetry</option>
+                    <option value="temperature">Temperature</option>
+                    <option value="salinity">Salinity</option>
+                    <option value="ssh">Sea surface height</option>
                     <option value="u">Zonal current (u)</option>
                     <option value="v">Meridional current (v)</option>
+                    <option value="bathymetry">Bathymetry</option>
                   </select>
                 </label>
                 <label class="platform-field">
@@ -176,7 +173,7 @@
               </div>
 
               <p class="platform-note">
-                The explorer averages currents over the selected time window and clips the field to the selected geographic range. The full environment product stays offline.
+                The explorer averages the selected time interval and clips the view to the selected geographic range. This is a visualization sample, not the full research artifact.
               </p>
             </section>
 
@@ -184,7 +181,7 @@
               <div class="platform-panel-head platform-panel-head-stack">
                 <div>
                   <h3>Subset summary</h3>
-                  <p class="platform-subnote">Quick diagnostics for the visible subset.</p>
+                  <p class="platform-subnote">Quick diagnostics for the current view.</p>
                 </div>
               </div>
               <div class="platform-stat-grid" id="explorerStats">
@@ -205,26 +202,26 @@
                   <span class="platform-stat-v">—</span>
                 </div>
               </div>
-              <p id="explorerNarrative" class="platform-note">Loading web subset…</p>
+              <p id="explorerNarrative" class="platform-note">Loading subset…</p>
             </aside>
           </div>
 
           <section class="platform-panel platform-map-panel">
             <div class="platform-panel-head platform-panel-head-map">
               <div>
-                <h3>Current field preview</h3>
+                <h3>Subset field map</h3>
                 <p id="explorerLegendText" class="platform-subnote">
-                  Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.
+                  Satellite-style background rendering of the selected subset, with bathymetry-informed shading and optional current vectors.
                 </p>
               </div>
               <div class="platform-legend">
                 <span class="legend-item"><span class="legend-swatch legend-land"></span>land / masked</span>
-                <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span></span>
+                <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed tint</span></span>
                 <span class="legend-item"><span class="legend-swatch legend-current"></span>current vectors</span>
               </div>
             </div>
-            <div class="platform-map-shell">
-              <canvas id="flowFieldCanvas" width="960" height="580" aria-label="Current field explorer canvas"></canvas>
+            <div class="platform-map-shell platform-map-shell-large">
+              <canvas id="flowFieldCanvas" width="1280" height="720" aria-label="Ocean subset field map"></canvas>
             </div>
             <div id="explorerMeta" class="platform-meta-row"></div>
           </section>
@@ -259,18 +256,18 @@
                   <tr><td>Main local example</td><td>30 daily steps</td><td>26 levels</td><td>240 × 240</td><td>~0.00418°</td></tr>
                   <tr><td>Public variant</td><td>357 daily steps</td><td>26 levels</td><td>41 × 41</td><td>0.25°</td></tr>
                   <tr><td>Tiny variant</td><td>357 daily steps</td><td>1 level</td><td>62 × 101</td><td>~0.01°</td></tr>
-                  <tr><td>Web explorer subset</td><td>13 sampled dates</td><td>4 sampled levels</td><td>21 × 21</td><td>0.50°</td></tr>
+                  <tr><td>Web subset</td><td>13 sampled dates</td><td>4 sampled levels</td><td>21 × 21</td><td>0.50°</td></tr>
                 </tbody>
               </table>
             </div>
-            <p class="platform-subnote">The explorer subset is intentionally downsampled for fast browser delivery and does not represent the maximum data fidelity supported by the pipeline.</p>
+            <p class="platform-subnote">The browser subset is intentionally downsampled for fast static deployment and does not represent the maximum supported data fidelity.</p>
           </article>
           <article class="platform-card">
             <h3>How to interpret precision</h3>
             <ul class="platform-list">
               <li><strong>Space:</strong> current examples span from ~0.25° broad coverage down to ~0.00418° for tighter local crops.</li>
               <li><strong>Time:</strong> artifacts range from a focused 30-day crop to a year-scale public release with 357 daily steps.</li>
-              <li><strong>Depth:</strong> current generated products span from a single shallow layer in tiny to 26 levels in the broader examples.</li>
+              <li><strong>Depth:</strong> current generated products span from a single shallow layer in tiny to 26 levels in broader examples.</li>
               <li><strong>Pipeline:</strong> these are concrete released footprints, not hard limits. Different region, time, and depth requests can be regenerated when upstream coverage exists.</li>
             </ul>
           </article>
