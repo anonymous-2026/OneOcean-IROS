@@ -57,8 +57,8 @@
     <section class="hero platform-hero">
       <div class="hero-body">
         <div class="container is-max-widescreen">
-          <div class="columns is-vcentered is-variable is-6">
-            <div class="column is-7">
+          <div class="columns is-centered">
+            <div class="column is-11 has-text-centered">
               <p class="platform-eyebrow">Platform guide</p>
               <h1 class="title platform-title">Build, inspect, and reuse the OneOcean environment product</h1>
               <p class="platform-subtitle">
@@ -78,30 +78,26 @@
                   <span>Pipeline</span>
                 </a>
               </div>
-            </div>
-            <div class="column is-5">
-              <div class="platform-hero-panel">
-                <div class="platform-chip-grid">
-                  <div class="platform-chip">
-                    <span class="platform-chip-k">Canonical asset</span>
-                    <span class="platform-chip-v"><code>combined_environment.nc</code></span>
-                  </div>
-                  <div class="platform-chip">
-                    <span class="platform-chip-k">Schema</span>
-                    <span class="platform-chip-v">time × depth × lat × lon</span>
-                  </div>
-                  <div class="platform-chip">
-                    <span class="platform-chip-k">Backends</span>
-                    <span class="platform-chip-v"><code>benchmark_core</code> + <code>oceangym_benchmark</code></span>
-                  </div>
-                  <div class="platform-chip">
-                    <span class="platform-chip-k">Web preview</span>
-                    <span class="platform-chip-v">Static subset for GitHub Pages</span>
-                  </div>
+              <div class="platform-hero-metrics">
+                <div class="platform-hero-metric">
+                  <span class="platform-hero-metric-k">Canonical asset</span>
+                  <span class="platform-hero-metric-v"><code>combined_environment.nc</code></span>
                 </div>
-                <div class="platform-hero-note">
-                  <strong>Recommended workflow:</strong> use the released dataset to get started, regenerate custom subsets only when you need a new region, time range, or depth configuration.
+                <div class="platform-hero-metric">
+                  <span class="platform-hero-metric-k">Schema</span>
+                  <span class="platform-hero-metric-v">time × depth × lat × lon</span>
                 </div>
+                <div class="platform-hero-metric">
+                  <span class="platform-hero-metric-k">Backends</span>
+                  <span class="platform-hero-metric-v"><code>benchmark_core</code> + <code>oceangym_benchmark</code></span>
+                </div>
+                <div class="platform-hero-metric">
+                  <span class="platform-hero-metric-k">Web preview</span>
+                  <span class="platform-hero-metric-v">Static subset for GitHub Pages</span>
+                </div>
+              </div>
+              <div class="platform-hero-note">
+                <strong>Recommended workflow:</strong> use the released dataset to get started, regenerate custom subsets only when you need a new region, time range, or depth configuration.
               </div>
             </div>
           </div>
@@ -446,25 +442,22 @@ python -m benchmark_core.cli.run \
           </p>
         </div>
 
-        <div class="platform-diagram">
+        <div class="platform-pipeline-grid">
           <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-water"></i> CMEMS / GOPAF fields</div>
-            <div class="platform-diagram-sub">salinity, temperature, currents, SSH, optional tides</div>
+            <div class="platform-diagram-title"><i class="fas fa-water"></i> Ocean fields</div>
+            <div class="platform-diagram-sub">CMEMS / GOPAF variables such as salinity, temperature, currents, SSH, and optional tides.</div>
           </div>
-          <div class="platform-diagram-arrow">→</div>
           <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-mountain"></i> GEBCO GeoTIFF</div>
-            <div class="platform-diagram-sub">bathymetry crop and terrain mask</div>
+            <div class="platform-diagram-title"><i class="fas fa-mountain"></i> Bathymetry</div>
+            <div class="platform-diagram-sub">GEBCO GeoTIFF crops provide terrain structure and masking for the chosen region.</div>
           </div>
-          <div class="platform-diagram-arrow">→</div>
           <div class="platform-diagram-box platform-diagram-box-strong">
-            <div class="platform-diagram-title"><i class="fas fa-cogs"></i> <code>Data_pipeline/run_pipeline.py</code></div>
-            <div class="platform-diagram-sub">align · interpolate · merge · compress</div>
+            <div class="platform-diagram-title"><i class="fas fa-cogs"></i> Merge and align</div>
+            <div class="platform-diagram-sub"><code>Data_pipeline/run_pipeline.py</code> aligns, interpolates, merges, and compresses the environment product.</div>
           </div>
-          <div class="platform-diagram-arrow">→</div>
           <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-file-alt"></i> <code>combined_environment.nc</code></div>
-            <div class="platform-diagram-sub">canonical environment product</div>
+            <div class="platform-diagram-title"><i class="fas fa-layer-group"></i> Export and reuse</div>
+            <div class="platform-diagram-sub">Produce <code>combined_environment.nc</code>, variants, drift exports, and scene-facing assets for downstream tasks.</div>
           </div>
         </div>
 
