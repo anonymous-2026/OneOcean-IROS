@@ -196,13 +196,17 @@
 }
 
 .results-evidence-note {
-  margin-bottom: 0.8rem;
+  margin-bottom: 1.25rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;
   border: 1px solid #d8e5f3;
   background: #f8fbff;
   color: var(--text-secondary);
   line-height: 1.55;
+}
+
+.results-evidence-note + .title {
+  margin-top: 0.25rem;
 }
 
 .results-evidence-note strong {

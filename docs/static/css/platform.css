@@ -281,11 +281,12 @@ body code {
 }
 
 .platform-section-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  gap: 1.5rem;
-  align-items: end;
-  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin-bottom: 1.55rem;
+  max-width: 72rem;
 }
 
 .platform-section-copy {
@@ -295,6 +296,7 @@ body code {
 .platform-lead {
   color: var(--platform-text-soft);
   font-size: 1.04rem;
+  max-width: 64rem;
 }
 
 .platform-card {
@@ -502,6 +504,10 @@ body code {
   background: linear-gradient(135deg, #d8e8f5, #7ea5c8);
 }
 
+.legend-speed {
+  background: linear-gradient(135deg, #0f3150, #11d0ff 60%, #ffe082);
+}
+
 .legend-current {
   background: linear-gradient(135deg, #1fe4ff, #ffe082);
 }
@@ -512,6 +518,7 @@ body code {
   overflow: hidden;
   background: linear-gradient(180deg, #c8e5f7 0%, #6f92b3 45%, #14314b 100%);
   border: 1px solid rgba(12, 44, 73, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 #flowFieldCanvas {
@@ -732,7 +739,6 @@ body code {
 }
 
 @media (max-width: 1023px) {
-  .platform-section-head,
   .platform-diagram,
   .platform-compare-grid {
     grid-template-columns: 1fr;

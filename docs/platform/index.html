@@ -155,7 +155,7 @@
             <h2 class="title is-3">GitHub Pages ocean explorer</h2>
           </div>
           <p class="platform-lead platform-section-copy">
-            This explorer is fully static and deployable on GitHub Pages. It ships a compact public-data subset with downsampled bathymetry and currents so visitors can filter time, depth, and geographic range directly in the browser.
+            This explorer is fully static and deployable on GitHub Pages. It ships a compact public-data subset with downsampled bathymetry and currents so visitors can filter time, depth, geographic range, and display mode directly in the browser.
           </p>
         </div>
 
@@ -178,6 +178,22 @@
               <div class="platform-control-group">
                 <label class="platform-label" for="depthSelect">Depth level</label>
                 <select id="depthSelect" class="platform-select"></select>
+              </div>
+              <div class="platform-control-group">
+                <label class="platform-label" for="fieldMode">Surface shading</label>
+                <select id="fieldMode" class="platform-select">
+                  <option value="speed">Current speed</option>
+                  <option value="bathymetry">Bathymetry</option>
+                  <option value="u">Zonal current (u)</option>
+                  <option value="v">Meridional current (v)</option>
+                </select>
+              </div>
+              <div class="platform-control-group">
+                <label class="platform-label" for="vectorOverlay">Vector overlay</label>
+                <select id="vectorOverlay" class="platform-select">
+                  <option value="on">Show vectors</option>
+                  <option value="off">Hide vectors</option>
+                </select>
               </div>
 
               <div class="platform-control-group">
@@ -215,11 +231,11 @@
               <h3 class="title is-5">Subset summary</h3>
               <div class="platform-stat-grid" id="explorerStats">
                 <div class="platform-stat">
-                  <span class="platform-stat-k">Mean speed</span>
+                  <span id="statPrimaryLabel" class="platform-stat-k">Mean speed</span>
                   <span class="platform-stat-v">—</span>
                 </div>
                 <div class="platform-stat">
-                  <span class="platform-stat-k">Peak speed</span>
+                  <span id="statSecondaryLabel" class="platform-stat-k">Peak speed</span>
                   <span class="platform-stat-v">—</span>
                 </div>
                 <div class="platform-stat">
@@ -240,11 +256,11 @@
               <div class="platform-map-head">
                 <div>
                   <h3 class="title is-5">Current field preview</h3>
-                  <p class="platform-footnote">Bathymetry shading from the public release. Arrows visualize the average current vector inside the selected subset.</p>
+                  <p id="explorerLegendText" class="platform-footnote">Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.</p>
                 </div>
                 <div class="platform-map-legend">
                   <span class="legend-swatch legend-land"></span><span>land / masked</span>
-                  <span class="legend-swatch legend-bathy"></span><span>bathymetry</span>
+                  <span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span>
                   <span class="legend-swatch legend-current"></span><span>current vectors</span>
                 </div>
               </div>
