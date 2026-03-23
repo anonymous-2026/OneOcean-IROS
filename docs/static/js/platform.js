@@ -76,10 +76,6 @@ function mixColor(c0, c1, t) {
   return c0.map((value, idx) => Math.round(lerp(value, c1[idx], t)));
 }
 
-function toCss(rgb, alpha = 1) {
-  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
-}
-
 function formatNumber(value, digits = 2) {
   return Number(value).toFixed(digits);
 }
@@ -98,7 +94,7 @@ function setupCanvas(canvas) {
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(width * 0.58));
+  const height = Math.max(1, Math.round(width * 0.53));
   canvas.width = Math.round(width * ratio);
   canvas.height = Math.round(height * ratio);
   canvas.style.height = `${height}px`;
@@ -446,18 +442,24 @@ function drawMapBackground(ctx, width, height, summary, fieldMode, range, margin
   let offset = 0;
 
   for (let py = 0; py < plotHeight; py += 1) {
+    const ny = py / Math.max(1, plotHeight - 1);
     const gy = ((plotHeight - py - 1) / Math.max(1, plotHeight - 1)) * Math.max(1, rows - 1);
     for (let px = 0; px < plotWidth; px += 1) {
+      const nx = px / Math.max(1, plotWidth - 1);
       const gx = (px / Math.max(1, plotWidth - 1)) * Math.max(1, cols - 1);
       const cell = bilinearCell(summary, gx, gy);
       const base = colorForBathymetry(cell.elevation, cell.land);
       const overlay = fieldTint(fieldMode, valueForField(cell, fieldMode), range);
-      const blendRatio = fieldMode === 'bathymetry' ? 0.22 : fieldMode === 'ssh' ? 0.44 : 0.36;
+      const blendRatio = fieldMode === 'bathymetry' ? 0.18 : fieldMode === 'ssh' ? 0.48 : 0.42;
       let rgb = mixColor(base, overlay, blendRatio);
 
-      const ridge = clamp((Math.abs(cell.elevation) % 220) / 220, 0, 1);
-      const light = cell.land ? 0.05 : 0.08 * (1 - clamp(Math.abs(cell.elevation) / 5200, 0, 1));
-      rgb = rgb.map((v) => Math.round(clamp(v + ridge * 8 + light * 255, 0, 255)));
+      const ridge = clamp((Math.abs(cell.elevation) % 240) / 240, 0, 1);
+      const latitudeLight = 0.18 * (1 - ny);
+      const swell = 0.04 * Math.sin(nx * 14.0 + ny * 6.0) + 0.03 * Math.cos(nx * 20.0 - ny * 9.0);
+      const currentTexture = 0.025 * Math.sin(nx * 28.0 + cell.meanU * 12.0) + 0.02 * Math.cos(ny * 24.0 + cell.meanV * 12.0);
+      const relief = cell.land ? 0.1 : 0.08 * (1 - clamp(Math.abs(cell.elevation) / 5200, 0, 1));
+      const light = latitudeLight + swell + currentTexture + relief;
+      rgb = rgb.map((v) => Math.round(clamp(v + ridge * 7 + light * 255, 0, 255)));
 
       image.data[offset] = rgb[0];
       image.data[offset + 1] = rgb[1];
@@ -468,25 +470,6 @@ function drawMapBackground(ctx, width, height, summary, fieldMode, range, margin
   }
 
   ctx.putImageData(image, margins.left, margins.top);
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= 4; x += 1) {
-    const px = margins.left + (plotWidth * x) / 4;
-    ctx.beginPath();
-    ctx.moveTo(px, margins.top);
-    ctx.lineTo(px, height - margins.bottom);
-    ctx.stroke();
-  }
-  for (let y = 0; y <= 3; y += 1) {
-    const py = margins.top + (plotHeight * y) / 3;
-    ctx.beginPath();
-    ctx.moveTo(margins.left, py);
-    ctx.lineTo(width - margins.right, py);
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 function drawAxes(ctx, width, height, subset, margins) {
@@ -504,19 +487,22 @@ function drawAxes(ctx, width, height, subset, margins) {
   const lonLabels = [subset.lonMin, (subset.lonMin + subset.lonMax) / 2, subset.lonMax];
   const latLabels = [subset.latMin, (subset.latMin + subset.latMax) / 2, subset.latMax];
 
+  ctx.textAlign = 'center';
   lonLabels.forEach((value, idx) => {
     const x = left + (plotWidth * idx) / (lonLabels.length - 1);
-    ctx.fillText(`${formatNumber(value)}°`, x - 20, height - bottom + 24);
+    ctx.fillText(`${formatNumber(value)}°`, x, height - bottom + 24);
   });
 
+  ctx.textAlign = 'right';
   latLabels.forEach((value, idx) => {
     const y = height - bottom - (plotHeight * idx) / (latLabels.length - 1);
-    ctx.fillText(`${formatNumber(value)}°`, 20, y + (idx === latLabels.length - 1 ? -8 : 4));
+    ctx.fillText(`${formatNumber(value)}°`, left - 10, y + (idx === latLabels.length - 1 ? -8 : 4));
   });
 
+  ctx.textAlign = 'center';
   ctx.fillText('longitude', width / 2 - 30, height - 8);
   ctx.save();
-  ctx.translate(12, height / 2 + 10);
+  ctx.translate(18, height / 2 + 10);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('latitude', 0, 0);
   ctx.restore();
@@ -642,7 +628,7 @@ function renderExplorer() {
   const showVectors = controls.vectorOverlay.value === 'on';
 
   const { ctx, width, height } = setupCanvas(controls.canvas);
-  const margins = { left: 86, right: 34, top: 30, bottom: 58 };
+  const margins = { left: 72, right: 20, top: 16, bottom: 52 };
   const fieldRange = rangeForField(summary, fieldMode);
 
   ctx.clearRect(0, 0, width, height);
