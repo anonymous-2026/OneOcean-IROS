@@ -252,8 +252,8 @@
           <div class="column is-five-sixths">
             <h2 class="title is-3 has-text-left">What the results show</h2>
             <div class="content">
-              <p class="has-text-justified">The paper claim is not “some red numbers are larger.” The point of the benchmark is that it stays <strong>non-saturated</strong>, reuses the same environment grounding across backends, and exposes complementary failure modes in navigation, coordination, and pollution-response tasks. The tables below support those benchmark-design claims.</p>
-              <p class="has-text-justified"><strong>Heuristic</strong> denotes the deterministic task-specific controller used as the strongest built-in baseline. <strong>BC</strong> is a behavior-cloning policy trained to imitate heuristic actions. <strong>LLM planners</strong> produce high-level decisions such as assignments or waypoint choices, while deterministic low-level control and safety checks remain unchanged. <strong>Red entries</strong> are a quick visual cue for the numerically best value in a column; they are not themselves the paper’s contribution.</p>
+              <p class="has-text-justified">The paper claim is not “a few highlighted numbers are larger.” The point of the benchmark is that it stays <strong>non-saturated</strong>, reuses the same environment grounding across backends, and exposes complementary failure modes in navigation, coordination, and pollution-response tasks. The tables below are organized as evidence for those benchmark-design claims.</p>
+              <p class="has-text-justified"><strong>Heuristic</strong> denotes the deterministic task-specific controller used as the strongest built-in baseline. <strong>BC</strong> is a behavior-cloning policy trained to imitate heuristic actions. <strong>LLM planners</strong> produce high-level decisions such as assignments or waypoint choices, while deterministic low-level control and safety checks remain unchanged. <strong>Highlighted entries</strong> indicate column-best values only and should be read together with the claim summaries and captions, not as a standalone leaderboard.</p>
             </div>
 
             <div class="columns is-multiline is-variable is-4 results-takeaway-grid">
@@ -278,8 +278,11 @@
             </div>
 
             <div class="table-panel">
+              <div class="results-evidence-note">
+                <strong>Evidence 1.</strong> The suite stays discriminative instead of saturating: Tier 2 remains usable for routine comparison, while Tier 3 still exposes meaningful gaps in robustness, coordination, and completion quality.
+              </div>
               <h3 class="title is-4 has-text-left">Core benchmark headline results</h3>
-              <p class="table-caption">Macro results over the 10-task suite plus Tier 3 key-task metrics. Higher is better for success, coverage, inspection score, and cleanup rate; lower is better for energy and collision ratio.</p>
+              <p class="table-caption">Macro results over the 10-task suite plus Tier 3 key-task metrics. Higher is better for success, coverage, inspection score, and cleanup rate; lower is better for energy and collision ratio. Highlighting marks the best number in a column, but the benchmark-level takeaway is the spread between Tier 2 and Tier 3.</p>
               <div class="table-scroll">
                 <table class="paper-table compact">
                   <thead>
@@ -351,8 +354,11 @@
             </div>
 
             <div class="table-panel">
+              <div class="results-evidence-note">
+                <strong>Evidence 2.</strong> Planning-sensitive tasks remain informative under shared low-level control: once the disturbance model and safety checks are fixed, high-level decisions still materially change cleanup, inspection, and efficiency outcomes.
+              </div>
               <h3 class="title is-4 has-text-left">Planning-sensitive tasks: heuristic, BC, and LLM planners</h3>
-              <p class="table-caption">Tier 2 planning suite under stronger currents. The LLM planner provides high-level assignments or waypoint choices; low-level control and safety checks remain deterministic.</p>
+              <p class="table-caption">Tier 2 planning suite under stronger currents. The LLM planner provides high-level assignments or waypoint choices; low-level control and safety checks remain deterministic. Read this table as method separation under a shared execution contract, not as an isolated ranking board.</p>
               <div class="table-scroll">
                 <table class="paper-table">
                   <thead>

@@ -527,6 +527,44 @@ body code {
   gap: 0.55rem;
 }
 
+.platform-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--platform-border);
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.platform-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+}
+
+.platform-table thead {
+  background: #0d3b66;
+}
+
+.platform-table th,
+.platform-table td {
+  padding: 0.8rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #e5eef7;
+  font-size: 0.92rem;
+}
+
+.platform-table th {
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.platform-table td {
+  color: var(--platform-text-soft);
+}
+
+.platform-table tbody tr:nth-child(even) {
+  background: rgba(13, 94, 168, 0.04);
+}
+
 .platform-meta-pill {
   display: inline-flex;
   align-items: center;

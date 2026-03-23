@@ -324,6 +324,98 @@ python -m benchmark_core.cli.run \
       </div>
     </section>
 
+    <section id="resolution" class="section platform-section">
+      <div class="container is-max-widescreen">
+        <div class="platform-section-head">
+          <div>
+            <p class="platform-eyebrow">Resolution</p>
+            <h2 class="title is-3">What resolution the data product supports</h2>
+          </div>
+          <p class="platform-lead platform-section-copy">
+            There is no single fixed “OneOcean resolution.” The pipeline accepts custom region, time, and depth requests; the effective precision is bounded by the chosen crop, variant export, and the upstream ocean-data sources used to assemble the environment product.
+          </p>
+        </div>
+
+        <div class="columns is-multiline is-variable is-5">
+          <div class="column is-6">
+            <article class="platform-card">
+              <h3 class="title is-5">Current shipped/generated footprints</h3>
+              <div class="platform-table-scroll">
+                <table class="platform-table">
+                  <thead>
+                    <tr>
+                      <th>Artifact</th>
+                      <th>Time</th>
+                      <th>Depth</th>
+                      <th>Lat × Lon</th>
+                      <th>Horizontal step</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Main local environment example</td>
+                      <td>30 daily steps</td>
+                      <td>26 levels</td>
+                      <td>240 × 240</td>
+                      <td>~0.00418°</td>
+                    </tr>
+                    <tr>
+                      <td>Public release variant</td>
+                      <td>357 daily steps</td>
+                      <td>26 levels</td>
+                      <td>41 × 41</td>
+                      <td>0.25°</td>
+                    </tr>
+                    <tr>
+                      <td>Tiny release variant</td>
+                      <td>357 daily steps</td>
+                      <td>1 level</td>
+                      <td>62 × 101</td>
+                      <td>~0.01°</td>
+                    </tr>
+                    <tr>
+                      <td>GitHub Pages explorer subset</td>
+                      <td>13 sampled dates</td>
+                      <td>4 sampled levels</td>
+                      <td>21 × 21</td>
+                      <td>0.50° after web downsampling</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="platform-footnote">
+                The explorer subset is derived from the public release and intentionally downsampled for browser delivery; it is a visualization asset, not the maximum-fidelity dataset.
+              </p>
+            </article>
+          </div>
+
+          <div class="column is-6">
+            <article class="platform-card">
+              <h3 class="title is-5">How to interpret “supported precision”</h3>
+              <div class="platform-mini-grid">
+                <div class="platform-mini">
+                  <span class="platform-mini-k">Space</span>
+                  <span class="platform-mini-v">Current examples span from ~0.25° public coverage down to ~0.00418° for a tighter local crop used to build the main environment product.</span>
+                </div>
+                <div class="platform-mini">
+                  <span class="platform-mini-k">Time</span>
+                  <span class="platform-mini-v">Current released/generated artifacts range from 30 daily steps for a focused month-long crop to 357 daily steps for broader yearly coverage.</span>
+                </div>
+                <div class="platform-mini">
+                  <span class="platform-mini-k">Depth</span>
+                  <span class="platform-mini-v">Current artifacts span from a single shallow layer in the tiny variant to 26 depth levels in the main/public products.</span>
+                </div>
+                <div class="platform-mini">
+                  <span class="platform-mini-k">Pipeline</span>
+                  <span class="platform-mini-v">The pipeline is not hard-coded to these exact footprints: you can regenerate different region, time, and depth configurations as long as the upstream data are available.</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="pipeline" class="section platform-section platform-section-alt">
       <div class="container is-max-widescreen">
         <div class="platform-section-head">
