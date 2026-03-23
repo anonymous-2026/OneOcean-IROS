@@ -4,231 +4,189 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OneOcean | Platform</title>
-  <meta name="description" content="OneOcean platform: customize the ocean-environment dataset, export variants, preview a deployable current-field subset, and run marine-robotics tasks across quantitative and scene-backed backends.">
+  <meta name="description" content="OneOcean platform guide: inspect the environment product, preview a deployable ocean-data subset, and run the benchmark across quantitative and scene-backed backends.">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#0d3b66">
-
   <link rel="icon" type="image/png" href="../static/logo.png">
   <link rel="apple-touch-icon" href="../static/logo.png">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-  <link rel="stylesheet" href="../static/css/bulma.min.css">
-  <link rel="stylesheet" href="../static/css/platform.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../static/css/platform.css">
 </head>
 <body>
-  <nav class="navbar platform-navbar" role="navigation" aria-label="main navigation">
-    <div class="container is-max-widescreen">
-      <div class="navbar-brand">
-        <a class="navbar-item platform-brand" href="../" aria-label="Back to OneOcean project page">
-          <img src="../static/logo.png" alt="OneOcean logo" class="platform-logo">
-          <span class="platform-brand-text">OneOcean</span>
-        </a>
-        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="platformNavbarMenu">
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-        </a>
-      </div>
-
-      <div id="platformNavbarMenu" class="navbar-menu">
-        <div class="navbar-end">
-          <a class="navbar-item" href="../">Project Page</a>
-          <a class="navbar-item" href="#explorer">Explorer</a>
-          <a class="navbar-item" href="#quickstart">Quickstart</a>
-          <a class="navbar-item" href="#backends">Backends</a>
-          <a class="navbar-item" href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener">Online Demo</a>
-          <a class="navbar-item" href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener">Code</a>
-          <a class="navbar-item" href="../oneocean_paper.pdf" target="_blank" rel="noopener">Paper</a>
-          <div class="navbar-item has-dropdown is-hoverable">
-            <a class="navbar-link">Dataset</a>
-            <div class="navbar-dropdown is-right">
-              <a class="navbar-item" href="https://zenodo.org/records/18837700" target="_blank" rel="noopener">Zenodo</a>
-              <a class="navbar-item" href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset" target="_blank" rel="noopener">Hugging Face</a>
-            </div>
-          </div>
-        </div>
-      </div>
+  <header class="platform-topbar">
+    <div class="platform-shell platform-topbar-inner">
+      <a class="platform-brand" href="../" aria-label="Back to OneOcean project page">
+        <img src="../static/logo.png" alt="OneOcean logo" class="platform-logo">
+        <span>OneOcean</span>
+      </a>
+      <nav class="platform-nav" aria-label="Platform navigation">
+        <a href="../">Project Page</a>
+        <a href="#overview">Overview</a>
+        <a href="#explorer">Explorer</a>
+        <a href="#resolution">Resolution</a>
+        <a href="#pipeline">Pipeline</a>
+        <a href="#backends">Backends</a>
+        <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS" target="_blank" rel="noopener">Online Demo</a>
+        <a href="https://github.com/anonymous-2026/OneOcean-IROS" target="_blank" rel="noopener">Code</a>
+        <a href="../oneocean_paper.pdf" target="_blank" rel="noopener">Paper</a>
+      </nav>
     </div>
-  </nav>
+  </header>
 
-  <main id="main-content">
-    <section class="hero platform-hero">
-      <div class="hero-body">
-        <div class="container is-max-widescreen">
-          <div class="columns is-centered">
-            <div class="column is-11 has-text-centered">
-              <p class="platform-eyebrow">Platform guide</p>
-              <h1 class="title platform-title">Build, inspect, and reuse the OneOcean environment product</h1>
-              <p class="platform-subtitle">
-                This page is the operational view of the paper: start from the released dataset, regenerate custom spatiotemporal subsets, preview a GitHub-Pages-safe current-field subset, and drive both the core benchmark backend and the external underwater-scene backend from the same grounded ocean data.
-              </p>
-              <div class="platform-cta-row">
-                <a class="button platform-button platform-button-primary" href="#explorer">
-                  <span class="icon"><i class="fas fa-compass"></i></span>
-                  <span>Open explorer</span>
-                </a>
-                <a class="button platform-button platform-button-secondary" href="#quickstart">
-                  <span class="icon"><i class="fas fa-rocket"></i></span>
-                  <span>Quickstart</span>
-                </a>
-                <a class="button platform-button platform-button-secondary" href="#pipeline">
-                  <span class="icon"><i class="fas fa-project-diagram"></i></span>
-                  <span>Pipeline</span>
-                </a>
-              </div>
-              <div class="platform-hero-metrics">
-                <div class="platform-hero-metric">
-                  <span class="platform-hero-metric-k">Canonical asset</span>
-                  <span class="platform-hero-metric-v"><code>combined_environment.nc</code></span>
-                </div>
-                <div class="platform-hero-metric">
-                  <span class="platform-hero-metric-k">Schema</span>
-                  <span class="platform-hero-metric-v">time × depth × lat × lon</span>
-                </div>
-                <div class="platform-hero-metric">
-                  <span class="platform-hero-metric-k">Backends</span>
-                  <span class="platform-hero-metric-v"><code>benchmark_core</code> + <code>oceangym_benchmark</code></span>
-                </div>
-                <div class="platform-hero-metric">
-                  <span class="platform-hero-metric-k">Web preview</span>
-                  <span class="platform-hero-metric-v">Static subset for GitHub Pages</span>
-                </div>
-              </div>
-              <div class="platform-hero-note">
-                <strong>Recommended workflow:</strong> use the released dataset to get started, regenerate custom subsets only when you need a new region, time range, or depth configuration.
-              </div>
-            </div>
-          </div>
+  <main class="platform-page">
+    <section class="platform-hero">
+      <div class="platform-shell platform-hero-inner">
+        <p class="platform-kicker">Platform Guide</p>
+        <h1>Inspect the environment product, ship a lightweight ocean preview, and drive both benchmark backends from the same data grounding.</h1>
+        <p class="platform-hero-copy">
+          OneOcean is organized around a reusable ocean-environment product rather than a simulator-only artifact. The same grounded data contract supports the quantitative benchmark, the scene-backed underwater backend, and a static GitHub Pages explorer.
+        </p>
+        <div class="platform-hero-actions">
+          <a class="platform-button platform-button-primary" href="#explorer">Open explorer</a>
+          <a class="platform-button" href="#pipeline">View pipeline</a>
+          <a class="platform-button" href="#backends">View backends</a>
+        </div>
+        <div class="platform-metric-row">
+          <article class="platform-metric">
+            <span class="metric-label">Canonical asset</span>
+            <span class="metric-value"><code>combined_environment.nc</code></span>
+          </article>
+          <article class="platform-metric">
+            <span class="metric-label">Schema</span>
+            <span class="metric-value">time × depth × lat × lon</span>
+          </article>
+          <article class="platform-metric">
+            <span class="metric-label">Execution targets</span>
+            <span class="metric-value"><code>benchmark_core</code> and <code>oceangym_benchmark</code></span>
+          </article>
+          <article class="platform-metric">
+            <span class="metric-label">Browser preview</span>
+            <span class="metric-value">static public-data subset</span>
+          </article>
         </div>
       </div>
     </section>
 
-    <section class="section platform-section">
-      <div class="container is-max-widescreen">
+    <section id="overview" class="platform-section">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Workflow</p>
-            <h2 class="title is-3">How this page maps to the paper workflow</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            OneOcean is not just a simulator. The core artifact is an ocean-environment product that can be regenerated, subsetted, exported, and reused across multiple task backends with shared provenance.
+          <p class="platform-kicker">Overview</p>
+          <h2>How this page maps to the paper workflow</h2>
+          <p>
+            The paper evaluates methods on tasks grounded in a shared ocean data product. This page keeps that structure explicit: acquire or rebuild the environment product, export the right footprint, then reuse that footprint across quantitative and scene-backed evaluation.
           </p>
         </div>
-
-        <div class="columns is-multiline is-variable is-5">
-          <div class="column is-4">
-            <article class="platform-card platform-step-card">
-              <div class="platform-step-index">01</div>
-              <h3 class="title is-5">Acquire grounded data</h3>
-              <p>Start from the released dataset or regenerate it from CMEMS currents plus GEBCO bathymetry inside <code>Data_pipeline/</code>.</p>
-            </article>
-          </div>
-          <div class="column is-4">
-            <article class="platform-card platform-step-card">
-              <div class="platform-step-index">02</div>
-              <h3 class="title is-5">Export the right footprint</h3>
-              <p>Use tiny / scene / public variants for debugging, scene deployment, public release, or a lightweight web preview.</p>
-            </article>
-          </div>
-          <div class="column is-4">
-            <article class="platform-card platform-step-card">
-              <div class="platform-step-index">03</div>
-              <h3 class="title is-5">Drive tasks consistently</h3>
-              <p>Reuse the same environment grounding in the quantitative benchmark and the underwater-scene backend so metrics, media, and provenance stay aligned.</p>
-            </article>
-          </div>
+        <div class="platform-card-grid platform-card-grid-3">
+          <article class="platform-card">
+            <span class="platform-step">01</span>
+            <h3>Acquire or regenerate</h3>
+            <p>Start from the released dataset or rebuild a custom crop from Copernicus Marine currents and GEBCO bathymetry.</p>
+          </article>
+          <article class="platform-card">
+            <span class="platform-step">02</span>
+            <h3>Export the right footprint</h3>
+            <p>Choose tiny, scene, or public variants depending on whether the target is debugging, browser preview, task deployment, or public release.</p>
+          </article>
+          <article class="platform-card">
+            <span class="platform-step">03</span>
+            <h3>Drive tasks consistently</h3>
+            <p>Use the same grounded currents in both backends so tables, videos, screenshots, and manifests all trace back to one environment contract.</p>
+          </article>
         </div>
       </div>
     </section>
 
-    <section id="explorer" class="section platform-section platform-section-alt">
-      <div class="container is-max-widescreen">
+    <section id="explorer" class="platform-section platform-section-tinted">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Interactive subset</p>
-            <h2 class="title is-3">GitHub Pages ocean explorer</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            This explorer is fully static and deployable on GitHub Pages. It ships a compact public-data subset with downsampled bathymetry and currents so visitors can filter time, depth, geographic range, and display mode directly in the browser.
+          <p class="platform-kicker">Interactive Subset</p>
+          <h2>GitHub Pages ocean explorer</h2>
+          <p>
+            This browser module is intentionally static. It uses a downsampled subset exported from the public release so visitors can filter time, depth, and geographic range in the browser without downloading the full NetCDF environment file.
           </p>
         </div>
 
-        <div class="platform-card platform-explorer-card">
-          <div class="platform-explorer-toolbar">
-            <div class="platform-controls-pane">
-              <div class="platform-controls-head">
-                <h3 class="title is-5">Controls</h3>
-                <button id="explorerReset" class="button platform-button platform-button-ghost is-small" type="button">Reset</button>
+        <div class="platform-explorer-card">
+          <div class="platform-explorer-top">
+            <section class="platform-panel">
+              <div class="platform-panel-head">
+                <div>
+                  <h3>Controls</h3>
+                  <p class="platform-subnote">Filter the web subset before rendering the current field.</p>
+                </div>
+                <button id="explorerReset" class="platform-button platform-button-small" type="button">Reset</button>
               </div>
-
-              <div class="platform-controls-grid">
-                <div class="platform-control-group">
-                  <label class="platform-label" for="timeStart">Time window start</label>
+              <div class="platform-control-grid">
+                <label class="platform-field">
+                  <span>Time window start</span>
                   <select id="timeStart" class="platform-select"></select>
-                </div>
-                <div class="platform-control-group">
-                  <label class="platform-label" for="timeEnd">Time window end</label>
+                </label>
+                <label class="platform-field">
+                  <span>Time window end</span>
                   <select id="timeEnd" class="platform-select"></select>
-                </div>
-                <div class="platform-control-group">
-                  <label class="platform-label" for="depthSelect">Depth level</label>
+                </label>
+                <label class="platform-field">
+                  <span>Depth level</span>
                   <select id="depthSelect" class="platform-select"></select>
-                </div>
-                <div class="platform-control-group">
-                  <label class="platform-label" for="fieldMode">Surface shading</label>
+                </label>
+                <label class="platform-field">
+                  <span>Surface shading</span>
                   <select id="fieldMode" class="platform-select">
                     <option value="speed">Current speed</option>
                     <option value="bathymetry">Bathymetry</option>
                     <option value="u">Zonal current (u)</option>
                     <option value="v">Meridional current (v)</option>
                   </select>
-                </div>
-                <div class="platform-control-group">
-                  <label class="platform-label" for="vectorOverlay">Vector overlay</label>
+                </label>
+                <label class="platform-field">
+                  <span>Vector overlay</span>
                   <select id="vectorOverlay" class="platform-select">
                     <option value="on">Show vectors</option>
                     <option value="off">Hide vectors</option>
                   </select>
-                </div>
+                </label>
               </div>
 
               <div class="platform-range-grid">
-                <div class="platform-control-group">
+                <div class="platform-range-field">
                   <div class="platform-range-head">
-                    <label class="platform-label" for="latMin">Latitude range</label>
+                    <span>Latitude range</span>
                     <span id="latRangeValue" class="platform-range-value"></span>
                   </div>
                   <input id="latMin" class="platform-range" type="range" step="0.25">
                   <input id="latMax" class="platform-range" type="range" step="0.25">
                 </div>
-
-                <div class="platform-control-group">
+                <div class="platform-range-field">
                   <div class="platform-range-head">
-                    <label class="platform-label" for="lonMin">Longitude range</label>
+                    <span>Longitude range</span>
                     <span id="lonRangeValue" class="platform-range-value"></span>
                   </div>
                   <input id="lonMin" class="platform-range" type="range" step="0.25">
                   <input id="lonMax" class="platform-range" type="range" step="0.25">
                 </div>
-
-                <div class="platform-control-group">
+                <div class="platform-range-field">
                   <div class="platform-range-head">
-                    <label class="platform-label" for="vectorDensity">Vector density</label>
+                    <span>Vector density</span>
                     <span id="vectorDensityValue" class="platform-range-value"></span>
                   </div>
                   <input id="vectorDensity" class="platform-range" type="range" min="1" max="4" step="1" value="2">
                 </div>
               </div>
 
-              <div class="platform-inline-note">
-                The current field is averaged over the selected time window and clipped to the selected geographic box. The browser never downloads the full NetCDF artifact.
-              </div>
-            </div>
+              <p class="platform-note">
+                The explorer averages currents over the selected time window and clips the field to the selected geographic range. The full environment product stays offline.
+              </p>
+            </section>
 
-            <div class="platform-summary-pane">
-              <h3 class="title is-5">Subset summary</h3>
+            <aside class="platform-panel">
+              <div class="platform-panel-head platform-panel-head-stack">
+                <div>
+                  <h3>Subset summary</h3>
+                  <p class="platform-subnote">Quick diagnostics for the visible subset.</p>
+                </div>
+              </div>
               <div class="platform-stat-grid" id="explorerStats">
                 <div class="platform-stat">
                   <span id="statPrimaryLabel" class="platform-stat-k">Mean speed</span>
@@ -247,291 +205,142 @@
                   <span class="platform-stat-v">—</span>
                 </div>
               </div>
-              <p id="explorerNarrative" class="platform-footnote platform-stats-note">Loading web subset…</p>
-            </div>
+              <p id="explorerNarrative" class="platform-note">Loading web subset…</p>
+            </aside>
           </div>
 
-          <div class="platform-map-card">
-            <div class="platform-map-head">
+          <section class="platform-panel platform-map-panel">
+            <div class="platform-panel-head platform-panel-head-map">
               <div>
-                <h3 class="title is-5">Current field preview</h3>
-                <p id="explorerLegendText" class="platform-footnote">Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.</p>
+                <h3>Current field preview</h3>
+                <p id="explorerLegendText" class="platform-subnote">
+                  Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.
+                </p>
               </div>
-              <div class="platform-map-legend">
-                <span class="legend-swatch legend-land"></span><span>land / masked</span>
-                <span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span>
-                <span class="legend-swatch legend-current"></span><span>current vectors</span>
+              <div class="platform-legend">
+                <span class="legend-item"><span class="legend-swatch legend-land"></span>land / masked</span>
+                <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span></span>
+                <span class="legend-item"><span class="legend-swatch legend-current"></span>current vectors</span>
               </div>
             </div>
             <div class="platform-map-shell">
               <canvas id="flowFieldCanvas" width="960" height="580" aria-label="Current field explorer canvas"></canvas>
             </div>
-            <div id="explorerMeta" class="platform-map-meta"></div>
-          </div>
+            <div id="explorerMeta" class="platform-meta-row"></div>
+          </section>
         </div>
       </div>
     </section>
 
-    <section id="quickstart" class="section platform-section">
-      <div class="container is-max-widescreen">
+    <section id="resolution" class="platform-section">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Quickstart</p>
-            <h2 class="title is-3">From dataset artifact to first run</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            All commands below assume the repository root as the working directory. Start from the released dataset unless you need a new region or time window.
+          <p class="platform-kicker">Resolution</p>
+          <h2>Supported data footprints</h2>
+          <p>
+            OneOcean does not expose one fixed precision. Effective resolution depends on the chosen region, the requested time span, the depth levels, and which export variant is generated from the pipeline.
           </p>
         </div>
-
-        <div class="columns is-multiline is-variable is-5">
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-download"></i></span>
-                Use the released dataset
-              </h3>
-              <p>
-                Download a prebuilt <code>combined_environment.nc</code> and place it under <code>Data_pipeline/Data/Combined/</code> to avoid refetching upstream data.
-              </p>
-              <div class="platform-links">
-                <a href="https://zenodo.org/records/18837700" target="_blank" rel="noopener">Zenodo</a>
-                <span class="dot">·</span>
-                <a href="https://huggingface.co/datasets/anonymous321123/OneOcean_Environment_Dataset" target="_blank" rel="noopener">Hugging Face</a>
-              </div>
-            </article>
-          </div>
-
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-play"></i></span>
-                Run a first benchmark task
-              </h3>
-              <p>
-                Export a drift cache from the dataset, then run a canonical navigation task in the fast quantitative backend.
-              </p>
-              <pre class="platform-pre"><code>python -m benchmark_core.cli.export_drift_cache \
-  --nc Data_pipeline/Data/Combined/combined_environment.nc \
-  --u-var utotal --v-var vtotal --time-index 0 --depth-index 0 \
-  --out runs/benchmark_core/_cache/drift_t0_d0.npz
-
-python -m benchmark_core.cli.run \
-  --drift-npz runs/benchmark_core/_cache/drift_t0_d0.npz \
-  --task go_to_goal_current \
-  --controller go_to_goal \
-  --difficulty medium \
-  --n-agents 1 \
-  --episodes 10 \
-  --seed 0 \
-  --out-dir runs/benchmark_core/quickstart</code></pre>
-              <p class="platform-footnote">
-                If tides are not present in the dataset, replace <code>utotal/vtotal</code> with <code>uo/vo</code>.
-              </p>
-            </article>
-          </div>
-        </div>
-
-        <div class="platform-callout">
-          <p><strong>Folder contract:</strong> the pipeline writes into <code>Data_pipeline/Data/</code>, and the released dataset mirrors that layout so the benchmark and scene-backed tools can run without path changes.</p>
+        <div class="platform-card-grid platform-card-grid-2">
+          <article class="platform-card">
+            <h3>Current released or generated examples</h3>
+            <div class="platform-table-wrap">
+              <table class="platform-table">
+                <thead>
+                  <tr>
+                    <th>Artifact</th>
+                    <th>Time</th>
+                    <th>Depth</th>
+                    <th>Lat × Lon</th>
+                    <th>Step</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Main local example</td><td>30 daily steps</td><td>26 levels</td><td>240 × 240</td><td>~0.00418°</td></tr>
+                  <tr><td>Public variant</td><td>357 daily steps</td><td>26 levels</td><td>41 × 41</td><td>0.25°</td></tr>
+                  <tr><td>Tiny variant</td><td>357 daily steps</td><td>1 level</td><td>62 × 101</td><td>~0.01°</td></tr>
+                  <tr><td>Web explorer subset</td><td>13 sampled dates</td><td>4 sampled levels</td><td>21 × 21</td><td>0.50°</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="platform-subnote">The explorer subset is intentionally downsampled for fast browser delivery and does not represent the maximum data fidelity supported by the pipeline.</p>
+          </article>
+          <article class="platform-card">
+            <h3>How to interpret precision</h3>
+            <ul class="platform-list">
+              <li><strong>Space:</strong> current examples span from ~0.25° broad coverage down to ~0.00418° for tighter local crops.</li>
+              <li><strong>Time:</strong> artifacts range from a focused 30-day crop to a year-scale public release with 357 daily steps.</li>
+              <li><strong>Depth:</strong> current generated products span from a single shallow layer in tiny to 26 levels in the broader examples.</li>
+              <li><strong>Pipeline:</strong> these are concrete released footprints, not hard limits. Different region, time, and depth requests can be regenerated when upstream coverage exists.</li>
+            </ul>
+          </article>
         </div>
       </div>
     </section>
 
-    <section id="resolution" class="section platform-section">
-      <div class="container is-max-widescreen">
+    <section id="pipeline" class="platform-section platform-section-tinted">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Resolution</p>
-            <h2 class="title is-3">What resolution the data product supports</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            There is no single fixed “OneOcean resolution.” The pipeline accepts custom region, time, and depth requests; the effective precision is bounded by the chosen crop, variant export, and the upstream ocean-data sources used to assemble the environment product.
+          <p class="platform-kicker">Pipeline</p>
+          <h2>Regenerate or tailor the environment product</h2>
+          <p>
+            The pipeline aligns currents, bathymetry, optional tides, and masks into one canonical environment file, then exports variants for benchmarking, scene deployment, and lightweight web delivery.
           </p>
         </div>
 
-        <div class="columns is-multiline is-variable is-5">
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">Current shipped/generated footprints</h3>
-              <div class="platform-table-scroll">
-                <table class="platform-table">
-                  <thead>
-                    <tr>
-                      <th>Artifact</th>
-                      <th>Time</th>
-                      <th>Depth</th>
-                      <th>Lat × Lon</th>
-                      <th>Horizontal step</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>Main local environment example</td>
-                      <td>30 daily steps</td>
-                      <td>26 levels</td>
-                      <td>240 × 240</td>
-                      <td>~0.00418°</td>
-                    </tr>
-                    <tr>
-                      <td>Public release variant</td>
-                      <td>357 daily steps</td>
-                      <td>26 levels</td>
-                      <td>41 × 41</td>
-                      <td>0.25°</td>
-                    </tr>
-                    <tr>
-                      <td>Tiny release variant</td>
-                      <td>357 daily steps</td>
-                      <td>1 level</td>
-                      <td>62 × 101</td>
-                      <td>~0.01°</td>
-                    </tr>
-                    <tr>
-                      <td>GitHub Pages explorer subset</td>
-                      <td>13 sampled dates</td>
-                      <td>4 sampled levels</td>
-                      <td>21 × 21</td>
-                      <td>0.50° after web downsampling</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p class="platform-footnote">
-                The explorer subset is derived from the public release and intentionally downsampled for browser delivery; it is a visualization asset, not the maximum-fidelity dataset.
-              </p>
-            </article>
-          </div>
-
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">How to interpret “supported precision”</h3>
-              <div class="platform-mini-grid">
-                <div class="platform-mini">
-                  <span class="platform-mini-k">Space</span>
-                  <span class="platform-mini-v">Current examples span from ~0.25° public coverage down to ~0.00418° for a tighter local crop used to build the main environment product.</span>
-                </div>
-                <div class="platform-mini">
-                  <span class="platform-mini-k">Time</span>
-                  <span class="platform-mini-v">Current released/generated artifacts range from 30 daily steps for a focused month-long crop to 357 daily steps for broader yearly coverage.</span>
-                </div>
-                <div class="platform-mini">
-                  <span class="platform-mini-k">Depth</span>
-                  <span class="platform-mini-v">Current artifacts span from a single shallow layer in the tiny variant to 26 depth levels in the main/public products.</span>
-                </div>
-                <div class="platform-mini">
-                  <span class="platform-mini-k">Pipeline</span>
-                  <span class="platform-mini-v">The pipeline is not hard-coded to these exact footprints: you can regenerate different region, time, and depth configurations as long as the upstream data are available.</span>
-                </div>
-              </div>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="pipeline" class="section platform-section platform-section-alt">
-      <div class="container is-max-widescreen">
-        <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Pipeline</p>
-            <h2 class="title is-3">Regenerate or tailor the environment product</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            The pipeline aligns bathymetry, currents, optional tides, and masks into a canonical environment file, then exports smaller variants for debugging, scenes, the web, and broader public release.
-          </p>
+        <div class="platform-card-grid platform-card-grid-4">
+          <article class="platform-card"><span class="platform-step">01</span><h3>Ocean fields</h3><p>Copernicus Marine variables such as currents, SSH, salinity, and temperature.</p></article>
+          <article class="platform-card"><span class="platform-step">02</span><h3>Bathymetry</h3><p>GEBCO GeoTIFF crops provide terrain structure and masking for the requested region.</p></article>
+          <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p><code>Data_pipeline/run_pipeline.py</code> interpolates, aligns, merges, and writes the environment product.</p></article>
+          <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce <code>combined_environment.nc</code>, variants, drift exports, and scene-facing task assets.</p></article>
         </div>
 
-        <div class="platform-pipeline-grid">
-          <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-water"></i> Ocean fields</div>
-            <div class="platform-diagram-sub">CMEMS / GOPAF variables such as salinity, temperature, currents, SSH, and optional tides.</div>
-          </div>
-          <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-mountain"></i> Bathymetry</div>
-            <div class="platform-diagram-sub">GEBCO GeoTIFF crops provide terrain structure and masking for the chosen region.</div>
-          </div>
-          <div class="platform-diagram-box platform-diagram-box-strong">
-            <div class="platform-diagram-title"><i class="fas fa-cogs"></i> Merge and align</div>
-            <div class="platform-diagram-sub"><code>Data_pipeline/run_pipeline.py</code> aligns, interpolates, merges, and compresses the environment product.</div>
-          </div>
-          <div class="platform-diagram-box">
-            <div class="platform-diagram-title"><i class="fas fa-layer-group"></i> Export and reuse</div>
-            <div class="platform-diagram-sub">Produce <code>combined_environment.nc</code>, variants, drift exports, and scene-facing assets for downstream tasks.</div>
-          </div>
-        </div>
-
-        <div class="columns is-multiline is-variable is-5">
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-sliders-h"></i></span>
-                Customize region, time, and depth
-              </h3>
-              <p>
-                Use geographic bounds plus start/end timestamps to define the slice. Depth can be expressed as a range or an explicit list.
-              </p>
-              <pre class="platform-pre"><code>python Data_pipeline/run_pipeline.py --overwrite \
+        <div class="platform-card-grid platform-card-grid-2 platform-detail-grid">
+          <article class="platform-card">
+            <h3>Customize region, time, and depth</h3>
+            <p>Use geographic bounds plus start/end timestamps to define the slice. Depth can be passed as a range or as an explicit list.</p>
+            <pre class="platform-code"><code>python Data_pipeline/run_pipeline.py --overwrite \
   --lat-min 32.0 --lat-max 33.0 --lon-min -66.5 --lon-max -65.5 \
   --start 2024-06-01T00:00:00 --end 2024-06-30T00:00:00 \
   --depths "0,10,20,50,100,200" \
   --include-tides</code></pre>
-              <p class="platform-footnote">
-                If tides are surface-only, the pipeline applies a configurable decay profile along depth. This is an engineering approximation, not a full 3D tidal model.
-              </p>
-            </article>
-          </div>
-
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-layer-group"></i></span>
-                Export variants for different uses
-              </h3>
-              <p>
-                Variants are written under <code>Data_pipeline/Data/Combined/variants/</code>. Each one carries a <code>variant.json</code> manifest so downstream media and tables stay auditable.
-              </p>
-              <pre class="platform-pre"><code>python Data_pipeline/generate_variants.py \
+            <p class="platform-subnote">If tides are surface-only, the pipeline applies a configurable depth-decay profile. This is an engineering approximation, not a full 3D tidal model.</p>
+          </article>
+          <article class="platform-card">
+            <h3>Export variants for different uses</h3>
+            <p>Variants are written under <code>Data_pipeline/Data/Combined/variants/</code> with a consistent schema and manifest.</p>
+            <pre class="platform-code"><code>python Data_pipeline/generate_variants.py \
   --which tiny,scene,public \
   --overwrite</code></pre>
-              <div class="platform-mini-grid">
-                <div class="platform-mini"><span class="platform-mini-k">tiny</span><span class="platform-mini-v">fast iteration, smoke checks, small web exports</span></div>
-                <div class="platform-mini"><span class="platform-mini-k">scene</span><span class="platform-mini-v">main scene and task grounding footprint</span></div>
-                <div class="platform-mini"><span class="platform-mini-k">public</span><span class="platform-mini-v">broader temporal coverage with lighter spatial resolution</span></div>
-              </div>
-            </article>
-          </div>
+            <ul class="platform-list platform-list-tight">
+              <li><strong>tiny:</strong> fast debugging and small browser-safe exports</li>
+              <li><strong>scene:</strong> main scene grounding footprint for task deployment</li>
+              <li><strong>public:</strong> broader temporal coverage with lighter spatial resolution</li>
+            </ul>
+          </article>
         </div>
 
-        <div class="platform-callout">
-          <p><strong>Credentials:</strong> CMEMS access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF tiles must already exist under <code>Data_pipeline/Data/</code>.</p>
+        <div class="platform-banner">
+          <strong>Credentials:</strong> Copernicus Marine access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF files must already exist under <code>Data_pipeline/Data/</code>.
         </div>
       </div>
     </section>
 
-    <section id="backends" class="section platform-section">
-      <div class="container is-max-widescreen">
+    <section id="backends" class="platform-section">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Execution</p>
-            <h2 class="title is-3">Two backend modes, one environment grounding</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            The benchmark core backend is optimized for scale and paper tables. The OceanGym scene backend is optimized for underwater scene semantics, media, and qualitative deployment evidence. Both consume currents derived from the same environment product.
+          <p class="platform-kicker">Execution</p>
+          <h2>Two backend modes, one environment grounding</h2>
+          <p>
+            The core benchmark backend is optimized for scale, tables, and reproducible run manifests. The OceanGym scene backend is optimized for underwater scene semantics, screenshots, GIFs, and qualitative task evidence. Both consume currents derived from the same environment product.
           </p>
         </div>
 
-        <div class="columns is-variable is-5 is-multiline">
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
-                Core benchmark backend (<code>benchmark_core</code>)
-              </h3>
-              <p>
-                Export a drift cache (<code>.npz</code>) from <code>combined_environment.nc</code>, then run task matrices with shared metrics and reproducible manifests.
-              </p>
-              <pre class="platform-pre"><code>python -m benchmark_core.cli.export_drift_cache \
+        <div class="platform-card-grid platform-card-grid-2">
+          <article class="platform-card">
+            <h3>Core benchmark backend (<code>benchmark_core</code>)</h3>
+            <p>Export a drift cache from <code>combined_environment.nc</code>, then run task matrices with shared metrics and reproducible manifests.</p>
+            <pre class="platform-code"><code>python -m benchmark_core.cli.export_drift_cache \
   --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
   --u-var utotal --v-var vtotal --time-index 0 --depth-index 0 \
   --out runs/benchmark_core/_cache/drift_scene_t0_d0.npz
@@ -543,19 +352,11 @@ python -m benchmark_core.cli.run_matrix \
   --constraint-mode hard \
   --bathy-mode hard \
   --validate</code></pre>
-            </article>
-          </div>
-
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-city"></i></span>
-                OceanGym scene backend (<code>tracks/oceangym_benchmark</code>)
-              </h3>
-              <p>
-                Export a time series of data-grounded currents and inject them into the scene task suite for qualitative deployment evidence and task videos.
-              </p>
-              <pre class="platform-pre"><code>python tracks/oceangym_benchmark/export_current_series_npz.py \
+          </article>
+          <article class="platform-card">
+            <h3>OceanGym scene backend (<code>tracks/oceangym_benchmark</code>)</h3>
+            <p>Export a time series of grounded currents and inject them into the scene task suite for qualitative deployment evidence and task videos.</p>
+            <pre class="platform-code"><code>python tracks/oceangym_benchmark/export_current_series_npz.py \
   --dataset Data_pipeline/Data/Combined/combined_environment.nc \
   --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
 
@@ -563,75 +364,46 @@ python tracks/oceangym_benchmark/run_task_suite.py \
   --preset ocean_worlds_camera \
   --episodes 3 \
   --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz</code></pre>
-              <p class="platform-footnote">
-                This backend assumes a working HoloOcean client plus packaged worlds installed locally.
-              </p>
-            </article>
-          </div>
+            <p class="platform-subnote">This backend assumes a working HoloOcean client plus packaged worlds installed locally.</p>
+          </article>
         </div>
 
-        <div class="platform-compare-grid">
-          <div class="platform-compare-card">
-            <div class="platform-compare-k">Use <code>benchmark_core</code> when</div>
-            <div class="platform-compare-v">you need broad method comparisons, reproducible tables, difficulty sweeps, and large run matrices.</div>
-          </div>
-          <div class="platform-compare-card">
-            <div class="platform-compare-k">Use <code>oceangym_benchmark</code> when</div>
-            <div class="platform-compare-v">you need scene semantics, underwater screenshots, GIFs, MP4s, and qualitative validation inside packaged environments.</div>
-          </div>
+        <div class="platform-card-grid platform-card-grid-2 platform-detail-grid">
+          <article class="platform-card platform-card-accent">
+            <h3>Use <code>benchmark_core</code> when</h3>
+            <p>you need broad method comparisons, reproducible tables, difficulty sweeps, and larger run matrices.</p>
+          </article>
+          <article class="platform-card platform-card-accent">
+            <h3>Use <code>oceangym_benchmark</code> when</h3>
+            <p>you need scene semantics, screenshots, GIFs, MP4s, and qualitative validation inside packaged environments.</p>
+          </article>
         </div>
       </div>
     </section>
 
-    <section id="publish" class="section platform-section platform-section-alt">
-      <div class="container is-max-widescreen">
+    <section class="platform-section platform-section-tinted">
+      <div class="platform-shell">
         <div class="platform-section-head">
-          <div>
-            <p class="platform-eyebrow">Reuse</p>
-            <h2 class="title is-3">Publish artifacts people can actually rerun</h2>
-          </div>
-          <p class="platform-lead platform-section-copy">
-            The safest public bundle is a small set of aligned artifacts: the dataset footprint, its variant manifest, the run manifests, and representative media generated from scene-backed tasks.
+          <p class="platform-kicker">Reuse</p>
+          <h2>Publish artifacts others can rerun</h2>
+          <p>
+            The practical public bundle is small and explicit: a released environment footprint, its manifest, representative run manifests, and the media proving that the scene backend really consumed the same grounding.
           </p>
         </div>
-
-        <div class="columns is-variable is-5 is-multiline">
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-box"></i></span>
-                Recommended artifact bundle
-              </h3>
-              <ul class="platform-ul">
-                <li><code>combined_environment.nc</code> or the exported variant used for the study</li>
-                <li><code>variants/&lt;tier&gt;/variant.json</code> with the exact footprint</li>
-                <li><code>runs/benchmark_core/**/results_manifest.json</code></li>
-                <li><code>runs/oceangym_benchmark/**/media/</code> screenshots, GIFs, and MP4s</li>
-              </ul>
-            </article>
-          </div>
-
-          <div class="column is-6">
-            <article class="platform-card">
-              <h3 class="title is-5">
-                <span class="icon"><i class="fas fa-globe"></i></span>
-                Deploy the website on GitHub Pages
-              </h3>
-              <p>
-                This repository serves the public website from <code>docs/</code>. The explorer on this page uses a compact static subset, so it remains deployable without server-side infrastructure.
-              </p>
-              <p class="platform-footnote">
-                If the page looks stale after pushing, wait for Pages to rebuild and then hard-refresh the browser cache.
-              </p>
-            </article>
-          </div>
-        </div>
-
-        <div class="platform-footer">
-          <a href="../" class="button platform-button platform-button-secondary">
-            <span class="icon"><i class="fas fa-arrow-left"></i></span>
-            <span>Back to project page</span>
-          </a>
+        <div class="platform-card-grid platform-card-grid-2">
+          <article class="platform-card">
+            <h3>Recommended artifact bundle</h3>
+            <ul class="platform-list">
+              <li><code>combined_environment.nc</code> or the specific exported variant used in the study</li>
+              <li><code>variants/&lt;tier&gt;/variant.json</code> with the exact footprint</li>
+              <li><code>runs/benchmark_core/**/results_manifest.json</code></li>
+              <li><code>runs/oceangym_benchmark/**/media/</code> screenshots, GIFs, and MP4s</li>
+            </ul>
+          </article>
+          <article class="platform-card">
+            <h3>GitHub Pages deployment</h3>
+            <p>The website is served directly from <code>docs/</code>. The explorer remains GitHub-Pages-compatible because it uses a pre-exported static subset instead of server-side filtering.</p>
+          </article>
         </div>
       </div>
     </section>
