@@ -199,8 +199,8 @@
   margin-bottom: 1.25rem;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  border: 1px solid #d8e5f3;
-  background: #f8fbff;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
   color: var(--text-secondary);
   line-height: 1.55;
 }
@@ -300,9 +300,9 @@
 }
 
 .paper-table .best {
-  color: var(--oneocean-blue-deep);
-  font-weight: 800;
-  background: rgba(13, 59, 102, 0.08);
+  color: inherit;
+  font-weight: inherit;
+  background: transparent;
 }
 
 .result-figures {

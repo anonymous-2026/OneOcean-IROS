@@ -344,6 +344,38 @@ body code {
   margin-bottom: 1rem;
 }
 
+.platform-explorer-card {
+  padding: 1.15rem;
+}
+
+.platform-explorer-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.95fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.platform-controls-pane,
+.platform-summary-pane {
+  border-radius: 16px;
+  border: 1px solid var(--platform-border);
+  background: var(--platform-surface);
+  padding: 1rem;
+}
+
+.platform-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.platform-range-grid {
+  margin-top: 0.95rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.95rem;
+}
+
 .platform-controls-head,
 .platform-map-head {
   display: flex;
@@ -740,7 +772,10 @@ body code {
 
 @media (max-width: 1023px) {
   .platform-diagram,
-  .platform-compare-grid {
+  .platform-compare-grid,
+  .platform-explorer-toolbar,
+  .platform-controls-grid,
+  .platform-range-grid {
     grid-template-columns: 1fr;
   }
 

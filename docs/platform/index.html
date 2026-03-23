@@ -159,67 +159,71 @@
           </p>
         </div>
 
-        <div class="columns is-variable is-5">
-          <div class="column is-4">
-            <div class="platform-card platform-controls-card">
+        <div class="platform-card platform-explorer-card">
+          <div class="platform-explorer-toolbar">
+            <div class="platform-controls-pane">
               <div class="platform-controls-head">
                 <h3 class="title is-5">Controls</h3>
                 <button id="explorerReset" class="button platform-button platform-button-ghost is-small" type="button">Reset</button>
               </div>
 
-              <div class="platform-control-group">
-                <label class="platform-label" for="timeStart">Time window start</label>
-                <select id="timeStart" class="platform-select"></select>
-              </div>
-              <div class="platform-control-group">
-                <label class="platform-label" for="timeEnd">Time window end</label>
-                <select id="timeEnd" class="platform-select"></select>
-              </div>
-              <div class="platform-control-group">
-                <label class="platform-label" for="depthSelect">Depth level</label>
-                <select id="depthSelect" class="platform-select"></select>
-              </div>
-              <div class="platform-control-group">
-                <label class="platform-label" for="fieldMode">Surface shading</label>
-                <select id="fieldMode" class="platform-select">
-                  <option value="speed">Current speed</option>
-                  <option value="bathymetry">Bathymetry</option>
-                  <option value="u">Zonal current (u)</option>
-                  <option value="v">Meridional current (v)</option>
-                </select>
-              </div>
-              <div class="platform-control-group">
-                <label class="platform-label" for="vectorOverlay">Vector overlay</label>
-                <select id="vectorOverlay" class="platform-select">
-                  <option value="on">Show vectors</option>
-                  <option value="off">Hide vectors</option>
-                </select>
+              <div class="platform-controls-grid">
+                <div class="platform-control-group">
+                  <label class="platform-label" for="timeStart">Time window start</label>
+                  <select id="timeStart" class="platform-select"></select>
+                </div>
+                <div class="platform-control-group">
+                  <label class="platform-label" for="timeEnd">Time window end</label>
+                  <select id="timeEnd" class="platform-select"></select>
+                </div>
+                <div class="platform-control-group">
+                  <label class="platform-label" for="depthSelect">Depth level</label>
+                  <select id="depthSelect" class="platform-select"></select>
+                </div>
+                <div class="platform-control-group">
+                  <label class="platform-label" for="fieldMode">Surface shading</label>
+                  <select id="fieldMode" class="platform-select">
+                    <option value="speed">Current speed</option>
+                    <option value="bathymetry">Bathymetry</option>
+                    <option value="u">Zonal current (u)</option>
+                    <option value="v">Meridional current (v)</option>
+                  </select>
+                </div>
+                <div class="platform-control-group">
+                  <label class="platform-label" for="vectorOverlay">Vector overlay</label>
+                  <select id="vectorOverlay" class="platform-select">
+                    <option value="on">Show vectors</option>
+                    <option value="off">Hide vectors</option>
+                  </select>
+                </div>
               </div>
 
-              <div class="platform-control-group">
-                <div class="platform-range-head">
-                  <label class="platform-label" for="latMin">Latitude range</label>
-                  <span id="latRangeValue" class="platform-range-value"></span>
+              <div class="platform-range-grid">
+                <div class="platform-control-group">
+                  <div class="platform-range-head">
+                    <label class="platform-label" for="latMin">Latitude range</label>
+                    <span id="latRangeValue" class="platform-range-value"></span>
+                  </div>
+                  <input id="latMin" class="platform-range" type="range" step="0.25">
+                  <input id="latMax" class="platform-range" type="range" step="0.25">
                 </div>
-                <input id="latMin" class="platform-range" type="range" step="0.25">
-                <input id="latMax" class="platform-range" type="range" step="0.25">
-              </div>
 
-              <div class="platform-control-group">
-                <div class="platform-range-head">
-                  <label class="platform-label" for="lonMin">Longitude range</label>
-                  <span id="lonRangeValue" class="platform-range-value"></span>
+                <div class="platform-control-group">
+                  <div class="platform-range-head">
+                    <label class="platform-label" for="lonMin">Longitude range</label>
+                    <span id="lonRangeValue" class="platform-range-value"></span>
+                  </div>
+                  <input id="lonMin" class="platform-range" type="range" step="0.25">
+                  <input id="lonMax" class="platform-range" type="range" step="0.25">
                 </div>
-                <input id="lonMin" class="platform-range" type="range" step="0.25">
-                <input id="lonMax" class="platform-range" type="range" step="0.25">
-              </div>
 
-              <div class="platform-control-group">
-                <div class="platform-range-head">
-                  <label class="platform-label" for="vectorDensity">Vector density</label>
-                  <span id="vectorDensityValue" class="platform-range-value"></span>
+                <div class="platform-control-group">
+                  <div class="platform-range-head">
+                    <label class="platform-label" for="vectorDensity">Vector density</label>
+                    <span id="vectorDensityValue" class="platform-range-value"></span>
+                  </div>
+                  <input id="vectorDensity" class="platform-range" type="range" min="1" max="4" step="1" value="2">
                 </div>
-                <input id="vectorDensity" class="platform-range" type="range" min="1" max="4" step="1" value="2">
               </div>
 
               <div class="platform-inline-note">
@@ -227,7 +231,7 @@
               </div>
             </div>
 
-            <div class="platform-card platform-stats-card">
+            <div class="platform-summary-pane">
               <h3 class="title is-5">Subset summary</h3>
               <div class="platform-stat-grid" id="explorerStats">
                 <div class="platform-stat">
@@ -251,24 +255,22 @@
             </div>
           </div>
 
-          <div class="column is-8">
-            <div class="platform-card platform-map-card">
-              <div class="platform-map-head">
-                <div>
-                  <h3 class="title is-5">Current field preview</h3>
-                  <p id="explorerLegendText" class="platform-footnote">Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.</p>
-                </div>
-                <div class="platform-map-legend">
-                  <span class="legend-swatch legend-land"></span><span>land / masked</span>
-                  <span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span>
-                  <span class="legend-swatch legend-current"></span><span>current vectors</span>
-                </div>
+          <div class="platform-map-card">
+            <div class="platform-map-head">
+              <div>
+                <h3 class="title is-5">Current field preview</h3>
+                <p id="explorerLegendText" class="platform-footnote">Current-speed shading from the public release. Arrows visualize the average current vector inside the selected subset.</p>
               </div>
-              <div class="platform-map-shell">
-                <canvas id="flowFieldCanvas" width="960" height="580" aria-label="Current field explorer canvas"></canvas>
+              <div class="platform-map-legend">
+                <span class="legend-swatch legend-land"></span><span>land / masked</span>
+                <span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed shading</span>
+                <span class="legend-swatch legend-current"></span><span>current vectors</span>
               </div>
-              <div id="explorerMeta" class="platform-map-meta"></div>
             </div>
+            <div class="platform-map-shell">
+              <canvas id="flowFieldCanvas" width="960" height="580" aria-label="Current field explorer canvas"></canvas>
+            </div>
+            <div id="explorerMeta" class="platform-map-meta"></div>
           </div>
         </div>
       </div>
