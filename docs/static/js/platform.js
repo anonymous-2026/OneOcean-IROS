@@ -9,7 +9,7 @@ const FIELD_CONFIG = {
   speed: {
     label: 'current speed',
     legend: 'current-speed tint',
-    narrative: 'Current-speed tint highlights the magnitude of the grounded flow field over a bathymetry-informed background.',
+    narrative: 'Current speed is visualized on top of a synthetic ocean-relief base map generated from bathymetry and smooth noise.',
     primaryLabel: 'Mean speed',
     secondaryLabel: 'Peak speed',
     units: 'm/s',
@@ -17,7 +17,7 @@ const FIELD_CONFIG = {
   temperature: {
     label: 'temperature',
     legend: 'temperature tint',
-    narrative: 'Temperature tint highlights thermal structure within the selected depth layer.',
+    narrative: 'Temperature tint shows thermal variation for the selected depth layer.',
     primaryLabel: 'Mean temperature',
     secondaryLabel: 'Peak temperature',
     units: '°C',
@@ -25,7 +25,7 @@ const FIELD_CONFIG = {
   salinity: {
     label: 'salinity',
     legend: 'salinity tint',
-    narrative: 'Salinity tint highlights spatial changes in water-mass composition.',
+    narrative: 'Salinity tint shows spatial differences in water-mass composition.',
     primaryLabel: 'Mean salinity',
     secondaryLabel: 'Peak salinity',
     units: 'psu',
@@ -33,23 +33,15 @@ const FIELD_CONFIG = {
   ssh: {
     label: 'sea surface height',
     legend: 'sea-surface-height tint',
-    narrative: 'Sea-surface-height tint highlights the surface elevation field sampled from the same public subset.',
+    narrative: 'Sea-surface-height tint visualizes surface elevation sampled from the same subset.',
     primaryLabel: 'Mean SSH',
     secondaryLabel: 'Peak |SSH|',
-    units: 'm',
-  },
-  bathymetry: {
-    label: 'bathymetry',
-    legend: 'bathymetry shading',
-    narrative: 'Bathymetry shading emphasizes the seabed geometry beneath the selected current field.',
-    primaryLabel: 'Mean depth',
-    secondaryLabel: 'Max depth',
     units: 'm',
   },
   u: {
     label: 'zonal current (u)',
     legend: 'zonal-current tint',
-    narrative: 'Zonal-current tint separates westward and eastward flow components.',
+    narrative: 'Zonal-current tint shows east-west flow variation.',
     primaryLabel: 'Mean u',
     secondaryLabel: 'Peak |u|',
     units: 'm/s',
@@ -57,10 +49,18 @@ const FIELD_CONFIG = {
   v: {
     label: 'meridional current (v)',
     legend: 'meridional-current tint',
-    narrative: 'Meridional-current tint separates southward and northward flow components.',
+    narrative: 'Meridional-current tint shows north-south flow variation.',
     primaryLabel: 'Mean v',
     secondaryLabel: 'Peak |v|',
     units: 'm/s',
+  },
+  bathymetry: {
+    label: 'bathymetry',
+    legend: 'bathymetry shading',
+    narrative: 'Bathymetry shading emphasizes seabed structure in the subset footprint.',
+    primaryLabel: 'Mean depth',
+    secondaryLabel: 'Max depth',
+    units: 'm',
   },
 };
 
@@ -90,11 +90,15 @@ function formatDateLabel(isoText) {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function buildIndexOptions(select, labels) {
+  select.innerHTML = labels.map((label, index) => `<option value="${index}">${label}</option>`).join('');
+}
+
 function setupCanvas(canvas) {
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(1, Math.round(rect.width));
-  const height = Math.max(1, Math.round(width * 0.53));
+  const height = Math.max(1, Math.round(width * 0.56));
   canvas.width = Math.round(width * ratio);
   canvas.height = Math.round(height * ratio);
   canvas.style.height = `${height}px`;
@@ -103,8 +107,28 @@ function setupCanvas(canvas) {
   return { ctx, width, height };
 }
 
-function buildIndexOptions(select, labels) {
-  select.innerHTML = labels.map((label, index) => `<option value="${index}">${label}</option>`).join('');
+function wireCopyButtons() {
+  const buttons = document.querySelectorAll('.platform-copy-btn');
+  buttons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      const target = document.getElementById(button.dataset.copyTarget);
+      if (!target) return;
+      const text = target.textContent || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        const before = button.textContent;
+        button.textContent = 'Copied';
+        window.setTimeout(() => {
+          button.textContent = before;
+        }, 1200);
+      } catch {
+        button.textContent = 'Failed';
+        window.setTimeout(() => {
+          button.textContent = 'Copy';
+        }, 1200);
+      }
+    });
+  });
 }
 
 function initializeControls(dataset) {
@@ -258,8 +282,6 @@ function summarizeSubset(dataset, subset) {
   let maxElevation = Number.NEGATIVE_INFINITY;
   let minTemperature = Number.POSITIVE_INFINITY;
   let minSalinity = Number.POSITIVE_INFINITY;
-  let minSSH = Number.POSITIVE_INFINITY;
-  let maxSSH = Number.NEGATIVE_INFINITY;
 
   latIndices.forEach((latIndex) => {
     const row = [];
@@ -270,6 +292,7 @@ function summarizeSubset(dataset, subset) {
       let salinity = 0;
       let ssh = 0;
       let count = 0;
+
       for (let timeIndex = timeStart; timeIndex <= timeEnd; timeIndex += 1) {
         u += dataset.u[timeIndex][depthIndex][latIndex][lonIndex];
         v += dataset.v[timeIndex][depthIndex][latIndex][lonIndex];
@@ -278,6 +301,7 @@ function summarizeSubset(dataset, subset) {
         ssh += dataset.ssh[timeIndex][latIndex][lonIndex];
         count += 1;
       }
+
       const meanU = u / count;
       const meanV = v / count;
       const meanTemperature = temperature / count;
@@ -303,14 +327,10 @@ function summarizeSubset(dataset, subset) {
       maxSalinity = Math.max(maxSalinity, meanSalinity);
       minSalinity = Math.min(minSalinity, meanSalinity);
       peakAbsSSH = Math.max(peakAbsSSH, Math.abs(meanSSH));
-      minSSH = Math.min(minSSH, meanSSH);
-      maxSSH = Math.max(maxSSH, meanSSH);
       minElevation = Math.min(minElevation, elevation);
       maxElevation = Math.max(maxElevation, elevation);
 
       row.push({
-        latIndex,
-        lonIndex,
         meanU,
         meanV,
         meanTemperature,
@@ -336,8 +356,6 @@ function summarizeSubset(dataset, subset) {
     minSalinity,
     meanSSH: cellCount ? sshSum / cellCount : 0,
     peakAbsSSH,
-    minSSH,
-    maxSSH,
     meanU: cellCount ? uSum / cellCount : 0,
     meanV: cellCount ? vSum / cellCount : 0,
     peakAbsU,
@@ -349,63 +367,58 @@ function summarizeSubset(dataset, subset) {
   };
 }
 
-function valueForField(cell, mode) {
-  if (mode === 'speed') return cell.speed;
-  if (mode === 'temperature') return cell.meanTemperature;
-  if (mode === 'salinity') return cell.meanSalinity;
-  if (mode === 'ssh') return cell.meanSSH;
-  if (mode === 'u') return cell.meanU;
-  if (mode === 'v') return cell.meanV;
-  return cell.elevation;
-}
-
-function rangeForField(summary, mode) {
-  if (mode === 'speed') return { min: 0, max: Math.max(summary.maxSpeed, 0.1) };
-  if (mode === 'temperature') return { min: summary.minTemperature, max: summary.maxTemperature };
-  if (mode === 'salinity') return { min: summary.minSalinity, max: summary.maxSalinity };
-  if (mode === 'ssh') return { min: -Math.max(summary.peakAbsSSH, 0.05), max: Math.max(summary.peakAbsSSH, 0.05) };
-  if (mode === 'u') return { min: -Math.max(summary.peakAbsU, 0.1), max: Math.max(summary.peakAbsU, 0.1) };
-  if (mode === 'v') return { min: -Math.max(summary.peakAbsV, 0.1), max: Math.max(summary.peakAbsV, 0.1) };
+function scalarRange(summary, fieldMode) {
+  if (fieldMode === 'speed') return { min: 0, max: Math.max(summary.maxSpeed, 0.1) };
+  if (fieldMode === 'temperature') return { min: summary.minTemperature, max: summary.maxTemperature };
+  if (fieldMode === 'salinity') return { min: summary.minSalinity, max: summary.maxSalinity };
+  if (fieldMode === 'ssh') return { min: -Math.max(summary.peakAbsSSH, 0.05), max: Math.max(summary.peakAbsSSH, 0.05) };
+  if (fieldMode === 'u') return { min: -Math.max(summary.peakAbsU, 0.1), max: Math.max(summary.peakAbsU, 0.1) };
+  if (fieldMode === 'v') return { min: -Math.max(summary.peakAbsV, 0.1), max: Math.max(summary.peakAbsV, 0.1) };
   return { min: summary.minElevation, max: summary.maxElevation };
 }
 
-function colorForBathymetry(elevation, land) {
+function valueForMode(cell, fieldMode) {
+  if (fieldMode === 'speed') return cell.speed;
+  if (fieldMode === 'temperature') return cell.meanTemperature;
+  if (fieldMode === 'salinity') return cell.meanSalinity;
+  if (fieldMode === 'ssh') return cell.meanSSH;
+  if (fieldMode === 'u') return cell.meanU;
+  if (fieldMode === 'v') return cell.meanV;
+  return cell.elevation;
+}
+
+function colorForRelief(elevation, land, nx, ny) {
+  const depthNorm = clamp(Math.abs(elevation) / 5600, 0, 1);
+  let rgb;
   if (land) {
-    const h = clamp((elevation + 5) / 150, 0, 1);
-    return mixColor([194, 183, 151], [116, 105, 78], h);
+    rgb = mixColor([210, 196, 158], [123, 110, 79], clamp((elevation + 10) / 210, 0, 1));
+  } else if (depthNorm < 0.2) {
+    rgb = mixColor([71, 147, 184], [34, 104, 153], depthNorm / 0.2);
+  } else if (depthNorm < 0.65) {
+    rgb = mixColor([34, 104, 153], [15, 63, 104], (depthNorm - 0.2) / 0.45);
+  } else {
+    rgb = mixColor([15, 63, 104], [8, 31, 60], (depthNorm - 0.65) / 0.35);
   }
-  const depth = clamp(Math.abs(elevation) / 5500, 0, 1);
-  if (depth < 0.25) return mixColor([33, 88, 125], [56, 140, 176], depth / 0.25);
-  if (depth < 0.65) return mixColor([56, 140, 176], [18, 73, 112], (depth - 0.25) / 0.40);
-  return mixColor([18, 73, 112], [8, 34, 62], (depth - 0.65) / 0.35);
+
+  const wave = 0.04 * Math.sin(nx * 24.0 + ny * 8.0) + 0.03 * Math.cos(nx * 10.0 - ny * 18.0);
+  const light = 0.12 * (1.0 - ny) + wave;
+  return rgb.map((value) => Math.round(clamp(value + light * 255, 0, 255)));
 }
 
-function fieldTint(mode, value, range) {
+function colorForField(fieldMode, value, range) {
   const span = Math.max(1e-6, range.max - range.min);
-  if (mode === 'speed') {
-    const t = clamp((value - range.min) / span, 0, 1);
-    return mixColor([11, 91, 150], [255, 227, 127], t);
-  }
-  if (mode === 'temperature') {
-    const t = clamp((value - range.min) / span, 0, 1);
-    return mixColor([35, 111, 184], [244, 119, 62], t);
-  }
-  if (mode === 'salinity') {
-    const t = clamp((value - range.min) / span, 0, 1);
-    return mixColor([47, 132, 123], [230, 238, 120], t);
-  }
-  if (mode === 'bathymetry') {
-    return colorForBathymetry(value, value >= 0);
-  }
   const t = clamp((value - range.min) / span, 0, 1);
-  return t < 0.5
-    ? mixColor([230, 128, 72], [235, 241, 246], t / 0.5)
-    : mixColor([235, 241, 246], [22, 103, 184], (t - 0.5) / 0.5);
+  if (fieldMode === 'speed') return mixColor([20, 98, 153], [255, 225, 126], t);
+  if (fieldMode === 'temperature') return mixColor([37, 111, 186], [245, 121, 61], t);
+  if (fieldMode === 'salinity') return mixColor([39, 130, 116], [225, 240, 122], t);
+  if (fieldMode === 'bathymetry') return mixColor([22, 82, 124], [196, 214, 232], t);
+  if (t < 0.5) return mixColor([232, 130, 74], [236, 243, 247], t / 0.5);
+  return mixColor([236, 243, 247], [22, 103, 185], (t - 0.5) / 0.5);
 }
 
-function bilinearCell(summary, gx, gy) {
-  const rows = summary.field.length;
-  const cols = summary.field[0].length;
+function bilinear(field, gx, gy) {
+  const rows = field.length;
+  const cols = field[0].length;
   const x = clamp(gx, 0, cols - 1);
   const y = clamp(gy, 0, rows - 1);
   const x0 = Math.floor(x);
@@ -415,10 +428,10 @@ function bilinearCell(summary, gx, gy) {
   const tx = x - x0;
   const ty = y - y0;
 
-  const c00 = summary.field[y0][x0];
-  const c10 = summary.field[y0][x1];
-  const c01 = summary.field[y1][x0];
-  const c11 = summary.field[y1][x1];
+  const c00 = field[y0][x0];
+  const c10 = field[y0][x1];
+  const c01 = field[y1][x0];
+  const c11 = field[y1][x1];
 
   const blend = (a, b, c, d) => lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
   return {
@@ -429,57 +442,44 @@ function bilinearCell(summary, gx, gy) {
     meanU: blend(c00.meanU, c10.meanU, c01.meanU, c11.meanU),
     meanV: blend(c00.meanV, c10.meanV, c01.meanV, c11.meanV),
     elevation: blend(c00.elevation, c10.elevation, c01.elevation, c11.elevation),
-    land: blend(c00.land ? 1 : 0, c10.land ? 1 : 0, c01.land ? 1 : 0, c11.land ? 1 : 0) > 0.35,
+    land: blend(c00.land ? 1 : 0, c10.land ? 1 : 0, c01.land ? 1 : 0, c11.land ? 1 : 0) > 0.45,
   };
 }
 
-function drawMapBackground(ctx, width, height, summary, fieldMode, range, margins) {
-  const plotWidth = width - margins.left - margins.right;
-  const plotHeight = height - margins.top - margins.bottom;
+function drawOceanMap(ctx, width, height, summary, fieldMode, range, subset) {
+  const margin = { left: 64, right: 14, top: 14, bottom: 46 };
+  const mapWidth = Math.max(1, width - margin.left - margin.right);
+  const mapHeight = Math.max(1, height - margin.top - margin.bottom);
   const rows = summary.field.length;
   const cols = summary.field[0].length;
-  const image = ctx.createImageData(plotWidth, plotHeight);
-  let offset = 0;
 
-  for (let py = 0; py < plotHeight; py += 1) {
-    const ny = py / Math.max(1, plotHeight - 1);
-    const gy = ((plotHeight - py - 1) / Math.max(1, plotHeight - 1)) * Math.max(1, rows - 1);
-    for (let px = 0; px < plotWidth; px += 1) {
-      const nx = px / Math.max(1, plotWidth - 1);
-      const gx = (px / Math.max(1, plotWidth - 1)) * Math.max(1, cols - 1);
-      const cell = bilinearCell(summary, gx, gy);
-      const base = colorForBathymetry(cell.elevation, cell.land);
-      const overlay = fieldTint(fieldMode, valueForField(cell, fieldMode), range);
-      const blendRatio = fieldMode === 'bathymetry' ? 0.18 : fieldMode === 'ssh' ? 0.48 : 0.42;
-      let rgb = mixColor(base, overlay, blendRatio);
-
-      const ridge = clamp((Math.abs(cell.elevation) % 240) / 240, 0, 1);
-      const latitudeLight = 0.18 * (1 - ny);
-      const swell = 0.04 * Math.sin(nx * 14.0 + ny * 6.0) + 0.03 * Math.cos(nx * 20.0 - ny * 9.0);
-      const currentTexture = 0.025 * Math.sin(nx * 28.0 + cell.meanU * 12.0) + 0.02 * Math.cos(ny * 24.0 + cell.meanV * 12.0);
-      const relief = cell.land ? 0.1 : 0.08 * (1 - clamp(Math.abs(cell.elevation) / 5200, 0, 1));
-      const light = latitudeLight + swell + currentTexture + relief;
-      rgb = rgb.map((v) => Math.round(clamp(v + ridge * 7 + light * 255, 0, 255)));
-
-      image.data[offset] = rgb[0];
-      image.data[offset + 1] = rgb[1];
-      image.data[offset + 2] = rgb[2];
-      image.data[offset + 3] = 255;
-      offset += 4;
+  const image = ctx.createImageData(mapWidth, mapHeight);
+  let p = 0;
+  for (let y = 0; y < mapHeight; y += 1) {
+    const ny = y / Math.max(1, mapHeight - 1);
+    const gy = (1 - ny) * Math.max(1, rows - 1);
+    for (let x = 0; x < mapWidth; x += 1) {
+      const nx = x / Math.max(1, mapWidth - 1);
+      const gx = nx * Math.max(1, cols - 1);
+      const cell = bilinear(summary.field, gx, gy);
+      const relief = colorForRelief(cell.elevation, cell.land, nx, ny);
+      const fieldColor = colorForField(fieldMode, valueForMode(cell, fieldMode), range);
+      const blend = fieldMode === 'bathymetry' ? 0.2 : 0.42;
+      const rgb = mixColor(relief, fieldColor, blend);
+      image.data[p] = rgb[0];
+      image.data[p + 1] = rgb[1];
+      image.data[p + 2] = rgb[2];
+      image.data[p + 3] = 255;
+      p += 4;
     }
   }
 
-  ctx.putImageData(image, margins.left, margins.top);
-}
+  ctx.putImageData(image, margin.left, margin.top);
 
-function drawAxes(ctx, width, height, subset, margins) {
-  const { left, right, top, bottom } = margins;
-  const plotWidth = width - left - right;
-  const plotHeight = height - top - bottom;
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.38)';
-  ctx.lineWidth = 1.2;
-  ctx.strokeRect(left, top, plotWidth, plotHeight);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1.1;
+  ctx.strokeRect(margin.left, margin.top, mapWidth, mapHeight);
 
   ctx.fillStyle = 'rgba(255,255,255,0.92)';
   ctx.font = '12px Inter, sans-serif';
@@ -489,80 +489,81 @@ function drawAxes(ctx, width, height, subset, margins) {
 
   ctx.textAlign = 'center';
   lonLabels.forEach((value, idx) => {
-    const x = left + (plotWidth * idx) / (lonLabels.length - 1);
-    ctx.fillText(`${formatNumber(value)}°`, x, height - bottom + 24);
+    const x = margin.left + (mapWidth * idx) / (lonLabels.length - 1);
+    ctx.fillText(`${formatNumber(value)}°`, x, height - 18);
   });
 
   ctx.textAlign = 'right';
   latLabels.forEach((value, idx) => {
-    const y = height - bottom - (plotHeight * idx) / (latLabels.length - 1);
-    ctx.fillText(`${formatNumber(value)}°`, left - 10, y + (idx === latLabels.length - 1 ? -8 : 4));
+    const y = margin.top + mapHeight - (mapHeight * idx) / (latLabels.length - 1);
+    ctx.fillText(`${formatNumber(value)}°`, margin.left - 10, y + (idx === 2 ? -8 : 4));
   });
 
   ctx.textAlign = 'center';
-  ctx.fillText('longitude', width / 2 - 30, height - 8);
+  ctx.fillText('longitude', margin.left + mapWidth / 2, height - 4);
   ctx.save();
-  ctx.translate(18, height / 2 + 10);
+  ctx.translate(14, margin.top + mapHeight / 2 + 6);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('latitude', 0, 0);
   ctx.restore();
   ctx.restore();
+
+  return { margin, mapWidth, mapHeight };
 }
 
-function drawVectors(ctx, width, height, summary, controls, margins) {
-  const densityStep = Number(controls.vectorDensity.value);
+function drawVectorOverlay(ctx, summary, rangeSpeed, controls, mapLayout) {
+  const step = Number(controls.vectorDensity.value);
   const rows = summary.field.length;
   const cols = summary.field[0].length;
-  const drawWidth = width - margins.left - margins.right;
-  const drawHeight = height - margins.top - margins.bottom;
-  const cellWidth = drawWidth / Math.max(1, cols);
-  const cellHeight = drawHeight / Math.max(1, rows);
-  let vectorCount = 0;
+  const cellWidth = mapLayout.mapWidth / Math.max(1, cols);
+  const cellHeight = mapLayout.mapHeight / Math.max(1, rows);
+  let count = 0;
 
   summary.field.forEach((row, rowIndex) => {
     row.forEach((cell, colIndex) => {
       if (cell.land) return;
-      if (rowIndex % densityStep !== 0 || colIndex % densityStep !== 0) return;
-      vectorCount += 1;
-      const centerX = margins.left + colIndex * cellWidth + cellWidth / 2;
-      const centerY = margins.top + (rows - rowIndex - 1) * cellHeight + cellHeight / 2;
-      const scale = Math.min(cellWidth, cellHeight) * 0.95;
-      const norm = Math.max(0.12, summary.maxSpeed);
+      if (rowIndex % step !== 0 || colIndex % step !== 0) return;
+
+      const cx = mapLayout.margin.left + colIndex * cellWidth + cellWidth / 2;
+      const cy = mapLayout.margin.top + (rows - rowIndex - 1) * cellHeight + cellHeight / 2;
+      const scale = Math.min(cellWidth, cellHeight) * 0.88;
+      const norm = Math.max(0.08, rangeSpeed.max);
       const dx = (cell.meanU / norm) * scale;
       const dy = (-cell.meanV / norm) * scale;
-      const endX = centerX + dx;
-      const endY = centerY + dy;
+      const ex = cx + dx;
+      const ey = cy + dy;
 
-      ctx.strokeStyle = 'rgba(6, 15, 23, 0.85)';
-      ctx.lineWidth = 4.2;
+      ctx.strokeStyle = 'rgba(6, 18, 26, 0.82)';
+      ctx.lineWidth = 3.8;
       ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(endX, endY);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
       ctx.stroke();
 
-      ctx.strokeStyle = 'rgba(228, 247, 255, 0.92)';
-      ctx.lineWidth = 2.3;
+      ctx.strokeStyle = 'rgba(236, 247, 255, 0.95)';
+      ctx.lineWidth = 2.1;
       ctx.beginPath();
-      ctx.moveTo(centerX, centerY);
-      ctx.lineTo(endX, endY);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(ex, ey);
       ctx.stroke();
 
       const angle = Math.atan2(dy, dx);
-      const arrowSize = 7;
-      ctx.fillStyle = 'rgba(228, 247, 255, 0.92)';
+      const arrow = 6.3;
+      ctx.fillStyle = 'rgba(236, 247, 255, 0.95)';
       ctx.beginPath();
-      ctx.moveTo(endX, endY);
-      ctx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), endY - arrowSize * Math.sin(angle - Math.PI / 6));
-      ctx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), endY - arrowSize * Math.sin(angle + Math.PI / 6));
+      ctx.moveTo(ex, ey);
+      ctx.lineTo(ex - arrow * Math.cos(angle - Math.PI / 6), ey - arrow * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(ex - arrow * Math.cos(angle + Math.PI / 6), ey - arrow * Math.sin(angle + Math.PI / 6));
       ctx.closePath();
       ctx.fill();
+      count += 1;
     });
   });
 
-  controls.stats[2].textContent = String(vectorCount);
+  return count;
 }
 
-function fieldSummaryValues(summary, fieldMode) {
+function summaryValues(summary, fieldMode) {
   if (fieldMode === 'bathymetry') {
     return {
       primary: `${Math.round(Math.abs(summary.meanElevation))} m`,
@@ -622,44 +623,42 @@ function renderExplorer() {
 
   const subset = activeSubsetIndices(dataset, controls);
   if (!subset.latIndices.length || !subset.lonIndices.length) return;
+
   const summary = summarizeSubset(dataset, subset);
   const fieldMode = controls.fieldMode.value;
   const fieldConfig = FIELD_CONFIG[fieldMode];
   const showVectors = controls.vectorOverlay.value === 'on';
+  const range = scalarRange(summary, fieldMode);
+  const rangeSpeed = scalarRange(summary, 'speed');
 
   const { ctx, width, height } = setupCanvas(controls.canvas);
-  const margins = { left: 72, right: 20, top: 16, bottom: 52 };
-  const fieldRange = rangeForField(summary, fieldMode);
-
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = '#0d2740';
+  ctx.fillStyle = '#0a2238';
   ctx.fillRect(0, 0, width, height);
-  drawMapBackground(ctx, width, height, summary, fieldMode, fieldRange, margins);
-  if (showVectors) {
-    drawVectors(ctx, width, height, summary, controls, margins);
-  } else {
-    controls.stats[2].textContent = '0';
-  }
-  drawAxes(ctx, width, height, subset, margins);
 
-  const values = fieldSummaryValues(summary, fieldMode);
+  const mapLayout = drawOceanMap(ctx, width, height, summary, fieldMode, range, subset);
+  const vectorCount = showVectors ? drawVectorOverlay(ctx, summary, rangeSpeed, controls, mapLayout) : 0;
+  controls.stats[2].textContent = String(vectorCount);
+
+  const values = summaryValues(summary, fieldMode);
   controls.statPrimaryLabel.textContent = fieldConfig.primaryLabel;
   controls.statSecondaryLabel.textContent = fieldConfig.secondaryLabel;
   controls.stats[0].textContent = values.primary;
   controls.stats[1].textContent = values.secondary;
   controls.stats[3].textContent = `${Math.round(summary.minElevation)} to ${Math.round(summary.maxElevation)} m`;
-  controls.legendText.textContent = `${fieldConfig.narrative} ${showVectors ? 'Vectors show averaged current direction.' : 'Vector overlay is currently hidden.'}`;
+
+  controls.legendText.textContent = `${fieldConfig.narrative} ${showVectors ? 'Vectors show averaged current direction.' : 'Vectors are hidden in this view.'}`;
   updateLegend(controls, fieldMode);
 
   controls.narrative.textContent =
-    `This panel shows only ${dataset.metadata.grid_shape[0]} × ${dataset.metadata.grid_shape[1]} cells, ${dataset.metadata.depth_count} sampled depth levels, and ${dataset.time.length} sampled dates from the public release. Averaging ${formatDateLabel(dataset.time[subset.timeStart])} to ${formatDateLabel(dataset.time[subset.timeEnd])} keeps the browser example lightweight while still exposing real data variation.`;
+    `This demo renders a small static subset (${dataset.metadata.grid_shape[0]} × ${dataset.metadata.grid_shape[1]}, ${dataset.metadata.depth_count} depth levels, ${dataset.time.length} dates) to keep GitHub Pages responsive while preserving real ocean variability.`;
 
   controls.meta.innerHTML = [
-    `Time: ${formatDateLabel(dataset.time[subset.timeStart])} → ${formatDateLabel(dataset.time[subset.timeEnd])}`,
+    `Time: ${formatDateLabel(dataset.time[subset.timeStart])} -> ${formatDateLabel(dataset.time[subset.timeEnd])}`,
     `Depth: ${formatNumber(dataset.depth[subset.depthIndex], 1)} m`,
-    `Display: ${fieldConfig.label}`,
-    `Lat: ${formatSigned(subset.latMin)}° → ${formatSigned(subset.latMax)}°`,
-    `Lon: ${formatSigned(subset.lonMin)}° → ${formatSigned(subset.lonMax)}°`,
+    `Variable: ${fieldConfig.label}`,
+    `Lat: ${formatSigned(subset.latMin)}° -> ${formatSigned(subset.latMax)}°`,
+    `Lon: ${formatSigned(subset.lonMin)}° -> ${formatSigned(subset.lonMax)}°`,
   ].map((text) => `<span class="platform-meta-pill">${text}</span>`).join('');
 }
 
@@ -672,6 +671,7 @@ async function loadDataset() {
 }
 
 async function bootstrapExplorer() {
+  wireCopyButtons();
   try {
     const dataset = await loadDataset();
     explorerState.dataset = dataset;
@@ -680,7 +680,7 @@ async function bootstrapExplorer() {
   } catch (error) {
     const narrative = document.getElementById('explorerNarrative');
     if (narrative) {
-      narrative.textContent = 'The web subset failed to load. Rebuild `docs/static/data/oneocean_public_currents_subset.json` and refresh the page.';
+      narrative.textContent = 'The web subset failed to load. Rebuild docs/static/data/oneocean_public_currents_subset.json and refresh the page.';
     }
     console.error(error);
   }

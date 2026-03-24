@@ -94,17 +94,37 @@
           </p>
         </div>
 
-        <div class="platform-mini-strip">
-          <div class="platform-mini-card"><span class="platform-mini-k">Source</span><span class="platform-mini-v">public release</span></div>
-          <div class="platform-mini-card"><span class="platform-mini-k">Sampled dates</span><span class="platform-mini-v">13</span></div>
-          <div class="platform-mini-card"><span class="platform-mini-k">Sampled depths</span><span class="platform-mini-v">4</span></div>
-          <div class="platform-mini-card"><span class="platform-mini-k">Grid</span><span class="platform-mini-v">21 × 21</span></div>
-          <div class="platform-mini-card"><span class="platform-mini-k">Variables</span><span class="platform-mini-v">currents, temperature, salinity, SSH, bathymetry</span></div>
-        </div>
-
         <div class="platform-explorer-card">
           <div class="platform-explorer-top">
-            <section class="platform-panel">
+            <aside class="platform-panel">
+              <div class="platform-panel-head platform-panel-head-stack">
+                <div>
+                  <h3>Subset summary</h3>
+                  <p class="platform-subnote">Quick diagnostics for the current view.</p>
+                </div>
+              </div>
+              <div class="platform-stat-grid" id="explorerStats">
+                <div class="platform-stat">
+                  <span id="statPrimaryLabel" class="platform-stat-k">Mean speed</span>
+                  <span class="platform-stat-v">—</span>
+                </div>
+                <div class="platform-stat">
+                  <span id="statSecondaryLabel" class="platform-stat-k">Peak speed</span>
+                  <span class="platform-stat-v">—</span>
+                </div>
+                <div class="platform-stat">
+                  <span class="platform-stat-k">Vectors shown</span>
+                  <span class="platform-stat-v">—</span>
+                </div>
+                <div class="platform-stat">
+                  <span class="platform-stat-k">Bathymetry span</span>
+                  <span class="platform-stat-v">—</span>
+                </div>
+              </div>
+              <p id="explorerNarrative" class="platform-note">Loading subset…</p>
+            </aside>
+
+            <section class="platform-panel platform-controls-panel">
               <div class="platform-panel-head">
                 <div>
                   <h3>Controls</h3>
@@ -176,34 +196,6 @@
                 The explorer averages the selected time interval and clips the view to the selected geographic range. This is a visualization sample, not the full research artifact.
               </p>
             </section>
-
-            <aside class="platform-panel">
-              <div class="platform-panel-head platform-panel-head-stack">
-                <div>
-                  <h3>Subset summary</h3>
-                  <p class="platform-subnote">Quick diagnostics for the current view.</p>
-                </div>
-              </div>
-              <div class="platform-stat-grid" id="explorerStats">
-                <div class="platform-stat">
-                  <span id="statPrimaryLabel" class="platform-stat-k">Mean speed</span>
-                  <span class="platform-stat-v">—</span>
-                </div>
-                <div class="platform-stat">
-                  <span id="statSecondaryLabel" class="platform-stat-k">Peak speed</span>
-                  <span class="platform-stat-v">—</span>
-                </div>
-                <div class="platform-stat">
-                  <span class="platform-stat-k">Vectors shown</span>
-                  <span class="platform-stat-v">—</span>
-                </div>
-                <div class="platform-stat">
-                  <span class="platform-stat-k">Bathymetry span</span>
-                  <span class="platform-stat-v">—</span>
-                </div>
-              </div>
-              <p id="explorerNarrative" class="platform-note">Loading subset…</p>
-            </aside>
           </div>
 
           <section class="platform-panel platform-map-panel">
@@ -288,7 +280,7 @@
         <div class="platform-card-grid platform-card-grid-4">
           <article class="platform-card"><span class="platform-step">01</span><h3>Ocean fields</h3><p>Copernicus Marine variables such as currents, SSH, salinity, and temperature.</p></article>
           <article class="platform-card"><span class="platform-step">02</span><h3>Bathymetry</h3><p>GEBCO GeoTIFF crops provide terrain structure and masking for the requested region.</p></article>
-          <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p><code>Data_pipeline/run_pipeline.py</code> interpolates, aligns, merges, and writes the environment product.</p></article>
+          <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p>The pipeline interpolates, aligns, merges, and writes the environment product.</p></article>
           <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce <code>combined_environment.nc</code>, variants, drift exports, and scene-facing task assets.</p></article>
         </div>
 
@@ -296,19 +288,19 @@
           <article class="platform-card">
             <h3>Customize region, time, and depth</h3>
             <p>Use geographic bounds plus start/end timestamps to define the slice. Depth can be passed as a range or as an explicit list.</p>
-            <pre class="platform-code"><code>python Data_pipeline/run_pipeline.py --overwrite \
+            <div class="platform-code-wrap"><button class="platform-copy-btn" type="button" data-copy-target="cmd-run-pipeline">Copy</button><pre class="platform-code"><code id="cmd-run-pipeline">python Data_pipeline/run_pipeline.py --overwrite \
   --lat-min 32.0 --lat-max 33.0 --lon-min -66.5 --lon-max -65.5 \
   --start 2024-06-01T00:00:00 --end 2024-06-30T00:00:00 \
   --depths "0,10,20,50,100,200" \
-  --include-tides</code></pre>
+  --include-tides</code></pre></div>
             <p class="platform-subnote">If tides are surface-only, the pipeline applies a configurable depth-decay profile. This is an engineering approximation, not a full 3D tidal model.</p>
           </article>
           <article class="platform-card">
             <h3>Export variants for different uses</h3>
-            <p>Variants are written under <code>Data_pipeline/Data/Combined/variants/</code> with a consistent schema and manifest.</p>
-            <pre class="platform-code"><code>python Data_pipeline/generate_variants.py \
+            <p>Variants are exported with a consistent schema and manifest.</p>
+            <div class="platform-code-wrap"><button class="platform-copy-btn" type="button" data-copy-target="cmd-generate-variants">Copy</button><pre class="platform-code"><code id="cmd-generate-variants">python Data_pipeline/generate_variants.py \
   --which tiny,scene,public \
-  --overwrite</code></pre>
+  --overwrite</code></pre></div>
             <ul class="platform-list platform-list-tight">
               <li><strong>tiny:</strong> fast debugging and small browser-safe exports</li>
               <li><strong>scene:</strong> main scene grounding footprint for task deployment</li>
@@ -318,7 +310,7 @@
         </div>
 
         <div class="platform-banner">
-          <strong>Credentials:</strong> Copernicus Marine access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF files must already exist under <code>Data_pipeline/Data/</code>.
+          <strong>Credentials:</strong> Copernicus Marine access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF files must be available before running the pipeline.
         </div>
       </div>
     </section>
@@ -337,7 +329,7 @@
           <article class="platform-card">
             <h3>Core benchmark backend (<code>benchmark_core</code>)</h3>
             <p>Export a drift cache from <code>combined_environment.nc</code>, then run task matrices with shared metrics and reproducible manifests.</p>
-            <pre class="platform-code"><code>python -m benchmark_core.cli.export_drift_cache \
+            <div class="platform-code-wrap"><button class="platform-copy-btn" type="button" data-copy-target="cmd-core-backend">Copy</button><pre class="platform-code"><code id="cmd-core-backend">python -m benchmark_core.cli.export_drift_cache \
   --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
   --u-var utotal --v-var vtotal --time-index 0 --depth-index 0 \
   --out runs/benchmark_core/_cache/drift_scene_t0_d0.npz
@@ -348,19 +340,19 @@ python -m benchmark_core.cli.run_matrix \
   --dynamics-model 6dof \
   --constraint-mode hard \
   --bathy-mode hard \
-  --validate</code></pre>
+  --validate</code></pre></div>
           </article>
           <article class="platform-card">
             <h3>OceanGym scene backend (<code>tracks/oceangym_benchmark</code>)</h3>
             <p>Export a time series of grounded currents and inject them into the scene task suite for qualitative deployment evidence and task videos.</p>
-            <pre class="platform-code"><code>python tracks/oceangym_benchmark/export_current_series_npz.py \
+            <div class="platform-code-wrap"><button class="platform-copy-btn" type="button" data-copy-target="cmd-scene-backend">Copy</button><pre class="platform-code"><code id="cmd-scene-backend">python tracks/oceangym_benchmark/export_current_series_npz.py \
   --dataset Data_pipeline/Data/Combined/combined_environment.nc \
   --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
 
 python tracks/oceangym_benchmark/run_task_suite.py \
   --preset ocean_worlds_camera \
   --episodes 3 \
-  --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz</code></pre>
+  --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz</code></pre></div>
             <p class="platform-subnote">This backend assumes a working HoloOcean client plus packaged worlds installed locally.</p>
           </article>
         </div>

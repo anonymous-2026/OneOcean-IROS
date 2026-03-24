@@ -224,35 +224,14 @@ code {
   font-weight: 800;
 }
 
-.platform-mini-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.platform-mini-card { padding: 14px 16px; }
-.platform-mini-k {
-  display: block;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--brand);
-  font-weight: 800;
-}
-.platform-mini-v {
-  display: block;
-  margin-top: 6px;
-  color: var(--text);
-  font-weight: 700;
-}
-
 .platform-explorer-card { padding: 20px; }
 .platform-explorer-top {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.9fr);
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 .platform-panel { padding: 20px; }
+.platform-controls-panel { order: 2; }
 .platform-map-panel { margin-top: 16px; }
 .platform-panel-head {
   display: flex;
@@ -439,6 +418,28 @@ code {
   padding: 0;
   white-space: pre;
 }
+.platform-code-wrap {
+  position: relative;
+}
+.platform-copy-btn {
+  position: absolute;
+  top: 18px;
+  right: 12px;
+  z-index: 2;
+  min-height: 28px;
+  border: 1px solid #2f5d86;
+  border-radius: 8px;
+  background: rgba(8, 31, 52, 0.92);
+  color: #d6e8f8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0 9px;
+  cursor: pointer;
+}
+.platform-copy-btn:hover,
+.platform-copy-btn:focus-visible {
+  background: #154a77;
+}
 .platform-banner {
   margin-top: 16px;
   padding: 14px 16px;
@@ -450,7 +451,6 @@ code {
 .platform-detail-grid { margin-top: 16px; }
 
 @media (max-width: 1120px) {
-  .platform-mini-strip,
   .platform-card-grid-4,
   .platform-card-grid-resolution,
   .platform-control-grid,
@@ -467,7 +467,6 @@ code {
   .platform-card-grid-3,
   .platform-card-grid-4,
   .platform-card-grid-resolution,
-  .platform-mini-strip,
   .platform-control-grid,
   .platform-range-grid,
   .platform-stat-grid { grid-template-columns: 1fr; }
