@@ -364,10 +364,17 @@ code {
   height: min(68vh, 760px);
   min-height: 500px;
 }
-#flowFieldCanvas {
+#flowFieldMap {
   display: block;
   width: 100%;
   height: 100%;
+  border-radius: 10px;
+}
+#flowFieldMap .leaflet-control-zoom {
+  border: 1px solid rgba(20, 62, 96, 0.35);
+}
+#flowFieldMap .leaflet-control-zoom a {
+  color: #244a69;
 }
 .platform-meta-row {
   display: flex;

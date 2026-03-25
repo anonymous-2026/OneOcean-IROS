@@ -3,55 +3,58 @@ const EXPLORER_DATA_PATH = '../static/data/oneocean_public_currents_subset.json'
 const explorerState = {
   dataset: null,
   controls: {},
+  map: null,
+  scalarLayer: null,
+  vectorLayer: null,
 };
 
 const FIELD_CONFIG = {
   speed: {
     label: 'current speed',
     legend: 'current-speed tint',
-    narrative: 'Current speed is rendered on top of a synthetic ocean-relief base map.',
+    narrative: 'Current speed is rendered over a map base layer with bathymetry-aware shading.',
     primaryLabel: 'Mean speed',
     secondaryLabel: 'Peak speed',
   },
   temperature: {
     label: 'temperature',
     legend: 'temperature tint',
-    narrative: 'Temperature tint highlights thermal variation in the selected layer.',
+    narrative: 'Temperature tint highlights thermal variation in the selected depth layer.',
     primaryLabel: 'Mean temperature',
     secondaryLabel: 'Peak temperature',
   },
   salinity: {
     label: 'salinity',
     legend: 'salinity tint',
-    narrative: 'Salinity tint highlights water-mass composition changes.',
+    narrative: 'Salinity tint highlights spatial water-mass differences.',
     primaryLabel: 'Mean salinity',
     secondaryLabel: 'Peak salinity',
   },
   ssh: {
     label: 'sea surface height',
     legend: 'sea-surface-height tint',
-    narrative: 'Sea-surface-height tint visualizes the sampled surface-elevation field.',
+    narrative: 'Sea-surface-height tint highlights sampled surface elevation from the same subset.',
     primaryLabel: 'Mean SSH',
     secondaryLabel: 'Peak |SSH|',
   },
   u: {
     label: 'zonal current (u)',
     legend: 'zonal-current tint',
-    narrative: 'Zonal-current tint visualizes east-west flow variation.',
+    narrative: 'Zonal-current tint visualizes east-west current variation.',
     primaryLabel: 'Mean u',
     secondaryLabel: 'Peak |u|',
   },
   v: {
     label: 'meridional current (v)',
     legend: 'meridional-current tint',
-    narrative: 'Meridional-current tint visualizes north-south flow variation.',
+    narrative: 'Meridional-current tint visualizes north-south current variation.',
     primaryLabel: 'Mean v',
     secondaryLabel: 'Peak |v|',
   },
   bathymetry: {
     label: 'bathymetry',
     legend: 'bathymetry shading',
-    narrative: 'Bathymetry shading visualizes seafloor geometry in the selected region.',
+    narrative: 'Bathymetry shading visualizes seabed geometry across the selected region.',
     primaryLabel: 'Mean depth',
     secondaryLabel: 'Max depth',
   },
@@ -67,6 +70,10 @@ function lerp(start, end, ratio) {
 
 function mixColor(colorA, colorB, ratio) {
   return colorA.map((value, index) => Math.round(lerp(value, colorB[index], ratio)));
+}
+
+function toRgba(color, alpha = 1) {
+  return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${alpha})`;
 }
 
 function formatNumber(value, digits = 2) {
@@ -85,23 +92,6 @@ function formatDateLabel(isoText) {
 
 function buildIndexOptions(select, labels) {
   select.innerHTML = labels.map((label, index) => `<option value="${index}">${label}</option>`).join('');
-}
-
-function setupCanvas(canvas) {
-  const ratio = window.devicePixelRatio || 1;
-  const bounds = canvas.getBoundingClientRect();
-  const width = Math.max(1, Math.round(bounds.width));
-  const fallbackHeight = Math.round(width * 0.56);
-  const height = Math.max(1, Math.round(bounds.height) || fallbackHeight);
-
-  canvas.width = Math.round(width * ratio);
-  canvas.height = Math.round(height * ratio);
-  canvas.style.width = '100%';
-  canvas.style.height = '100%';
-
-  const context = canvas.getContext('2d');
-  context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  return { context, width, height };
 }
 
 function wireCopyButtons() {
@@ -125,6 +115,41 @@ function wireCopyButtons() {
       }
     });
   });
+}
+
+function initializeMap(dataset) {
+  const mapElement = document.getElementById('flowFieldMap');
+  if (!mapElement || typeof L === 'undefined') {
+    return;
+  }
+
+  const latMin = dataset.latitude[0];
+  const latMax = dataset.latitude[dataset.latitude.length - 1];
+  const lonMin = dataset.longitude[0];
+  const lonMax = dataset.longitude[dataset.longitude.length - 1];
+
+  const map = L.map(mapElement, {
+    zoomControl: true,
+    attributionControl: true,
+    worldCopyJump: false,
+    preferCanvas: true,
+  });
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 13,
+    attribution: 'Tiles &copy; Esri &mdash; GEBCO, NOAA, National Geographic, DeLorme, HERE',
+  }).addTo(map);
+
+  const bounds = L.latLngBounds([latMin, lonMin], [latMax, lonMax]);
+  map.fitBounds(bounds.pad(0.06));
+
+  explorerState.map = map;
+  explorerState.scalarLayer = L.layerGroup().addTo(map);
+  explorerState.vectorLayer = L.layerGroup().addTo(map);
+
+  window.setTimeout(() => {
+    map.invalidateSize();
+  }, 20);
 }
 
 function initializeControls(dataset) {
@@ -151,7 +176,6 @@ function initializeControls(dataset) {
     legendText: document.getElementById('explorerLegendText'),
     surfaceLegendLabel: document.getElementById('surfaceLegendLabel'),
     surfaceLegendSwatch: document.getElementById('surfaceLegendSwatch'),
-    canvas: document.getElementById('flowFieldCanvas'),
   };
 
   buildIndexOptions(controls.timeStart, dataset.time.map(formatDateLabel));
@@ -219,7 +243,13 @@ function initializeControls(dataset) {
     rerender();
   });
 
-  window.addEventListener('resize', renderExplorer);
+  window.addEventListener('resize', () => {
+    if (explorerState.map) {
+      explorerState.map.invalidateSize();
+    }
+    renderExplorer();
+  });
+
   updateRangeLabels(controls);
   return controls;
 }
@@ -391,24 +421,14 @@ function valueForMode(cell, fieldMode) {
   return cell.elevation;
 }
 
-function colorForRelief(elevation, land, nx, ny) {
+function colorForRelief(elevation, land) {
   const depthNorm = clamp(Math.abs(elevation) / 5600, 0, 1);
-  let rgb;
-
   if (land) {
-    rgb = mixColor([197, 188, 155], [120, 108, 77], clamp((elevation + 15) / 240, 0, 1));
-  } else if (depthNorm < 0.22) {
-    rgb = mixColor([78, 153, 190], [41, 112, 160], depthNorm / 0.22);
-  } else if (depthNorm < 0.68) {
-    rgb = mixColor([41, 112, 160], [15, 66, 108], (depthNorm - 0.22) / 0.46);
-  } else {
-    rgb = mixColor([15, 66, 108], [6, 27, 54], (depthNorm - 0.68) / 0.32);
+    return mixColor([197, 188, 155], [120, 108, 77], clamp((elevation + 15) / 240, 0, 1));
   }
-
-  const wave = 0.038 * Math.sin(nx * 22.0 + ny * 8.0) + 0.025 * Math.cos(nx * 11.0 - ny * 17.0);
-  const sheen = 0.11 * (1.0 - ny);
-  const light = wave + sheen;
-  return rgb.map((value) => Math.round(clamp(value + light * 255, 0, 255)));
+  if (depthNorm < 0.22) return mixColor([78, 153, 190], [41, 112, 160], depthNorm / 0.22);
+  if (depthNorm < 0.68) return mixColor([41, 112, 160], [15, 66, 108], (depthNorm - 0.22) / 0.46);
+  return mixColor([15, 66, 108], [6, 27, 54], (depthNorm - 0.68) / 0.32);
 }
 
 function colorForField(fieldMode, value, range) {
@@ -423,159 +443,145 @@ function colorForField(fieldMode, value, range) {
   return mixColor([237, 244, 248], [23, 106, 188], (ratio - 0.5) / 0.5);
 }
 
-function bilinear(field, gx, gy) {
-  const rows = field.length;
-  const cols = field[0].length;
-  const x = clamp(gx, 0, cols - 1);
-  const y = clamp(gy, 0, rows - 1);
-
-  const x0 = Math.floor(x);
-  const y0 = Math.floor(y);
-  const x1 = Math.min(cols - 1, x0 + 1);
-  const y1 = Math.min(rows - 1, y0 + 1);
-  const tx = x - x0;
-  const ty = y - y0;
-
-  const c00 = field[y0][x0];
-  const c10 = field[y0][x1];
-  const c01 = field[y1][x0];
-  const c11 = field[y1][x1];
-
-  const blend = (a, b, c, d) => lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
-
-  return {
-    meanU: blend(c00.meanU, c10.meanU, c01.meanU, c11.meanU),
-    meanV: blend(c00.meanV, c10.meanV, c01.meanV, c11.meanV),
-    meanTemperature: blend(c00.meanTemperature, c10.meanTemperature, c01.meanTemperature, c11.meanTemperature),
-    meanSalinity: blend(c00.meanSalinity, c10.meanSalinity, c01.meanSalinity, c11.meanSalinity),
-    meanSSH: blend(c00.meanSSH, c10.meanSSH, c01.meanSSH, c11.meanSSH),
-    speed: blend(c00.speed, c10.speed, c01.speed, c11.speed),
-    elevation: blend(c00.elevation, c10.elevation, c01.elevation, c11.elevation),
-    land: blend(c00.land ? 1 : 0, c10.land ? 1 : 0, c01.land ? 1 : 0, c11.land ? 1 : 0) > 0.45,
-  };
+function edgeValues(values) {
+  if (values.length === 1) {
+    return [values[0] - 0.01, values[0] + 0.01];
+  }
+  const edges = [];
+  edges.push(values[0] - (values[1] - values[0]) / 2);
+  for (let i = 0; i < values.length - 1; i += 1) {
+    edges.push((values[i] + values[i + 1]) / 2);
+  }
+  edges.push(values[values.length - 1] + (values[values.length - 1] - values[values.length - 2]) / 2);
+  return edges;
 }
 
-function drawOceanMap(context, width, height, summary, fieldMode, range, subset) {
-  const margin = { left: 66, right: 12, top: 12, bottom: 44 };
-  const mapWidth = Math.max(1, width - margin.left - margin.right);
-  const mapHeight = Math.max(1, height - margin.top - margin.bottom);
+function bilinearSample(grid, fi, fj) {
+  const rows = grid.length;
+  const cols = grid[0].length;
 
+  const i0 = clamp(Math.floor(fi), 0, rows - 1);
+  const j0 = clamp(Math.floor(fj), 0, cols - 1);
+  const i1 = clamp(i0 + 1, 0, rows - 1);
+  const j1 = clamp(j0 + 1, 0, cols - 1);
+
+  const ti = clamp(fi - i0, 0, 1);
+  const tj = clamp(fj - j0, 0, 1);
+
+  const a = lerp(grid[i0][j0], grid[i0][j1], tj);
+  const b = lerp(grid[i1][j0], grid[i1][j1], tj);
+  return lerp(a, b, ti);
+}
+
+function drawScalarField(dataset, subset, summary, fieldMode, range) {
+  explorerState.scalarLayer.clearLayers();
   const rows = summary.field.length;
-  const cols = summary.field[0].length;
+  const cols = summary.field[0]?.length || 0;
+  if (!rows || !cols) return;
 
-  const image = context.createImageData(mapWidth, mapHeight);
-  let pixelOffset = 0;
+  const mapSize = explorerState.map ? explorerState.map.getSize() : { x: 800, y: 520 };
+  const width = Math.max(540, Math.min(1100, mapSize.x));
+  const height = Math.max(360, Math.min(760, Math.round(mapSize.y * 0.95)));
 
-  for (let py = 0; py < mapHeight; py += 1) {
-    const ny = py / Math.max(1, mapHeight - 1);
-    const gy = (1 - ny) * Math.max(1, rows - 1);
-    for (let px = 0; px < mapWidth; px += 1) {
-      const nx = px / Math.max(1, mapWidth - 1);
-      const gx = nx * Math.max(1, cols - 1);
-      const cell = bilinear(summary.field, gx, gy);
+  const valueGrid = summary.field.map((row) => row.map((cell) => valueForMode(cell, fieldMode)));
+  const elevationGrid = summary.field.map((row) => row.map((cell) => cell.elevation));
+  const landGrid = summary.field.map((row) => row.map((cell) => (cell.land ? 1 : 0)));
 
-      const baseColor = colorForRelief(cell.elevation, cell.land, nx, ny);
-      const fieldColor = colorForField(fieldMode, valueForMode(cell, fieldMode), range);
-      const blendRatio = fieldMode === 'bathymetry' ? 0.22 : 0.46;
-      const rgb = mixColor(baseColor, fieldColor, blendRatio);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return;
 
-      image.data[pixelOffset] = rgb[0];
-      image.data[pixelOffset + 1] = rgb[1];
-      image.data[pixelOffset + 2] = rgb[2];
-      image.data[pixelOffset + 3] = 255;
-      pixelOffset += 4;
+  const image = context.createImageData(width, height);
+  const alpha = fieldMode === 'bathymetry' ? 0.22 : 0.52;
+
+  for (let y = 0; y < height; y += 1) {
+    const fi = ((height - 1 - y) / Math.max(1, height - 1)) * Math.max(1, rows - 1);
+    for (let x = 0; x < width; x += 1) {
+      const fj = (x / Math.max(1, width - 1)) * Math.max(1, cols - 1);
+
+      const value = bilinearSample(valueGrid, fi, fj);
+      const elevation = bilinearSample(elevationGrid, fi, fj);
+      const landProb = bilinearSample(landGrid, fi, fj);
+      const land = landProb > 0.5;
+
+      const baseColor = colorForRelief(elevation, land);
+      const fieldColor = colorForField(fieldMode, value, range);
+      const fill = mixColor(baseColor, fieldColor, alpha);
+
+      const idx = (y * width + x) * 4;
+      image.data[idx] = fill[0];
+      image.data[idx + 1] = fill[1];
+      image.data[idx + 2] = fill[2];
+      image.data[idx + 3] = 208;
     }
   }
 
-  context.putImageData(image, margin.left, margin.top);
+  context.putImageData(image, 0, 0);
 
-  context.save();
-  context.strokeStyle = 'rgba(255,255,255,0.45)';
-  context.lineWidth = 1.05;
-  context.strokeRect(margin.left, margin.top, mapWidth, mapHeight);
-
-  context.fillStyle = 'rgba(255,255,255,0.92)';
-  context.font = '12px Inter, sans-serif';
-
-  const lonLabels = [subset.lonMin, (subset.lonMin + subset.lonMax) / 2, subset.lonMax];
-  const latLabels = [subset.latMin, (subset.latMin + subset.latMax) / 2, subset.latMax];
-
-  context.textAlign = 'center';
-  lonLabels.forEach((value, index) => {
-    const x = margin.left + (mapWidth * index) / (lonLabels.length - 1);
-    context.fillText(`${formatNumber(value)}°`, x, height - 18);
-  });
-
-  context.textAlign = 'right';
-  latLabels.forEach((value, index) => {
-    const y = margin.top + mapHeight - (mapHeight * index) / (latLabels.length - 1);
-    context.fillText(`${formatNumber(value)}°`, margin.left - 10, y + (index === latLabels.length - 1 ? -8 : 4));
-  });
-
-  context.textAlign = 'center';
-  context.fillText('longitude', margin.left + mapWidth / 2, height - 4);
-
-  context.save();
-  context.translate(14, margin.top + mapHeight / 2 + 6);
-  context.rotate(-Math.PI / 2);
-  context.fillText('latitude', 0, 0);
-  context.restore();
-
-  context.restore();
-  return { margin, mapWidth, mapHeight };
+  L.imageOverlay(canvas.toDataURL('image/png'), [[subset.latMin, subset.lonMin], [subset.latMax, subset.lonMax]], {
+    opacity: 0.92,
+    interactive: false,
+    className: 'platform-scalar-overlay',
+  }).addTo(explorerState.scalarLayer);
 }
 
-function drawVectorOverlay(context, summary, speedRange, controls, mapLayout) {
-  const step = Number(controls.vectorDensity.value);
-  const rows = summary.field.length;
-  const cols = summary.field[0].length;
-  const cellWidth = mapLayout.mapWidth / Math.max(1, cols);
-  const cellHeight = mapLayout.mapHeight / Math.max(1, rows);
+function drawVectorField(dataset, subset, summary, controls, speedRange) {
+  explorerState.vectorLayer.clearLayers();
 
-  let count = 0;
-  summary.field.forEach((row, rowIndex) => {
-    row.forEach((cell, colIndex) => {
-      if (cell.land) return;
-      if (rowIndex % step !== 0 || colIndex % step !== 0) return;
+  const densityStep = Number(controls.vectorDensity.value);
+  const latVals = subset.latIndices.map((index) => dataset.latitude[index]);
+  const lonVals = subset.lonIndices.map((index) => dataset.longitude[index]);
 
-      const cx = mapLayout.margin.left + colIndex * cellWidth + cellWidth / 2;
-      const cy = mapLayout.margin.top + (rows - rowIndex - 1) * cellHeight + cellHeight / 2;
+  let vectorCount = 0;
 
-      const scale = Math.min(cellWidth, cellHeight) * 0.9;
-      const norm = Math.max(0.08, speedRange.max);
-      const dx = (cell.meanU / norm) * scale;
-      const dy = (-cell.meanV / norm) * scale;
-      const ex = cx + dx;
-      const ey = cy + dy;
+  for (let i = 0; i < summary.field.length; i += 1) {
+    for (let j = 0; j < summary.field[i].length; j += 1) {
+      const cell = summary.field[i][j];
+      if (cell.land) continue;
+      if (i % densityStep !== 0 || j % densityStep !== 0) continue;
 
-      context.strokeStyle = 'rgba(7, 20, 30, 0.82)';
-      context.lineWidth = 3.5;
-      context.beginPath();
-      context.moveTo(cx, cy);
-      context.lineTo(ex, ey);
-      context.stroke();
+      const lat = latVals[i];
+      const lon = lonVals[j];
+      const speedNorm = Math.max(0.08, speedRange.max);
 
-      context.strokeStyle = 'rgba(236, 247, 255, 0.96)';
-      context.lineWidth = 2;
-      context.beginPath();
-      context.moveTo(cx, cy);
-      context.lineTo(ex, ey);
-      context.stroke();
+      const latScale = 0.07;
+      const lonScale = 0.07 / Math.max(0.25, Math.cos((lat * Math.PI) / 180));
 
-      const angle = Math.atan2(dy, dx);
-      const arrowLength = 6.2;
-      context.fillStyle = 'rgba(236, 247, 255, 0.96)';
-      context.beginPath();
-      context.moveTo(ex, ey);
-      context.lineTo(ex - arrowLength * Math.cos(angle - Math.PI / 6), ey - arrowLength * Math.sin(angle - Math.PI / 6));
-      context.lineTo(ex - arrowLength * Math.cos(angle + Math.PI / 6), ey - arrowLength * Math.sin(angle + Math.PI / 6));
-      context.closePath();
-      context.fill();
-      count += 1;
-    });
-  });
+      const deltaLat = (cell.meanV / speedNorm) * latScale;
+      const deltaLon = (cell.meanU / speedNorm) * lonScale;
 
-  return count;
+      const endLat = lat + deltaLat;
+      const endLon = lon + deltaLon;
+
+      L.polyline(
+        [
+          [lat, lon],
+          [endLat, endLon],
+        ],
+        {
+          color: 'rgba(235,247,255,0.95)',
+          weight: 1.6,
+          opacity: 0.92,
+          interactive: false,
+        }
+      ).addTo(explorerState.vectorLayer);
+
+      L.circleMarker([endLat, endLon], {
+        radius: 1.8,
+        color: 'rgba(235,247,255,0.95)',
+        fillColor: 'rgba(235,247,255,0.95)',
+        fillOpacity: 0.95,
+        weight: 1,
+        interactive: false,
+      }).addTo(explorerState.vectorLayer);
+
+      vectorCount += 1;
+    }
+  }
+
+  return vectorCount;
 }
 
 function summaryValues(summary, fieldMode) {
@@ -633,8 +639,8 @@ function updateLegend(controls, fieldMode) {
 }
 
 function renderExplorer() {
-  const { dataset, controls } = explorerState;
-  if (!dataset || !controls) return;
+  const { dataset, controls, map } = explorerState;
+  if (!dataset || !controls || !map) return;
 
   const subset = activeSubsetIndices(dataset, controls);
   if (!subset.latIndices.length || !subset.lonIndices.length) return;
@@ -646,13 +652,13 @@ function renderExplorer() {
   const fieldRange = scalarRange(summary, fieldMode);
   const speedRange = scalarRange(summary, 'speed');
 
-  const { context, width, height } = setupCanvas(controls.canvas);
-  context.clearRect(0, 0, width, height);
-  context.fillStyle = '#0a2238';
-  context.fillRect(0, 0, width, height);
+  drawScalarField(dataset, subset, summary, fieldMode, fieldRange);
 
-  const mapLayout = drawOceanMap(context, width, height, summary, fieldMode, fieldRange, subset);
-  const vectorCount = showVectors ? drawVectorOverlay(context, summary, speedRange, controls, mapLayout) : 0;
+  const vectorCount = showVectors ? drawVectorField(dataset, subset, summary, controls, speedRange) : 0;
+  if (!showVectors) {
+    explorerState.vectorLayer.clearLayers();
+  }
+
   controls.stats[2].textContent = String(vectorCount);
 
   const values = summaryValues(summary, fieldMode);
@@ -666,7 +672,7 @@ function renderExplorer() {
   updateLegend(controls, fieldMode);
 
   controls.narrative.textContent =
-    `This demo renders a small static subset (${dataset.metadata.grid_shape[0]} × ${dataset.metadata.grid_shape[1]}, ${dataset.metadata.depth_count} depth levels, ${dataset.time.length} dates) to keep GitHub Pages responsive while preserving real ocean variation.`;
+    `This demo renders a small static subset (${dataset.metadata.grid_shape[0]} x ${dataset.metadata.grid_shape[1]}, ${dataset.metadata.depth_count} depth levels, ${dataset.time.length} dates) to keep GitHub Pages responsive while preserving real ocean variation.`;
 
   controls.meta.innerHTML = [
     `Time: ${formatDateLabel(dataset.time[subset.timeStart])} -> ${formatDateLabel(dataset.time[subset.timeEnd])}`,
@@ -674,7 +680,12 @@ function renderExplorer() {
     `Variable: ${fieldConfig.label}`,
     `Lat: ${formatSigned(subset.latMin)}° -> ${formatSigned(subset.latMax)}°`,
     `Lon: ${formatSigned(subset.lonMin)}° -> ${formatSigned(subset.lonMax)}°`,
-  ].map((text) => `<span class="platform-meta-pill">${text}</span>`).join('');
+  ]
+    .map((text) => `<span class="platform-meta-pill">${text}</span>`)
+    .join('');
+
+  const fitBounds = L.latLngBounds([subset.latMin, subset.lonMin], [subset.latMax, subset.lonMax]);
+  map.fitBounds(fitBounds.pad(0.05), { animate: false });
 }
 
 async function loadDataset() {
@@ -690,6 +701,7 @@ async function bootstrapExplorer() {
   try {
     const dataset = await loadDataset();
     explorerState.dataset = dataset;
+    initializeMap(dataset);
     explorerState.controls = initializeControls(dataset);
     renderExplorer();
   } catch (error) {

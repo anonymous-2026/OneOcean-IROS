@@ -12,6 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="../static/css/platform.css">
 </head>
 <body>
@@ -213,7 +214,7 @@
               </div>
             </div>
             <div class="platform-map-shell platform-map-shell-large">
-              <canvas id="flowFieldCanvas" width="1280" height="720" aria-label="Ocean subset field map"></canvas>
+              <div id="flowFieldMap" aria-label="Ocean subset field map"></div>
             </div>
             <div id="explorerMeta" class="platform-meta-row"></div>
           </section>
@@ -236,7 +237,7 @@
             <div class="platform-precision-grid">
               <div class="platform-precision-item">
                 <span class="platform-precision-k">Horizontal step</span>
-                <span class="platform-precision-v">~0.00418°</span>
+                <span class="platform-precision-v">~0.00418° (about 460 m)</span>
               </div>
               <div class="platform-precision-item">
                 <span class="platform-precision-k">Spatial grid</span>
@@ -251,7 +252,7 @@
                 <span class="platform-precision-v">Daily (30-step window)</span>
               </div>
             </div>
-            <p class="platform-subnote">The browser explorer intentionally loads a very small static subset for fast web interaction and does not represent this full precision profile.</p>
+            <p class="platform-subnote">This precision reflects the released real ocean data product (not synthetic super-resolution). Interpolation can produce finer output grids for rendering or simulation, but it does not add new measured physical detail beyond the source data.</p>
           </article>
         </div>
       </div>
@@ -388,6 +389,7 @@ python tracks/oceangym_benchmark/run_task_suite.py \
     </section>
   </main>
 
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script defer src="../static/js/platform.js"></script>
 </body>
 </html>
