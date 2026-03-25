@@ -1,4 +1,8 @@
-# OneOcean
+<p align="center">
+  <img src="docs/static/logo.png" alt="OneOcean logo" width="120">
+</p>
+
+# One Ocean, Many Tasks: A Data-Grounded Simulation Suite and Benchmark for Marine Robotics
 
 <a href="https://anonymous-2026.github.io/OneOcean-demo-IROS"><img src="https://img.shields.io/badge/Online%20Demo-GitHub%20Pages-0EA5E9.svg" alt="Online Demo"></a>
 <a href="https://youtu.be/Fz2medRUxwo"><img src="https://img.shields.io/badge/Intro%20Video-YouTube-FF0000.svg" alt="Intro Video"></a>
