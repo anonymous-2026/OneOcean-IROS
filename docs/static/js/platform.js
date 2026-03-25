@@ -447,20 +447,20 @@ function vectorColorForMode(fieldMode, value, range) {
   const span = Math.max(1e-6, range.max - range.min);
   const ratio = clamp((value - range.min) / span, 0, 1);
 
-  if (fieldMode === 'speed') return mixColor([255, 232, 176], [206, 54, 40], ratio);
-  if (fieldMode === 'temperature') return mixColor([255, 238, 194], [198, 40, 40], ratio);
-  if (fieldMode === 'salinity') return mixColor([255, 230, 170], [168, 61, 23], ratio);
-  if (fieldMode === 'bathymetry') return mixColor([255, 244, 210], [147, 46, 18], ratio);
-  if (ratio < 0.5) return mixColor([255, 235, 181], [255, 173, 96], ratio / 0.5);
-  return mixColor([255, 173, 96], [188, 40, 34], (ratio - 0.5) / 0.5);
+  if (fieldMode === 'speed') return mixColor([255, 246, 198], [255, 112, 78], ratio);
+  if (fieldMode === 'temperature') return mixColor([255, 246, 205], [255, 96, 64], ratio);
+  if (fieldMode === 'salinity') return mixColor([255, 242, 192], [246, 120, 60], ratio);
+  if (fieldMode === 'bathymetry') return mixColor([255, 248, 214], [236, 108, 50], ratio);
+  if (ratio < 0.5) return mixColor([255, 244, 196], [255, 188, 110], ratio / 0.5);
+  return mixColor([255, 188, 110], [244, 102, 58], (ratio - 0.5) / 0.5);
 }
 
 function legendGradientForMode(fieldMode) {
-  if (fieldMode === 'speed') return 'linear-gradient(90deg, #ffe8b0, #ce3628)';
-  if (fieldMode === 'temperature') return 'linear-gradient(90deg, #ffeec2, #c62828)';
-  if (fieldMode === 'salinity') return 'linear-gradient(90deg, #ffe6aa, #a83d17)';
-  if (fieldMode === 'bathymetry') return 'linear-gradient(90deg, #fff4d2, #932e12)';
-  return 'linear-gradient(90deg, #ffebb5, #ffad60 50%, #bc2822)';
+  if (fieldMode === 'speed') return 'linear-gradient(90deg, #fff6c6, #ff704e)';
+  if (fieldMode === 'temperature') return 'linear-gradient(90deg, #fff6cd, #ff6040)';
+  if (fieldMode === 'salinity') return 'linear-gradient(90deg, #fff2c0, #f6783c)';
+  if (fieldMode === 'bathymetry') return 'linear-gradient(90deg, #fff8d6, #ec6c32)';
+  return 'linear-gradient(90deg, #fff4c4, #ffbc6e 50%, #f4663a)';
 }
 
 function bilinearSample(grid, fi, fj) {
