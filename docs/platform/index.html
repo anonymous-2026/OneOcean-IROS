@@ -225,43 +225,33 @@
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Resolution</p>
-          <h2>Supported data footprints</h2>
+          <h2>Best supported precision</h2>
           <p>
-            OneOcean does not expose one fixed precision. Effective resolution depends on the chosen region, the requested time span, the depth levels, and which export variant is generated from the pipeline.
+            This section reports the best precision profile we use for research runs. It is the reference fidelity for training and evaluation, independent of convenience exports used for local workflow.
           </p>
         </div>
-        <div class="platform-card-grid platform-card-grid-resolution">
+        <div class="platform-card-grid platform-card-grid-1">
           <article class="platform-card">
-            <h3>Current released or generated examples</h3>
-            <div class="platform-table-wrap">
-              <table class="platform-table">
-                <thead>
-                  <tr>
-                    <th>Artifact</th>
-                    <th>Time</th>
-                    <th>Depth</th>
-                    <th>Lat × Lon</th>
-                    <th>Step</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td>Main local example</td><td>30 daily steps</td><td>26 levels</td><td>240 × 240</td><td>~0.00418°</td></tr>
-                  <tr><td>Public variant</td><td>357 daily steps</td><td>26 levels</td><td>41 × 41</td><td>0.25°</td></tr>
-                  <tr><td>Tiny variant</td><td>357 daily steps</td><td>1 level</td><td>62 × 101</td><td>~0.01°</td></tr>
-                  <tr><td>Web subset</td><td>13 sampled dates</td><td>4 sampled levels</td><td>21 × 21</td><td>0.50°</td></tr>
-                </tbody>
-              </table>
+            <h3>Research-grade precision profile</h3>
+            <div class="platform-precision-grid">
+              <div class="platform-precision-item">
+                <span class="platform-precision-k">Horizontal step</span>
+                <span class="platform-precision-v">~0.00418°</span>
+              </div>
+              <div class="platform-precision-item">
+                <span class="platform-precision-k">Spatial grid</span>
+                <span class="platform-precision-v">240 × 240</span>
+              </div>
+              <div class="platform-precision-item">
+                <span class="platform-precision-k">Depth levels</span>
+                <span class="platform-precision-v">26</span>
+              </div>
+              <div class="platform-precision-item">
+                <span class="platform-precision-k">Temporal sampling</span>
+                <span class="platform-precision-v">Daily (30-step window)</span>
+              </div>
             </div>
-            <p class="platform-subnote">The browser subset is intentionally downsampled for fast static deployment and does not represent the maximum supported data fidelity.</p>
-          </article>
-          <article class="platform-card">
-            <h3>How to interpret precision</h3>
-            <ul class="platform-list">
-              <li><strong>Space:</strong> current examples span from ~0.25° broad coverage down to ~0.00418° for tighter local crops.</li>
-              <li><strong>Time:</strong> artifacts range from a focused 30-day crop to a year-scale public release with 357 daily steps.</li>
-              <li><strong>Depth:</strong> current generated products span from a single shallow layer in tiny to 26 levels in broader examples.</li>
-              <li><strong>Pipeline:</strong> these are concrete released footprints, not hard limits. Different region, time, and depth requests can be regenerated when upstream coverage exists.</li>
-            </ul>
+            <p class="platform-subnote">The browser explorer intentionally loads a very small static subset for fast web interaction and does not represent this full precision profile.</p>
           </article>
         </div>
       </div>

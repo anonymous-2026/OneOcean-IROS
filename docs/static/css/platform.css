@@ -193,10 +193,10 @@ code {
 .platform-card-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .platform-card-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .platform-card-grid-resolution { grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr); }
+.platform-card-grid-1 { grid-template-columns: 1fr; }
 .platform-card,
 .platform-panel,
-.platform-explorer-card,
-.platform-mini-card {
+.platform-explorer-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -232,17 +232,7 @@ code {
 }
 .platform-panel { padding: 20px; }
 .platform-explorer-top > .platform-panel:first-child {
-  padding: 14px;
-}
-.platform-explorer-top > .platform-panel:first-child .platform-panel-head {
-  margin-bottom: 10px;
-}
-.platform-explorer-top > .platform-panel:first-child h3 {
-  font-size: 0.98rem;
-  margin-bottom: 4px;
-}
-.platform-explorer-top > .platform-panel:first-child .platform-subnote {
-  font-size: 0.84rem;
+  padding: 16px;
 }
 .platform-controls-panel { order: 2; }
 .platform-map-panel { margin-top: 16px; }
@@ -372,7 +362,7 @@ code {
 }
 .platform-map-shell-large {
   height: min(68vh, 760px);
-  min-height: 460px;
+  min-height: 500px;
 }
 #flowFieldCanvas {
   display: block;
@@ -465,10 +455,37 @@ code {
   color: var(--text-soft);
 }
 .platform-detail-grid { margin-top: 16px; }
+.platform-precision-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.platform-precision-item {
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  border-radius: 12px;
+  padding: 12px;
+}
+.platform-precision-k {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+.platform-precision-v {
+  display: block;
+  margin-top: 6px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+}
 
 @media (max-width: 1120px) {
   .platform-card-grid-4,
   .platform-card-grid-resolution,
+  .platform-precision-grid,
   .platform-control-grid,
   .platform-range-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .platform-explorer-top { grid-template-columns: 1fr; }
@@ -483,6 +500,7 @@ code {
   .platform-card-grid-3,
   .platform-card-grid-4,
   .platform-card-grid-resolution,
+  .platform-precision-grid,
   .platform-control-grid,
   .platform-range-grid { grid-template-columns: 1fr; }
   .platform-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
