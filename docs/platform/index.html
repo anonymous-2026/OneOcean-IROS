@@ -204,13 +204,12 @@
               <div>
                 <h3>Subset field map</h3>
                 <p id="explorerLegendText" class="platform-subnote">
-                  Satellite-style background rendering of the selected subset, with bathymetry-informed shading and optional current vectors.
+                  Bathymetry is rendered as the base layer. Arrow direction shows current direction, and arrow color encodes the selected variable.
                 </p>
               </div>
               <div class="platform-legend">
                 <span class="legend-item"><span class="legend-swatch legend-land"></span>land / masked</span>
-                <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">current-speed tint</span></span>
-                <span class="legend-item"><span class="legend-swatch legend-current"></span>current vectors</span>
+                <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">vector color: current speed</span></span>
               </div>
             </div>
             <div class="platform-map-shell platform-map-shell-large">
@@ -236,23 +235,23 @@
             <h3>Research-grade precision profile</h3>
             <div class="platform-precision-grid">
               <div class="platform-precision-item">
-                <span class="platform-precision-k">Horizontal step</span>
-                <span class="platform-precision-v">~0.00418° (about 460 m)</span>
+                <span class="platform-precision-k">Horizontal step (default)</span>
+                <span class="platform-precision-v">~0.00418° (about 460 m), supports meter-level local interpolation grids</span>
               </div>
               <div class="platform-precision-item">
-                <span class="platform-precision-k">Spatial grid</span>
+                <span class="platform-precision-k">Spatial grid (default release)</span>
                 <span class="platform-precision-v">240 × 240</span>
               </div>
               <div class="platform-precision-item">
                 <span class="platform-precision-k">Depth levels</span>
-                <span class="platform-precision-v">26</span>
+                <span class="platform-precision-v">26 by default, supports meter-level custom depth sampling for local exports</span>
               </div>
               <div class="platform-precision-item">
                 <span class="platform-precision-k">Temporal sampling</span>
-                <span class="platform-precision-v">Daily (30-step window)</span>
+                <span class="platform-precision-v">Daily by default, supports hourly products where available</span>
               </div>
             </div>
-            <p class="platform-subnote">This precision reflects the released real ocean data product (not synthetic super-resolution). Interpolation can produce finer output grids for rendering or simulation, but it does not add new measured physical detail beyond the source data.</p>
+            <p class="platform-subnote">The default profile above reflects released real ocean observations/reanalysis. Finer meter-level grids are interpolation outputs for rendering or simulation and do not add new measured physical detail beyond the source products.</p>
           </article>
         </div>
       </div>
@@ -272,7 +271,7 @@
           <article class="platform-card"><span class="platform-step">01</span><h3>Ocean fields</h3><p>Copernicus Marine variables such as currents, SSH, salinity, and temperature.</p></article>
           <article class="platform-card"><span class="platform-step">02</span><h3>Bathymetry</h3><p>GEBCO GeoTIFF crops provide terrain structure and masking for the requested region.</p></article>
           <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p>The pipeline interpolates, aligns, merges, and writes the environment product.</p></article>
-          <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce <code>combined_environment.nc</code>, variants, drift exports, and scene-facing task assets.</p></article>
+          <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce variants, drift exports, and scene-facing task assets with consistent manifests.</p></article>
         </div>
 
         <div class="platform-card-grid platform-card-grid-2 platform-detail-grid">
@@ -302,6 +301,50 @@
 
         <div class="platform-banner">
           <strong>Credentials:</strong> Copernicus Marine access uses <code>COPERNICUSMARINE_USERNAME</code> and <code>COPERNICUSMARINE_PASSWORD</code>. GEBCO GeoTIFF files must be available before running the pipeline.
+        </div>
+      </div>
+    </section>
+
+    <section class="platform-section">
+      <div class="platform-shell">
+        <div class="platform-section-head">
+          <p class="platform-kicker">Data Sources</p>
+          <h2>Grounding data providers used by OneOcean</h2>
+          <p>
+            OneOcean merges multiple open ocean data products. The list below shows the source type, the primary dataset/product, and the responsible organization.
+          </p>
+        </div>
+        <div class="platform-card">
+          <div class="platform-source-grid">
+            <div class="platform-source-cell platform-source-head">Source type</div>
+            <div class="platform-source-cell platform-source-head">Dataset / product</div>
+            <div class="platform-source-cell platform-source-head">Organization</div>
+
+            <div class="platform-source-cell">Bathymetry</div>
+            <div class="platform-source-cell"><a href="https://www.gebco.net/data-products/gridded-bathymetry-data" target="_blank" rel="noopener">GEBCO 2025 Grid</a></div>
+            <div class="platform-source-cell">GEBCO Compilation Group under IHO and IOC-UNESCO</div>
+
+            <div class="platform-source-cell">Ocean physics</div>
+            <div class="platform-source-cell"><a href="https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024/description" target="_blank" rel="noopener">Copernicus Marine Global Ocean Physics Analysis and Forecast / GLORYS products</a></div>
+            <div class="platform-source-cell">Copernicus Marine Service, implemented by Mercator Ocean International for the European Union</div>
+
+            <div class="platform-source-cell">Tides</div>
+            <div class="platform-source-cell"><a href="https://www.tpxo.net/global" target="_blank" rel="noopener">TPXO Global Ocean Tidal Inversion Model</a></div>
+            <div class="platform-source-cell">Oregon State University (TPXO / OTIS development)</div>
+
+            <div class="platform-source-cell">Marine pollution</div>
+            <div class="platform-source-cell"><a href="https://hub.arcgis.com/datasets/noaa::marine-debris-monitoring-and-assessment-project-mdmap/about" target="_blank" rel="noopener">NOAA Marine Debris Monitoring and Assessment Project (MDMAP)</a></div>
+            <div class="platform-source-cell">NOAA Marine Debris Program</div>
+
+            <div class="platform-source-cell">Marine biodiversity</div>
+            <div class="platform-source-cell"><a href="https://obis.org/" target="_blank" rel="noopener">Ocean Biodiversity Information System (OBIS)</a></div>
+            <div class="platform-source-cell">IOC-UNESCO / OBIS Secretariat</div>
+
+            <div class="platform-source-cell">Global ocean data (China observation/reanalysis track)</div>
+            <div class="platform-source-cell">China Global Ocean Fusion Dataset and China Ocean ReAnalysis (CORA) products (with GLORYS as key reference input in this track)</div>
+            <div class="platform-source-cell">National Marine Data and Information Service (NMDIS), Ministry of Natural Resources, China</div>
+          </div>
+          <p class="platform-subnote platform-source-note">Note: product names can evolve across releases. OneOcean records the exact source version and footprint in export manifests for reproducibility.</p>
         </div>
       </div>
     </section>

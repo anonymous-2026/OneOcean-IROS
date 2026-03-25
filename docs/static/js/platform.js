@@ -11,50 +11,50 @@ const explorerState = {
 const FIELD_CONFIG = {
   speed: {
     label: 'current speed',
-    legend: 'current-speed tint',
-    narrative: 'Current speed is rendered over a map base layer with bathymetry-aware shading.',
+    legend: 'vector color: current speed',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes current-speed magnitude.',
     primaryLabel: 'Mean speed',
     secondaryLabel: 'Peak speed',
   },
   temperature: {
     label: 'temperature',
-    legend: 'temperature tint',
-    narrative: 'Temperature tint highlights thermal variation in the selected depth layer.',
+    legend: 'vector color: temperature',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes temperature in the selected depth layer.',
     primaryLabel: 'Mean temperature',
     secondaryLabel: 'Peak temperature',
   },
   salinity: {
     label: 'salinity',
-    legend: 'salinity tint',
-    narrative: 'Salinity tint highlights spatial water-mass differences.',
+    legend: 'vector color: salinity',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes salinity variation.',
     primaryLabel: 'Mean salinity',
     secondaryLabel: 'Peak salinity',
   },
   ssh: {
     label: 'sea surface height',
-    legend: 'sea-surface-height tint',
-    narrative: 'Sea-surface-height tint highlights sampled surface elevation from the same subset.',
+    legend: 'vector color: sea-surface height',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes sea-surface-height variation.',
     primaryLabel: 'Mean SSH',
     secondaryLabel: 'Peak |SSH|',
   },
   u: {
     label: 'zonal current (u)',
-    legend: 'zonal-current tint',
-    narrative: 'Zonal-current tint visualizes east-west current variation.',
+    legend: 'vector color: zonal current (u)',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes zonal-current variation.',
     primaryLabel: 'Mean u',
     secondaryLabel: 'Peak |u|',
   },
   v: {
     label: 'meridional current (v)',
-    legend: 'meridional-current tint',
-    narrative: 'Meridional-current tint visualizes north-south current variation.',
+    legend: 'vector color: meridional current (v)',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes meridional-current variation.',
     primaryLabel: 'Mean v',
     secondaryLabel: 'Peak |v|',
   },
   bathymetry: {
     label: 'bathymetry',
-    legend: 'bathymetry shading',
-    narrative: 'Bathymetry shading visualizes seabed geometry across the selected region.',
+    legend: 'vector color: bathymetry depth',
+    narrative: 'Bathymetry is shown as the base map. Arrow color encodes local depth values.',
     primaryLabel: 'Mean depth',
     secondaryLabel: 'Max depth',
   },
@@ -201,10 +201,10 @@ function initializeControls(dataset) {
   controls.depthSelect.value = '0';
   controls.fieldMode.value = 'speed';
   controls.vectorOverlay.value = 'on';
-  controls.latMin.value = String(minLat + 1.0);
-  controls.latMax.value = String(maxLat - 1.0);
-  controls.lonMin.value = String(minLon + 1.0);
-  controls.lonMax.value = String(maxLon - 1.0);
+  controls.latMin.value = String(minLat);
+  controls.latMax.value = String(maxLat);
+  controls.lonMin.value = String(minLon);
+  controls.lonMax.value = String(maxLon);
   controls.vectorDensity.value = '1';
 
   const rerender = () => {
@@ -235,10 +235,10 @@ function initializeControls(dataset) {
     controls.depthSelect.value = '0';
     controls.fieldMode.value = 'speed';
     controls.vectorOverlay.value = 'on';
-    controls.latMin.value = String(minLat + 1.0);
-    controls.latMax.value = String(maxLat - 1.0);
-    controls.lonMin.value = String(minLon + 1.0);
-    controls.lonMax.value = String(maxLon - 1.0);
+    controls.latMin.value = String(minLat);
+    controls.latMax.value = String(maxLat);
+    controls.lonMin.value = String(minLon);
+    controls.lonMax.value = String(maxLon);
     controls.vectorDensity.value = '1';
     rerender();
   });
@@ -443,17 +443,24 @@ function colorForField(fieldMode, value, range) {
   return mixColor([237, 244, 248], [23, 106, 188], (ratio - 0.5) / 0.5);
 }
 
-function edgeValues(values) {
-  if (values.length === 1) {
-    return [values[0] - 0.01, values[0] + 0.01];
-  }
-  const edges = [];
-  edges.push(values[0] - (values[1] - values[0]) / 2);
-  for (let i = 0; i < values.length - 1; i += 1) {
-    edges.push((values[i] + values[i + 1]) / 2);
-  }
-  edges.push(values[values.length - 1] + (values[values.length - 1] - values[values.length - 2]) / 2);
-  return edges;
+function vectorColorForMode(fieldMode, value, range) {
+  const span = Math.max(1e-6, range.max - range.min);
+  const ratio = clamp((value - range.min) / span, 0, 1);
+
+  if (fieldMode === 'speed') return mixColor([40, 136, 186], [255, 229, 124], ratio);
+  if (fieldMode === 'temperature') return mixColor([33, 112, 190], [246, 121, 55], ratio);
+  if (fieldMode === 'salinity') return mixColor([41, 130, 112], [220, 239, 114], ratio);
+  if (fieldMode === 'bathymetry') return mixColor([117, 167, 204], [10, 55, 94], ratio);
+  if (ratio < 0.5) return mixColor([47, 122, 204], [237, 244, 248], ratio / 0.5);
+  return mixColor([237, 244, 248], [230, 100, 58], (ratio - 0.5) / 0.5);
+}
+
+function legendGradientForMode(fieldMode) {
+  if (fieldMode === 'speed') return 'linear-gradient(90deg, #2888ba, #ffe57c)';
+  if (fieldMode === 'temperature') return 'linear-gradient(90deg, #2170be, #f67937)';
+  if (fieldMode === 'salinity') return 'linear-gradient(90deg, #298270, #dcef72)';
+  if (fieldMode === 'bathymetry') return 'linear-gradient(90deg, #75a7cc, #0a375e)';
+  return 'linear-gradient(90deg, #2f7acc, #edf4f8 50%, #e6643a)';
 }
 
 function bilinearSample(grid, fi, fj) {
@@ -483,7 +490,6 @@ function drawScalarField(dataset, subset, summary, fieldMode, range) {
   const width = Math.max(540, Math.min(1100, mapSize.x));
   const height = Math.max(360, Math.min(760, Math.round(mapSize.y * 0.95)));
 
-  const valueGrid = summary.field.map((row) => row.map((cell) => valueForMode(cell, fieldMode)));
   const elevationGrid = summary.field.map((row) => row.map((cell) => cell.elevation));
   const landGrid = summary.field.map((row) => row.map((cell) => (cell.land ? 1 : 0)));
 
@@ -494,21 +500,19 @@ function drawScalarField(dataset, subset, summary, fieldMode, range) {
   if (!context) return;
 
   const image = context.createImageData(width, height);
-  const alpha = fieldMode === 'bathymetry' ? 0.22 : 0.52;
+  const alpha = 0.16;
 
   for (let y = 0; y < height; y += 1) {
     const fi = ((height - 1 - y) / Math.max(1, height - 1)) * Math.max(1, rows - 1);
     for (let x = 0; x < width; x += 1) {
       const fj = (x / Math.max(1, width - 1)) * Math.max(1, cols - 1);
 
-      const value = bilinearSample(valueGrid, fi, fj);
       const elevation = bilinearSample(elevationGrid, fi, fj);
       const landProb = bilinearSample(landGrid, fi, fj);
       const land = landProb > 0.5;
 
       const baseColor = colorForRelief(elevation, land);
-      const fieldColor = colorForField(fieldMode, value, range);
-      const fill = mixColor(baseColor, fieldColor, alpha);
+      const fill = mixColor(baseColor, [233, 244, 250], alpha);
 
       const idx = (y * width + x) * 4;
       image.data[idx] = fill[0];
@@ -527,13 +531,13 @@ function drawScalarField(dataset, subset, summary, fieldMode, range) {
   }).addTo(explorerState.scalarLayer);
 }
 
-function drawVectorField(dataset, subset, summary, controls, speedRange) {
+function drawVectorField(dataset, subset, summary, controls, speedRange, fieldMode, fieldRange) {
   explorerState.vectorLayer.clearLayers();
 
   if (!explorerState.map) return 0;
 
   const densityLevel = Number(controls.vectorDensity.value);
-  const pixelStepByDensity = { 1: 14, 2: 19, 3: 24, 4: 30 };
+  const pixelStepByDensity = { 1: 10, 2: 14, 3: 20, 4: 28 };
   const targetPixelStep = pixelStepByDensity[densityLevel] || 19;
 
   const rows = summary.field.length;
@@ -542,27 +546,21 @@ function drawVectorField(dataset, subset, summary, controls, speedRange) {
 
   const uGrid = summary.field.map((row) => row.map((cell) => cell.meanU));
   const vGrid = summary.field.map((row) => row.map((cell) => cell.meanV));
+  const valueGrid = summary.field.map((row) => row.map((cell) => valueForMode(cell, fieldMode)));
   const landGrid = summary.field.map((row) => row.map((cell) => (cell.land ? 1 : 0)));
+  const elevationGrid = summary.field.map((row) => row.map((cell) => cell.elevation));
 
   const map = explorerState.map;
   const topLeft = map.latLngToLayerPoint([subset.latMax, subset.lonMin]);
   const bottomRight = map.latLngToLayerPoint([subset.latMin, subset.lonMax]);
   const mapWidth = Math.max(1, Math.abs(bottomRight.x - topLeft.x));
   const mapHeight = Math.max(1, Math.abs(bottomRight.y - topLeft.y));
-  const nx = clamp(Math.round(mapWidth / targetPixelStep), cols, 96);
-  const ny = clamp(Math.round(mapHeight / targetPixelStep), rows, 96);
+  const nx = clamp(Math.round(mapWidth / targetPixelStep), cols, 120);
+  const ny = clamp(Math.round(mapHeight / targetPixelStep), rows, 120);
 
   const speedNorm = Math.max(0.08, speedRange.max);
   const headAngle = (28 * Math.PI) / 180;
 
-  const style = {
-    color: 'rgba(235,247,255,0.96)',
-    weight: 1.7,
-    opacity: 0.97,
-    interactive: false,
-    lineCap: 'round',
-    lineJoin: 'round',
-  };
   let vectorCount = 0;
 
   for (let yi = 0; yi < ny; yi += 1) {
@@ -571,12 +569,26 @@ function drawVectorField(dataset, subset, summary, controls, speedRange) {
     for (let xi = 0; xi < nx; xi += 1) {
       const fj = (xi / Math.max(1, nx - 1)) * Math.max(1, cols - 1);
       const landProb = bilinearSample(landGrid, fi, fj);
-      if (landProb > 0.5) continue;
+      const nearestI = clamp(Math.round(fi), 0, rows - 1);
+      const nearestJ = clamp(Math.round(fj), 0, cols - 1);
+      const nearestCell = summary.field[nearestI][nearestJ];
+      const elevation = bilinearSample(elevationGrid, fi, fj);
+      if (landProb > 0.35 || nearestCell.land || elevation >= 0) continue;
 
       const meanU = bilinearSample(uGrid, fi, fj);
       const meanV = bilinearSample(vGrid, fi, fj);
       const speed = Math.sqrt(meanU * meanU + meanV * meanV);
       if (speed < 1e-4) continue;
+      const fieldValue = bilinearSample(valueGrid, fi, fj);
+      const vectorColor = vectorColorForMode(fieldMode, fieldValue, fieldRange);
+      const style = {
+        color: toRgba(vectorColor, 0.96),
+        weight: 1.8,
+        opacity: 0.97,
+        interactive: false,
+        lineCap: 'round',
+        lineJoin: 'round',
+      };
 
       const px = topLeft.x + ((xi + 0.5) / nx) * mapWidth;
       const startPoint = L.point(px, py);
@@ -655,13 +667,9 @@ function summaryValues(summary, fieldMode) {
 
 function updateLegend(controls, fieldMode) {
   controls.surfaceLegendLabel.textContent = FIELD_CONFIG[fieldMode].legend;
-  if (fieldMode === 'bathymetry') {
-    controls.surfaceLegendSwatch.className = 'legend-swatch legend-bathy';
-  } else if (fieldMode === 'speed') {
-    controls.surfaceLegendSwatch.className = 'legend-swatch legend-speed';
-  } else {
-    controls.surfaceLegendSwatch.className = 'legend-swatch legend-current';
-  }
+  controls.surfaceLegendSwatch.className = 'legend-swatch';
+  controls.surfaceLegendSwatch.style.background = legendGradientForMode(fieldMode);
+  controls.surfaceLegendSwatch.style.border = '1px solid rgba(166, 190, 214, 0.9)';
 }
 
 function renderExplorer() {
@@ -680,7 +688,7 @@ function renderExplorer() {
 
   drawScalarField(dataset, subset, summary, fieldMode, fieldRange);
 
-  const vectorCount = showVectors ? drawVectorField(dataset, subset, summary, controls, speedRange) : 0;
+  const vectorCount = showVectors ? drawVectorField(dataset, subset, summary, controls, speedRange, fieldMode, fieldRange) : 0;
   if (!showVectors) {
     explorerState.vectorLayer.clearLayers();
   }
