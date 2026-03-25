@@ -205,7 +205,7 @@ function initializeControls(dataset) {
   controls.latMax.value = String(maxLat - 1.0);
   controls.lonMin.value = String(minLon + 1.0);
   controls.lonMax.value = String(maxLon - 1.0);
-  controls.vectorDensity.value = '2';
+  controls.vectorDensity.value = '1';
 
   const rerender = () => {
     normalizeRanges(controls);
@@ -239,7 +239,7 @@ function initializeControls(dataset) {
     controls.latMax.value = String(maxLat - 1.0);
     controls.lonMin.value = String(minLon + 1.0);
     controls.lonMax.value = String(maxLon - 1.0);
-    controls.vectorDensity.value = '2';
+    controls.vectorDensity.value = '1';
     rerender();
   });
 
@@ -269,7 +269,7 @@ function normalizeRanges(controls) {
 function updateRangeLabels(controls) {
   controls.latRangeValue.textContent = `${formatNumber(controls.latMin.value)}° to ${formatNumber(controls.latMax.value)}°`;
   controls.lonRangeValue.textContent = `${formatNumber(controls.lonMin.value)}° to ${formatNumber(controls.lonMax.value)}°`;
-  controls.vectorDensityValue.textContent = ['dense', 'balanced', 'light', 'sparse'][Number(controls.vectorDensity.value) - 1];
+  controls.vectorDensityValue.textContent = ['very dense', 'dense', 'balanced', 'light'][Number(controls.vectorDensity.value) - 1];
 }
 
 function activeSubsetIndices(dataset, controls) {
@@ -530,52 +530,78 @@ function drawScalarField(dataset, subset, summary, fieldMode, range) {
 function drawVectorField(dataset, subset, summary, controls, speedRange) {
   explorerState.vectorLayer.clearLayers();
 
-  const densityStep = Number(controls.vectorDensity.value);
-  const latVals = subset.latIndices.map((index) => dataset.latitude[index]);
-  const lonVals = subset.lonIndices.map((index) => dataset.longitude[index]);
+  if (!explorerState.map) return 0;
 
+  const densityLevel = Number(controls.vectorDensity.value);
+  const pixelStepByDensity = { 1: 14, 2: 19, 3: 24, 4: 30 };
+  const targetPixelStep = pixelStepByDensity[densityLevel] || 19;
+
+  const rows = summary.field.length;
+  const cols = summary.field[0]?.length || 0;
+  if (!rows || !cols) return 0;
+
+  const uGrid = summary.field.map((row) => row.map((cell) => cell.meanU));
+  const vGrid = summary.field.map((row) => row.map((cell) => cell.meanV));
+  const landGrid = summary.field.map((row) => row.map((cell) => (cell.land ? 1 : 0)));
+
+  const map = explorerState.map;
+  const topLeft = map.latLngToLayerPoint([subset.latMax, subset.lonMin]);
+  const bottomRight = map.latLngToLayerPoint([subset.latMin, subset.lonMax]);
+  const mapWidth = Math.max(1, Math.abs(bottomRight.x - topLeft.x));
+  const mapHeight = Math.max(1, Math.abs(bottomRight.y - topLeft.y));
+  const nx = clamp(Math.round(mapWidth / targetPixelStep), cols, 96);
+  const ny = clamp(Math.round(mapHeight / targetPixelStep), rows, 96);
+
+  const speedNorm = Math.max(0.08, speedRange.max);
+  const headAngle = (28 * Math.PI) / 180;
+
+  const style = {
+    color: 'rgba(235,247,255,0.96)',
+    weight: 1.7,
+    opacity: 0.97,
+    interactive: false,
+    lineCap: 'round',
+    lineJoin: 'round',
+  };
   let vectorCount = 0;
 
-  for (let i = 0; i < summary.field.length; i += 1) {
-    for (let j = 0; j < summary.field[i].length; j += 1) {
-      const cell = summary.field[i][j];
-      if (cell.land) continue;
-      if (i % densityStep !== 0 || j % densityStep !== 0) continue;
+  for (let yi = 0; yi < ny; yi += 1) {
+    const fi = (yi / Math.max(1, ny - 1)) * Math.max(1, rows - 1);
+    const py = topLeft.y + ((yi + 0.5) / ny) * mapHeight;
+    for (let xi = 0; xi < nx; xi += 1) {
+      const fj = (xi / Math.max(1, nx - 1)) * Math.max(1, cols - 1);
+      const landProb = bilinearSample(landGrid, fi, fj);
+      if (landProb > 0.5) continue;
 
-      const lat = latVals[i];
-      const lon = lonVals[j];
-      const speedNorm = Math.max(0.08, speedRange.max);
+      const meanU = bilinearSample(uGrid, fi, fj);
+      const meanV = bilinearSample(vGrid, fi, fj);
+      const speed = Math.sqrt(meanU * meanU + meanV * meanV);
+      if (speed < 1e-4) continue;
 
-      const latScale = 0.07;
-      const lonScale = 0.07 / Math.max(0.25, Math.cos((lat * Math.PI) / 180));
+      const px = topLeft.x + ((xi + 0.5) / nx) * mapWidth;
+      const startPoint = L.point(px, py);
+      const unitX = meanU / speed;
+      const unitY = -meanV / speed;
+      const ratio = clamp(speed / speedNorm, 0, 1);
+      const shaftLengthPx = lerp(9, 23, ratio);
 
-      const deltaLat = (cell.meanV / speedNorm) * latScale;
-      const deltaLon = (cell.meanU / speedNorm) * lonScale;
+      const endPoint = L.point(startPoint.x + unitX * shaftLengthPx, startPoint.y + unitY * shaftLengthPx);
+      const startLatLon = map.layerPointToLatLng(startPoint);
+      const endLatLon = map.layerPointToLatLng(endPoint);
+      L.polyline([startLatLon, endLatLon], style).addTo(explorerState.vectorLayer);
 
-      const endLat = lat + deltaLat;
-      const endLon = lon + deltaLon;
+      const headLenPx = Math.max(4.5, shaftLengthPx * 0.35);
+      const backX = -unitX;
+      const backY = -unitY;
+      const leftX = backX * Math.cos(headAngle) - backY * Math.sin(headAngle);
+      const leftY = backX * Math.sin(headAngle) + backY * Math.cos(headAngle);
+      const rightX = backX * Math.cos(-headAngle) - backY * Math.sin(-headAngle);
+      const rightY = backX * Math.sin(-headAngle) + backY * Math.cos(-headAngle);
 
-      L.polyline(
-        [
-          [lat, lon],
-          [endLat, endLon],
-        ],
-        {
-          color: 'rgba(235,247,255,0.95)',
-          weight: 1.6,
-          opacity: 0.92,
-          interactive: false,
-        }
-      ).addTo(explorerState.vectorLayer);
-
-      L.circleMarker([endLat, endLon], {
-        radius: 1.8,
-        color: 'rgba(235,247,255,0.95)',
-        fillColor: 'rgba(235,247,255,0.95)',
-        fillOpacity: 0.95,
-        weight: 1,
-        interactive: false,
-      }).addTo(explorerState.vectorLayer);
+      const leftPoint = L.point(endPoint.x + leftX * headLenPx, endPoint.y + leftY * headLenPx);
+      const rightPoint = L.point(endPoint.x + rightX * headLenPx, endPoint.y + rightY * headLenPx);
+      L.polyline([endLatLon, map.layerPointToLatLng(leftPoint)], style).addTo(explorerState.vectorLayer);
+      L.polyline([endLatLon, map.layerPointToLatLng(rightPoint)], style).addTo(explorerState.vectorLayer);
 
       vectorCount += 1;
     }

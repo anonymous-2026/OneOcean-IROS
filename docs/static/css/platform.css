@@ -351,7 +351,7 @@ code {
 }
 .legend-land { background: #d7cfb8; border: 1px solid #b4aa8b; }
 .legend-speed { background: linear-gradient(135deg, #102f4c, #11bfe4 60%, #ffe289); }
-.legend-current { background: linear-gradient(135deg, #00d8ff, #ffffff); }
+.legend-current { background: #ebf7ff; border: 1px solid rgba(176, 206, 232, 0.9); }
 .legend-bathy { background: linear-gradient(135deg, #1a3e5d, #5b88aa, #c3dcef); }
 .platform-map-shell {
   margin-top: 14px;
