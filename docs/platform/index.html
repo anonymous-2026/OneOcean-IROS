@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OneOcean | Platform</title>
-  <meta name="description" content="OneOcean platform guide: inspect the environment product, preview a deployable ocean-data subset, and run the benchmark across quantitative and scene-backed backends.">
+  <meta name="description" content="OneOcean platform guide: inspect ocean-data grounding, preview a deployable subset, and run benchmark evaluation across quantitative and scene-backed backends.">
   <meta name="robots" content="index, follow">
   <meta name="theme-color" content="#0d3b66">
   <link rel="icon" type="image/png" href="../static/logo.png">
@@ -44,9 +44,9 @@
     <section class="platform-hero">
       <div class="platform-shell platform-hero-inner">
         <p class="platform-kicker">Platform Guide</p>
-        <h1>Inspect and reuse the OneOcean environment product.</h1>
+        <h1>Ocean grounding for underwater embodied-agent research.</h1>
         <p class="platform-hero-copy">
-          OneOcean is organized around a reusable ocean-environment product. The same grounded data contract supports the quantitative benchmark, the scene-backed underwater backend, and a static browser demo that can be hosted on GitHub Pages.
+          OneOcean provides data-grounded ocean context for underwater embodied-agent benchmarks. The same grounding is reused across quantitative evaluation, scene-backed execution, and a browser-accessible demo on GitHub Pages.
         </p>
         <div class="platform-hero-actions">
           <a class="platform-button platform-button-primary" href="#explorer">Open explorer</a>
@@ -62,7 +62,7 @@
           <p class="platform-kicker">Overview</p>
           <h2>How this page maps to the paper workflow</h2>
           <p>
-            The paper evaluates methods on tasks grounded in a shared ocean data product. This page keeps that structure explicit: acquire or rebuild the environment product, export the right footprint, then reuse that footprint across quantitative and scene-backed evaluation.
+            The paper evaluates methods on tasks grounded in a shared ocean dataset. This page keeps that structure explicit: acquire or rebuild the grounding dataset, export the right footprint, then reuse that footprint across quantitative and scene-backed evaluation.
           </p>
         </div>
         <div class="platform-card-grid platform-card-grid-3">
@@ -89,7 +89,7 @@
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Data Subset Example</p>
-          <h2>Small browser-safe sample</h2>
+          <h2>Web-based subset demonstration</h2>
           <p>
             This is not the full OneOcean dataset. The browser demo only uses a very small static subset sampled from the public release so GitHub Pages can load it quickly while still showing time, depth, and spatial filtering plus multiple ocean variables.
           </p>
@@ -208,7 +208,6 @@
                 </p>
               </div>
               <div class="platform-legend">
-                <span class="legend-item"><span class="legend-swatch legend-land"></span>land / masked</span>
                 <span class="legend-item"><span id="surfaceLegendSwatch" class="legend-swatch legend-speed"></span><span id="surfaceLegendLabel">vector color: current speed</span></span>
               </div>
             </div>
@@ -225,7 +224,7 @@
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Resolution</p>
-          <h2>Best supported precision</h2>
+          <h2>Reference data fidelity</h2>
           <p>
             This section reports the best precision profile we use for research runs. It is the reference fidelity for training and evaluation, independent of convenience exports used for local workflow.
           </p>
@@ -261,7 +260,7 @@
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Pipeline</p>
-          <h2>Regenerate or tailor the environment product</h2>
+          <h2>Data generation and adaptation pipeline</h2>
           <p>
             The pipeline aligns currents, bathymetry, optional tides, and masks into one canonical environment file, then exports variants for benchmarking, scene deployment, and lightweight web delivery.
           </p>
@@ -270,8 +269,8 @@
         <div class="platform-card-grid platform-card-grid-4">
           <article class="platform-card"><span class="platform-step">01</span><h3>Ocean fields</h3><p>Copernicus Marine variables such as currents, SSH, salinity, and temperature.</p></article>
           <article class="platform-card"><span class="platform-step">02</span><h3>Bathymetry</h3><p>GEBCO GeoTIFF crops provide terrain structure and masking for the requested region.</p></article>
-          <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p>The pipeline interpolates, aligns, merges, and writes the environment product.</p></article>
-          <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce variants, drift exports, and scene-facing task assets with consistent manifests.</p></article>
+          <article class="platform-card"><span class="platform-step">03</span><h3>Merge and align</h3><p>The pipeline interpolates, aligns, merges, and writes the grounding dataset artifact.</p></article>
+          <article class="platform-card"><span class="platform-step">04</span><h3>Export and reuse</h3><p>Produce reusable variants, drift exports, and scene-facing task assets with consistent manifests.</p></article>
         </div>
 
         <div class="platform-card-grid platform-card-grid-2 platform-detail-grid">
@@ -309,19 +308,19 @@
       <div class="platform-shell">
         <div class="platform-section-head">
           <p class="platform-kicker">Data Sources</p>
-          <h2>Grounding data providers used by OneOcean</h2>
+          <h2>Authoritative data sources behind OneOcean</h2>
           <p>
-            OneOcean merges multiple open ocean data products. The list below shows the source type, the primary dataset/product, and the responsible organization.
+            OneOcean merges multiple open ocean data sources. The list below shows the source type, the primary dataset, and the responsible organization.
           </p>
         </div>
         <div class="platform-card">
           <div class="platform-source-grid">
             <div class="platform-source-cell platform-source-head">Source type</div>
-            <div class="platform-source-cell platform-source-head">Dataset / product</div>
+            <div class="platform-source-cell platform-source-head">Dataset</div>
             <div class="platform-source-cell platform-source-head">Organization</div>
 
             <div class="platform-source-cell">Bathymetry</div>
-            <div class="platform-source-cell"><a href="https://www.gebco.net/data-products/gridded-bathymetry-data" target="_blank" rel="noopener">GEBCO 2025 Grid</a></div>
+            <div class="platform-source-cell"><a href="https://www.gebco.net/data-products/gridded-bathymetry-data" target="_blank" rel="noopener">General Bathymetric Chart of the Oceans (GEBCO) 2025 Grid</a></div>
             <div class="platform-source-cell">GEBCO Compilation Group under IHO and IOC-UNESCO</div>
 
             <div class="platform-source-cell">Ocean physics</div>
@@ -333,18 +332,18 @@
             <div class="platform-source-cell">Oregon State University (TPXO / OTIS development)</div>
 
             <div class="platform-source-cell">Marine pollution</div>
-            <div class="platform-source-cell"><a href="https://hub.arcgis.com/datasets/noaa::marine-debris-monitoring-and-assessment-project-mdmap/about" target="_blank" rel="noopener">NOAA Marine Debris Monitoring and Assessment Project (MDMAP)</a></div>
+            <div class="platform-source-cell"><a href="https://hub.arcgis.com/datasets/noaa::marine-debris-monitoring-and-assessment-project-mdmap/about" target="_blank" rel="noopener">National Oceanic and Atmospheric Administration (NOAA) Marine Debris Monitoring and Assessment Project (MDMAP)</a></div>
             <div class="platform-source-cell">NOAA Marine Debris Program</div>
 
             <div class="platform-source-cell">Marine biodiversity</div>
             <div class="platform-source-cell"><a href="https://obis.org/" target="_blank" rel="noopener">Ocean Biodiversity Information System (OBIS)</a></div>
             <div class="platform-source-cell">IOC-UNESCO / OBIS Secretariat</div>
 
-            <div class="platform-source-cell">Global ocean data (China observation/reanalysis track)</div>
-            <div class="platform-source-cell">China Global Ocean Fusion Dataset and China Ocean ReAnalysis (CORA) products (with GLORYS as key reference input in this track)</div>
+            <div class="platform-source-cell">CORA (China Ocean ReAnalysis) / CGOFD track</div>
+            <div class="platform-source-cell"><a href="https://figshare.com/articles/dataset/CORA_2_0_2016-2019/21828453" target="_blank" rel="noopener">China Ocean ReAnalysis (CORA) products and China Global Ocean Fusion Dataset (CGOFD) track</a></div>
             <div class="platform-source-cell">National Marine Data and Information Service (NMDIS), Ministry of Natural Resources, China</div>
           </div>
-          <p class="platform-subnote platform-source-note">Note: product names can evolve across releases. OneOcean records the exact source version and footprint in export manifests for reproducibility.</p>
+          <p class="platform-subnote platform-source-note">Note: dataset names can evolve across releases. OneOcean records the exact source version and footprint in export manifests for reproducibility.</p>
         </div>
       </div>
     </section>
@@ -355,7 +354,7 @@
           <p class="platform-kicker">Execution</p>
           <h2>Two backend modes, one environment grounding</h2>
           <p>
-            The core benchmark backend is optimized for scale, tables, and reproducible run manifests. The OceanGym scene backend is optimized for underwater scene semantics, screenshots, GIFs, and qualitative task evidence. Both consume currents derived from the same environment product.
+            The core benchmark backend is optimized for scale, tables, and reproducible run manifests. The OceanGym scene backend is optimized for underwater scene semantics, screenshots, GIFs, and qualitative task evidence. Both consume currents derived from the same grounding dataset.
           </p>
         </div>
 

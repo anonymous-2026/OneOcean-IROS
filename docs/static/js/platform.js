@@ -447,20 +447,20 @@ function vectorColorForMode(fieldMode, value, range) {
   const span = Math.max(1e-6, range.max - range.min);
   const ratio = clamp((value - range.min) / span, 0, 1);
 
-  if (fieldMode === 'speed') return mixColor([40, 136, 186], [255, 229, 124], ratio);
-  if (fieldMode === 'temperature') return mixColor([33, 112, 190], [246, 121, 55], ratio);
-  if (fieldMode === 'salinity') return mixColor([41, 130, 112], [220, 239, 114], ratio);
-  if (fieldMode === 'bathymetry') return mixColor([117, 167, 204], [10, 55, 94], ratio);
-  if (ratio < 0.5) return mixColor([47, 122, 204], [237, 244, 248], ratio / 0.5);
-  return mixColor([237, 244, 248], [230, 100, 58], (ratio - 0.5) / 0.5);
+  if (fieldMode === 'speed') return mixColor([255, 232, 176], [206, 54, 40], ratio);
+  if (fieldMode === 'temperature') return mixColor([255, 238, 194], [198, 40, 40], ratio);
+  if (fieldMode === 'salinity') return mixColor([255, 230, 170], [168, 61, 23], ratio);
+  if (fieldMode === 'bathymetry') return mixColor([255, 244, 210], [147, 46, 18], ratio);
+  if (ratio < 0.5) return mixColor([255, 235, 181], [255, 173, 96], ratio / 0.5);
+  return mixColor([255, 173, 96], [188, 40, 34], (ratio - 0.5) / 0.5);
 }
 
 function legendGradientForMode(fieldMode) {
-  if (fieldMode === 'speed') return 'linear-gradient(90deg, #2888ba, #ffe57c)';
-  if (fieldMode === 'temperature') return 'linear-gradient(90deg, #2170be, #f67937)';
-  if (fieldMode === 'salinity') return 'linear-gradient(90deg, #298270, #dcef72)';
-  if (fieldMode === 'bathymetry') return 'linear-gradient(90deg, #75a7cc, #0a375e)';
-  return 'linear-gradient(90deg, #2f7acc, #edf4f8 50%, #e6643a)';
+  if (fieldMode === 'speed') return 'linear-gradient(90deg, #ffe8b0, #ce3628)';
+  if (fieldMode === 'temperature') return 'linear-gradient(90deg, #ffeec2, #c62828)';
+  if (fieldMode === 'salinity') return 'linear-gradient(90deg, #ffe6aa, #a83d17)';
+  if (fieldMode === 'bathymetry') return 'linear-gradient(90deg, #fff4d2, #932e12)';
+  return 'linear-gradient(90deg, #ffebb5, #ffad60 50%, #bc2822)';
 }
 
 function bilinearSample(grid, fi, fj) {
@@ -480,50 +480,8 @@ function bilinearSample(grid, fi, fj) {
   return lerp(a, b, ti);
 }
 
-function rotatedFieldSample(grid, fi, fj) {
-  const rows = grid.length;
-  const cols = grid[0].length;
-  const rotatedI = (rows - 1) - fi;
-  const rotatedJ = (cols - 1) - fj;
-  return bilinearSample(grid, rotatedI, rotatedJ);
-}
-
 function drawScalarField(dataset, subset, summary, fieldMode, range) {
   explorerState.scalarLayer.clearLayers();
-  const rows = summary.field.length;
-  const cols = summary.field[0]?.length || 0;
-  if (!rows || !cols) return;
-
-  const latVals = subset.latIndices.map((index) => dataset.latitude[index]);
-  const lonVals = subset.lonIndices.map((index) => dataset.longitude[index]);
-  if (latVals.length < 2 || lonVals.length < 2) return;
-
-  for (let i = 0; i < rows; i += 1) {
-    for (let j = 0; j < cols; j += 1) {
-      const sourceI = rows - 1 - i;
-      const sourceJ = cols - 1 - j;
-      const cell = summary.field[sourceI][sourceJ];
-      if (!cell.land) continue;
-
-      const latSouth = i > 0 ? (latVals[i - 1] + latVals[i]) / 2 : latVals[i] - (latVals[1] - latVals[0]) / 2;
-      const latNorth = i < rows - 1 ? (latVals[i] + latVals[i + 1]) / 2 : latVals[i] + (latVals[rows - 1] - latVals[rows - 2]) / 2;
-      const lonWest = j > 0 ? (lonVals[j - 1] + lonVals[j]) / 2 : lonVals[j] - (lonVals[1] - lonVals[0]) / 2;
-      const lonEast = j < cols - 1 ? (lonVals[j] + lonVals[j + 1]) / 2 : lonVals[j] + (lonVals[cols - 1] - lonVals[cols - 2]) / 2;
-
-      L.rectangle(
-        [
-          [Math.min(latSouth, latNorth), Math.min(lonWest, lonEast)],
-          [Math.max(latSouth, latNorth), Math.max(lonWest, lonEast)],
-        ],
-        {
-          stroke: false,
-          fillColor: 'rgba(214, 201, 170, 0.66)',
-          fillOpacity: 0.66,
-          interactive: false,
-        }
-      ).addTo(explorerState.scalarLayer);
-    }
-  }
 }
 
 function drawVectorField(dataset, subset, summary, controls, speedRange, fieldMode, fieldRange) {
@@ -559,22 +517,22 @@ function drawVectorField(dataset, subset, summary, controls, speedRange, fieldMo
   let vectorCount = 0;
 
   for (let yi = 0; yi < ny; yi += 1) {
-      const fi = (yi / Math.max(1, ny - 1)) * Math.max(1, rows - 1);
+      const fi = (1 - yi / Math.max(1, ny - 1)) * Math.max(1, rows - 1);
       const py = topLeft.y + ((yi + 0.5) / ny) * mapHeight;
     for (let xi = 0; xi < nx; xi += 1) {
       const fj = (xi / Math.max(1, nx - 1)) * Math.max(1, cols - 1);
-      const landProb = rotatedFieldSample(landGrid, fi, fj);
-      const nearestI = clamp(Math.round((rows - 1) - fi), 0, rows - 1);
-      const nearestJ = clamp(Math.round((cols - 1) - fj), 0, cols - 1);
+      const landProb = bilinearSample(landGrid, fi, fj);
+      const nearestI = clamp(Math.round(fi), 0, rows - 1);
+      const nearestJ = clamp(Math.round(fj), 0, cols - 1);
       const nearestCell = summary.field[nearestI][nearestJ];
-      const elevation = rotatedFieldSample(elevationGrid, fi, fj);
+      const elevation = bilinearSample(elevationGrid, fi, fj);
       if (landProb > 0.35 || nearestCell.land || elevation >= 0) continue;
 
-      const meanU = rotatedFieldSample(uGrid, fi, fj);
-      const meanV = rotatedFieldSample(vGrid, fi, fj);
+      const meanU = bilinearSample(uGrid, fi, fj);
+      const meanV = bilinearSample(vGrid, fi, fj);
       const speed = Math.sqrt(meanU * meanU + meanV * meanV);
       if (speed < 1e-4) continue;
-      const fieldValue = rotatedFieldSample(valueGrid, fi, fj);
+      const fieldValue = bilinearSample(valueGrid, fi, fj);
       const vectorColor = vectorColorForMode(fieldMode, fieldValue, fieldRange);
       const style = {
         color: toRgba(vectorColor, 0.96),
