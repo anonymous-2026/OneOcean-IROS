@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -278,12 +279,51 @@ def interpolate_and_merge_fast(
         elevation=(("latitude", "longitude"), elevation),
         land_mask=(("latitude", "longitude"), land_mask.astype(np.uint8)),
     )
+    combined_ds["elevation"].attrs.update(
+        {
+            "long_name": "seafloor elevation relative to sea surface",
+            "units": "m",
+            "positive": "up",
+        }
+    )
+    combined_ds["land_mask"].attrs.update(
+        {
+            "long_name": "terrain invalid or land/NoData mask",
+            "flag_values": np.asarray([0, 1], dtype=np.uint8),
+            "flag_meanings": "valid_water invalid_terrain_or_nodata",
+            "units": "1",
+        }
+    )
+    coordinate_attributes = {
+        "latitude": {"standard_name": "latitude", "units": "degrees_north"},
+        "longitude": {"standard_name": "longitude", "units": "degrees_east"},
+        "depth": {"standard_name": "depth", "units": "m", "positive": "down"},
+    }
+    for coordinate, attributes in coordinate_attributes.items():
+        if coordinate in combined_ds.coords:
+            for key, value in attributes.items():
+                combined_ds[coordinate].attrs.setdefault(key, value)
+
+    current_descriptions = {
+        "uo": "eastward sea-water velocity",
+        "vo": "northward sea-water velocity",
+        "utide": "approximated eastward tidal velocity",
+        "vtide": "approximated northward tidal velocity",
+        "utotal": "combined eastward sea-water velocity",
+        "vtotal": "combined northward sea-water velocity",
+    }
+    for variable, long_name in current_descriptions.items():
+        if variable in combined_ds.data_vars:
+            combined_ds[variable].attrs.setdefault("long_name", long_name)
+            combined_ds[variable].attrs.setdefault("units", "m s-1")
 
     combined_ds.attrs.update(
         {
+            "Conventions": "CF-1.8",
+            "source": "OneOcean harmonization of GEBCO terrain and Copernicus Marine ocean fields",
             "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ"),
-            "terrain_file": terrain_file,
-            "water_file": water_file,
+            "terrain_source_name": Path(terrain_file).name,
+            "water_source_name": Path(water_file).name,
             "water_latlon_swapped_autocorrected": str(bool(did_swap_latlon)),
             "terrain_bounds_left": float(bounds.left),
             "terrain_bounds_right": float(bounds.right),

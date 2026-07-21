@@ -21,25 +21,26 @@ Main outputs are written under `Data/`:
 - `Data/Combined/variants/public/combined/combined_environment.nc`: lighter public-release variant
 
 The detailed generation log, design decisions, and size summary are recorded in `../DATA_PIPELINE_LOG.md`.
+The public variable, coordinate, unit, mask, and provenance requirements are defined in `../docs/DATASET_CONTRACT.md`.
 
 ## Quickstart
 
 Generate the canonical combined dataset:
 
 ```bash
-python Data_pipeline/run_pipeline.py --overwrite
+python3 Data_pipeline/run_pipeline.py --overwrite
 ```
 
 Generate the standard paper variants:
 
 ```bash
-python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
+python3 Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
 ```
 
 Reuse existing downloads and regenerate only derived outputs:
 
 ```bash
-python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite --reuse-existing
+python3 Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite --reuse-existing
 ```
 
 ## Requirements
@@ -61,6 +62,14 @@ Optional tide-enabled variants also include:
 
 - `utide`, `vtide`
 - `utotal`, `vtotal`
+
+Validate a generated product and write a machine-readable report:
+
+```bash
+python3 tools/validate_environment_product.py \
+  Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --json-out runs/validation/scene.json
+```
 
 ## Notes
 

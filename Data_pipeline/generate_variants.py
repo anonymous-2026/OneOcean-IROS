@@ -37,13 +37,20 @@ def _utcnow() -> str:
 
 
 def _write_metadata(out_dir: Path, v: Variant, *, terrain_file: Path, water_file: Path, combined_file: Path) -> None:
+    def _portable_path(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(out_dir.resolve()))
+        except ValueError:
+            return path.name
+
     out = {
         "generated_at_utc": _utcnow(),
         "variant": asdict(v),
+        "path_base": "variant_directory",
         "paths": {
-            "terrain_file": str(terrain_file),
-            "water_file": str(water_file),
-            "combined_file": str(combined_file),
+            "terrain_file": _portable_path(terrain_file),
+            "water_file": _portable_path(water_file),
+            "combined_file": _portable_path(combined_file),
         },
     }
     (out_dir / "variant.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
@@ -145,21 +152,21 @@ def main() -> int:
     variants: list[Variant] = [
         Variant(
             name="tiny",
-            lat_min=32.40,
-            lat_max=32.60,
-            lon_min=-66.20,
-            lon_max=-66.00,
-            start="2024-06-01T00:00:00",
-            end="2024-06-03T00:00:00",
+            lat_min=42.1,
+            lat_max=42.7,
+            lon_min=-71.2,
+            lon_max=-70.2,
+            start="2025-01-01T00:00:00",
+            end="2025-12-31T00:00:00",
             min_depth=0.0,
-            max_depth=50.0,
+            max_depth=1.0,
             basic_dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
-            include_tides=True,
+            include_tides=False,
             tide_time_align="nearest",
-            tide_depth_profile="exp_decay",
-            tide_z0_m=30.0,
+            tide_depth_profile="broadcast",
+            tide_z0_m=50.0,
             tide_zmax_m=200.0,
-            target_res_deg=None,
+            target_res_deg=0.01,
         ),
         Variant(
             name="scene",
@@ -167,8 +174,8 @@ def main() -> int:
             lat_max=33.0,
             lon_min=-66.5,
             lon_max=-65.5,
-            start="2024-06-01T00:00:00",
-            end="2024-06-30T00:00:00",
+            start="2025-12-01T00:00:00",
+            end="2025-12-31T00:00:00",
             min_depth=0.0,
             max_depth=200.0,
             basic_dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
@@ -185,14 +192,14 @@ def main() -> int:
             lat_max=40.0,
             lon_min=-72.0,
             lon_max=-62.0,
-            start="2021-01-01T00:00:00",
-            end="2024-12-01T00:00:00",
+            start="2025-01-01T00:00:00",
+            end="2025-12-31T00:00:00",
             min_depth=0.0,
             max_depth=200.0,
-            basic_dataset_id="cmems_mod_glo_phy_my_0.083deg_P1M-m",
+            basic_dataset_id="cmems_mod_glo_phy_my_0.083deg_P1D-m",
             include_tides=False,
-            tide_time_align="nearest",
-            tide_depth_profile="broadcast",
+            tide_time_align="linear",
+            tide_depth_profile="exp_decay",
             tide_z0_m=50.0,
             tide_zmax_m=200.0,
             target_res_deg=0.25,
