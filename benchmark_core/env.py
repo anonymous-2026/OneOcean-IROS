@@ -182,6 +182,49 @@ class HeadlessOceanEnv:
     def time_to_success_s(self) -> float | None:
         return None if self._time_to_success_s is None else float(self._time_to_success_s)
 
+    def observe(self) -> dict[str, Any]:
+        currents = np.zeros((self.n_agents, 3), dtype=np.float64)
+        pollution_probe = np.zeros((self.n_agents,), dtype=np.float64)
+        latitude = np.zeros((self.n_agents,), dtype=np.float64)
+        longitude = np.zeros((self.n_agents,), dtype=np.float64)
+        elevation = np.full((self.n_agents,), np.nan, dtype=np.float64)
+        land_mask = np.full((self.n_agents,), np.nan, dtype=np.float64)
+        for agent_index in range(self.n_agents):
+            x_m, _, z_m = self._positions[agent_index]
+            current_x, current_z = self._sample_current(float(x_m), float(z_m))
+            currents[agent_index] = np.array([current_x, 0.0, current_z], dtype=np.float64)
+            pollution_probe[agent_index] = float(self.pollution.sample(self._positions[agent_index]))
+            latitude[agent_index] = float(self.origin_lat + float(z_m) / METERS_PER_DEG_LAT)
+            longitude[agent_index] = float(self.origin_lon + float(x_m) / meters_per_deg_lon(self.origin_lat))
+            terrain_elevation = self.drift_field.sample_elevation_xz(
+                x_m=float(x_m),
+                z_m=float(z_m),
+                origin_lat=self.origin_lat,
+                origin_lon=self.origin_lon,
+            )
+            terrain_mask = self.drift_field.sample_land_mask_xz(
+                x_m=float(x_m),
+                z_m=float(z_m),
+                origin_lat=self.origin_lat,
+                origin_lon=self.origin_lon,
+            )
+            if terrain_elevation is not None:
+                elevation[agent_index] = float(terrain_elevation)
+            if terrain_mask is not None:
+                land_mask[agent_index] = float(terrain_mask)
+        return {
+            "time_s": float(self._t),
+            "positions_xyz": self._positions.copy(),
+            "quaternions_xyzw": self._quats_xyzw.copy(),
+            "body_velocity_uvw_pqr": self._nu_body.copy(),
+            "currents_xyz": currents,
+            "pollution_probe": pollution_probe,
+            "latitude": latitude,
+            "longitude": longitude,
+            "elevation_m": elevation,
+            "land_mask": land_mask,
+        }
+
     def _sample_current(self, x_m: float, z_m: float) -> tuple[float, float]:
         drift_x, drift_z = self.drift_field.sample_xz(
             x_m=x_m,
@@ -636,7 +679,7 @@ class HeadlessOceanEnv:
         self.rec.write_run_meta(meta)
         return meta
 
-    def step(self) -> tuple[bool, dict[str, Any]]:
+    def step(self, actions_xyz: np.ndarray | None = None) -> tuple[bool, dict[str, Any]]:
         assert self.task_cfg is not None and self.task_state is not None and self.controller_cfg is not None
 
         # Observations for controller.
@@ -911,16 +954,26 @@ class HeadlessOceanEnv:
             cx, cz = self._sample_current(float(self._positions[i, 0]), float(self._positions[i, 2]))
             currents[i] = np.array([cx, 0.0, cz], dtype=np.float64)
 
-        act = compute_actions(
-            self.controller_cfg,
-            step_index=step_i,
-            positions_xyz=self._positions,
-            goal_xyz=goal,
-            pollution_probe=probe,
-            local_currents_xyz=currents,
-            rng=self.rng,
-            task_kind=str(self.task_cfg.kind),
-        )
+        action_source = "controller"
+        if actions_xyz is None:
+            act = compute_actions(
+                self.controller_cfg,
+                step_index=step_i,
+                positions_xyz=self._positions,
+                goal_xyz=goal,
+                pollution_probe=probe,
+                local_currents_xyz=currents,
+                rng=self.rng,
+                task_kind=str(self.task_cfg.kind),
+            )
+        else:
+            act = np.asarray(actions_xyz, dtype=np.float64)
+            if act.shape != (self.n_agents, 3):
+                raise ValueError(f"actions_xyz must have shape ({self.n_agents}, 3), got {act.shape}")
+            if not np.all(np.isfinite(act)):
+                raise ValueError("actions_xyz must contain only finite values")
+            act = act.copy()
+            action_source = "external"
         # Clip actions to max speed.
         for i in range(self.n_agents):
             sp = float(np.linalg.norm(act[i]))
@@ -1239,6 +1292,7 @@ class HeadlessOceanEnv:
         if step_i % 5 == 0:
             payload: dict[str, Any] = {"task": str(self.task_cfg.kind)}
             payload["controller"] = str(self.controller_cfg.kind)
+            payload["action_source"] = action_source
             # Goal used for action computation (helps downstream BC / audits).
             try:
                 g = np.asarray(goal, dtype=np.float64)
@@ -1290,6 +1344,7 @@ class HeadlessOceanEnv:
         )
         info = {
             "t": float(self._t),
+            "action_source": action_source,
             "probe_max": float(np.max(probe2)),
             "probe_mean": float(np.mean(probe2)),
             "energy_proxy": float(self._energy),

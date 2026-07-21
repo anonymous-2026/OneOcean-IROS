@@ -12,7 +12,7 @@ It provides:
 ## Drift cache export
 
 ```bash
-python -m benchmark_core.cli.export_drift_cache \
+python3 -m benchmark_core.cli.export_drift_cache \
   --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
   --u-var utotal \
   --v-var vtotal \
@@ -24,7 +24,7 @@ python -m benchmark_core.cli.export_drift_cache \
 ## Single run
 
 ```bash
-python -m benchmark_core.cli.run \
+python3 -m benchmark_core.cli.run \
   --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
   --task go_to_goal_current \
   --difficulty medium \
@@ -41,7 +41,7 @@ python -m benchmark_core.cli.run \
 ## Sweep run
 
 ```bash
-python -m benchmark_core.cli.run_matrix \
+python3 -m benchmark_core.cli.run_matrix \
   --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
   --preset paper_v1 \
   --dynamics-model 6dof \
@@ -79,5 +79,8 @@ Each run root under `runs/benchmark_core/` contains:
 
 - The default paper setting is `--dynamics-model 6dof`.
 - Constraint enforcement is an engineering realism gate, not a full hydrodynamics model.
+- `docs/MODEL_SCOPE.md` maps the implemented dynamics and pollution equations to their configuration fields and limitations.
+- `HeadlessOceanEnv.step(actions_xyz=None)` preserves the built-in controller by default and accepts external core-frame velocity commands for integrations such as ROS 2.
+- `docs/LLM_PLANNER_DIAGNOSTICS.md` separates high-level planner validity/fallback/cost from low-level controller performance.
 - BC training utilities live in `benchmark_core/ml/`.
-- Replay export for the web demo is available through `python -m benchmark_core.cli.export_demo_replay`.
+- Replay export for the web demo is available through `python3 -m benchmark_core.cli.export_demo_replay`.

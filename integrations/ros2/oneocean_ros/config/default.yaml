@@ -1,0 +1,20 @@
+oneocean_bridge:
+  ros__parameters:
+    drift_npz: ""
+    output_directory: "runs/ros2"
+    task: "go_to_goal_current"
+    difficulty: "medium"
+    controller: "go_to_goal"
+    pollution_model: "gaussian"
+    n_agents: 1
+    seed: 0
+    dt_s: 1.0
+    dynamics_model: "6dof"
+    constraint_mode: "hard"
+    bathy_mode: "off"
+    control_mode: "external"
+    autostart: true
+    auto_reset: false
+    increment_seed_on_reset: false
+    realtime_rate: 1.0
+    command_timeout_s: 2.0
