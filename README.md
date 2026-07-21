@@ -20,6 +20,7 @@ It keeps only the code paths used by the paper:
 - `OCPNet/`: pollution-field and current-aware pollution modeling code.
 - `benchmark_core/`: core quantitative benchmark used for the large evaluation tables.
 - `tracks/oceangym_benchmark/`: OceanGym and HoloOcean benchmark used for scene-grounded underwater evaluation and media generation.
+- `integrations/ros2/`: optional ROS 2 Jazzy bridge for standard robot middleware integration.
 - `tests/`: lightweight regression tests for the final benchmark surfaces.
 
 Exploratory branches, deprecated simulators, internal planning notes, and cached run outputs are intentionally excluded from version control.
@@ -27,10 +28,12 @@ Exploratory branches, deprecated simulators, internal planning notes, and cached
 ## Repository layout
 
 ```text
-OneOcean-IROS/
+OneOcean/
 ├── Data_pipeline/
 ├── OCPNet/
 ├── benchmark_core/
+├── integrations/
+│   └── ros2/
 ├── tracks/
 │   └── oceangym_benchmark/
 ├── tests/
@@ -55,18 +58,27 @@ Notes:
 ### 1. Build the combined environment dataset
 
 ```bash
-python Data_pipeline/run_pipeline.py --overwrite
-python Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
+python3 Data_pipeline/run_pipeline.py --overwrite
+python3 Data_pipeline/generate_variants.py --which tiny,scene,public --overwrite
 ```
 
 The pipeline rationale, depth-handling decisions, and reproducibility notes are recorded in `DATA_PIPELINE_LOG.md`.
+The public schema, custom-data validation workflow, coordinate convention, and release variants are defined in `docs/DATASET_CONTRACT.md`.
+
+Validate a generated or custom product before exporting it:
+
+```bash
+python3 tools/validate_environment_product.py \
+  Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
+  --json-out runs/validation/scene.json
+```
 
 ### 2. Run the benchmark core
 
 Export a drift cache from the combined dataset:
 
 ```bash
-python -m benchmark_core.cli.export_drift_cache \
+python3 -m benchmark_core.cli.export_drift_cache \
   --nc Data_pipeline/Data/Combined/variants/scene/combined/combined_environment.nc \
   --u-var utotal \
   --v-var vtotal \
@@ -78,7 +90,7 @@ python -m benchmark_core.cli.export_drift_cache \
 Run one benchmark episode:
 
 ```bash
-python -m benchmark_core.cli.run \
+python3 -m benchmark_core.cli.run \
   --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
   --task go_to_goal_current \
   --difficulty medium \
@@ -95,7 +107,7 @@ python -m benchmark_core.cli.run \
 Run a sweep:
 
 ```bash
-python -m benchmark_core.cli.run_matrix \
+python3 -m benchmark_core.cli.run_matrix \
   --drift-npz runs/benchmark_core/_cache/drift_scene_t0_d0.npz \
   --preset paper_v1 \
   --dynamics-model 6dof \
@@ -109,14 +121,14 @@ python -m benchmark_core.cli.run_matrix \
 Render baseline scene media:
 
 ```bash
-python tracks/oceangym_benchmark/render_scene_media.py \
+python3 tracks/oceangym_benchmark/render_scene_media.py \
   --preset ocean_worlds_camera
 ```
 
 Export a data-grounded current time series:
 
 ```bash
-python tracks/oceangym_benchmark/export_current_series_npz.py \
+python3 tracks/oceangym_benchmark/export_current_series_npz.py \
   --dataset Data_pipeline/Data/Combined/combined_environment.nc \
   --out_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz
 ```
@@ -124,7 +136,7 @@ python tracks/oceangym_benchmark/export_current_series_npz.py \
 Run the OceanGym task suite:
 
 ```bash
-python tracks/oceangym_benchmark/run_task_suite.py \
+python3 tracks/oceangym_benchmark/run_task_suite.py \
   --preset ocean_worlds_camera \
   --current_npz runs/_cache/data_grounding/currents/cmems_center_uovo.npz \
   --episodes 3
@@ -133,6 +145,16 @@ python tracks/oceangym_benchmark/run_task_suite.py \
 ## Documentation
 
 - `Data_pipeline/README.md`: data pipeline usage and dataset assembly details.
+- `docs/DATASET_CONTRACT.md`: environment schema, custom-data validation, and NetCDF-to-NPZ round-trip checks.
+- `docs/MODEL_SCOPE.md`: implemented dynamics equations, default parameters, pollution probes/sinks, and model limitations.
+- `docs/LLM_PLANNER_DIAGNOSTICS.md`: existing-run planner validity, fallback, latency, token, and task-level analysis.
 - `benchmark_core/README.md`: quantitative benchmark protocol and CLI usage.
 - `tracks/oceangym_benchmark/README.md`: OceanGym benchmark usage, media generation, and external-scene notes.
+- `integrations/ros2/README.md`: ROS 2 frame, topic, service, build, and launch contract.
 - `docs/`: project and platform website sources.
+
+## Regression test
+
+```bash
+python3 -m pytest -q
+```

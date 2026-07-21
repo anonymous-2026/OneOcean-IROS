@@ -123,7 +123,7 @@ def _fmt_f(x: float | None, nd: int = 2) -> str:
 
 def export_main(*, out_dir: Path, runs: list[RunSpec], difficulty: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    # A compact method-level table aligned with paper/shuaijun-iros26-paper/docs/suggestion.md.
+    # A compact method-level table aligned with the manuscript planning table.
     header = [
         "method",
         "go_to_goal SR",

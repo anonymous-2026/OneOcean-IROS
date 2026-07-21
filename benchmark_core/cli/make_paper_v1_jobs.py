@@ -124,7 +124,7 @@ def main() -> int:
         )
 
     if not bool(args.no_llm):
-        llm_root = str(os.environ.get("ONEOCEAN_LLM_ROOT", "")).strip() or "/data/private/user2/models"
+        llm_root = str(os.environ.get("ONEOCEAN_LLM_ROOT", "")).strip() or "models"
         models = [
             ("chatglm3_6b", str(Path(llm_root) / "ChatGLM3-6B")),
             ("glm4_9b", str(Path(llm_root) / "GLM-4-9B-Chat")),
